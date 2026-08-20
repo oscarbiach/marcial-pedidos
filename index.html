@@ -1,0 +1,2941 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<!-- viewport-fit=cover: sin esto env(safe-area-inset-*) da 0 y el header
+     queda tapado por la isla/notch cuando corre instalada en iPhone. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Distribuidora Marcial — Carga de Pedidos</title>
+
+<!-- ── PWA: instalable en el celular ──
+     En iPhone se instala desde Safari con Compartir → Agregar a inicio.
+     apple-mobile-web-app-capable es lo que hace que arranque sin la barra
+     del navegador; sin eso queda como un simple acceso directo. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F3B6E">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- black-translucent: el navy del header sube hasta arriba de todo,
+     detrás del reloj y la batería. Lo compensa el padding de safe-area. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Marcial">
+<style>
+:root {
+  --navy:   #1F3B6E;
+  --navy2:  #16305C;
+  --blue:   #2980B9;
+  --lblue:  #EBF5FB;
+  --green:  #1E8449;
+  --lgreen: #EAFAF1;
+  --orange: #D68910;
+  --lorng:  #FEF9E7;
+  --red:    #C0392B;
+  --lred:   #FADBD8;
+  --gray:   #566573;
+  --lgray:  #F4F6F7;
+  --white:  #FFFFFF;
+  --border: #D5D8DC;
+  --text:   #1C2833;
+  --shadow: 0 2px 8px rgba(0,0,0,.12);
+  --radius: 12px;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--lgray); color:var(--text); min-height:100vh; }
+
+/* ── HEADER ── */
+header {
+  background:var(--navy); color:#fff;
+  /* El padding de arriba suma la safe-area: instalada en iPhone el header
+     arranca en y=0 (detrás del reloj), en el navegador el inset da 0 y
+     queda igual que siempre. */
+  padding:calc(14px + env(safe-area-inset-top)) 16px 12px;
+  position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.3);
+  display:flex; align-items:center; gap:10px;
+}
+header h1 { font-size:17px; font-weight:700; flex:1; }
+header span { font-size:22px; }
+#whoBtn {
+  background:rgba(255,255,255,.15); border:none; color:#fff;
+  border-radius:20px; padding:5px 12px; font-size:13px; cursor:pointer;
+}
+#pcNav { display:flex; gap:6px; }
+#pcNav button {
+  background:rgba(255,255,255,.12); border:none; color:#fff;
+  border-radius:18px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer;
+}
+#pcNav button:hover { background:rgba(255,255,255,.25); }
+#pcNav button.on { background:#fff; color:var(--navy); }
+
+/* ── MENU MODAL ── */
+.menu-btn {
+  width:100%; padding:14px; border-radius:12px; border:2px solid var(--border);
+  font-size:16px; font-weight:700; cursor:pointer; margin-bottom:10px; background:#fff;
+  text-align:left; display:flex; align-items:center; gap:12px;
+}
+.menu-btn:hover { border-color:var(--navy); background:var(--lblue); }
+.menu-btn.on { border-color:var(--navy); background:var(--navy); color:#fff; }
+
+/* ── CONTENT ── */
+main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* ── FORM CARD (formulario en página) ── */
+.form-card {
+  background:#fff; border-radius:var(--radius); padding:16px;
+  box-shadow:var(--shadow); margin-bottom:12px;
+}
+
+/* ── PEDIDOS LIST ── */
+.section-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px; margin-top:4px;
+}
+.section-header h3 { font-size:15px; color:var(--gray); }
+.badge { background:var(--navy); color:#fff; border-radius:12px; padding:2px 8px; font-size:12px; }
+
+.order-list { display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:16px; }
+.day-divider {
+  display:flex; align-items:center; gap:10px; grid-column:1/-1;
+  color:var(--gray); font-size:12px; font-weight:600; margin-top:4px;
+}
+.day-divider::before, .day-divider::after { content:''; flex:1; border-top:1px solid var(--border); }
+.order-card {
+  background:#fff; border-radius:var(--radius); padding:12px 14px;
+  box-shadow:var(--shadow); cursor:pointer; transition:.15s;
+  border-left:4px solid var(--border);
+}
+.order-card:active { opacity:.85; }
+.order-card.Pendiente  { border-left-color:var(--orange); }
+.order-card.Despachado { border-left-color:var(--green); }
+.order-card.Cancelado  { border-left-color:var(--red); opacity:.65; }
+.oc-top { display:flex; justify-content:space-between; align-items:flex-start; }
+.oc-main { font-size:15px; font-weight:700; }
+.oc-sub  { font-size:12px; color:var(--gray); margin-top:2px; }
+.oc-items { font-size:12px; color:var(--gray); margin-top:6px; border-top:1px solid var(--lgray); padding-top:6px; }
+.status-pill {
+  font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px; white-space:nowrap;
+}
+.sp-Pendiente  { background:var(--lorng);  color:var(--orange); }
+.sp-Despachado { background:var(--lgreen); color:var(--green); }
+.sp-Cancelado  { background:var(--lred);   color:var(--red); }
+.sp-Activo     { background:var(--lgreen); color:var(--green); }
+.sp-Pausado    { background:var(--lgray);  color:var(--gray); }
+.order-card.Activo  { border-left-color:#7D3C98; }
+.order-card.Pausado { border-left-color:var(--border); opacity:.65; }
+.fijo-tag {
+  font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px;
+  background:#F4ECF7; color:#7D3C98; white-space:nowrap;
+}
+/* Pedidos que pasan a retirar: se diferencian notoriamente del reparto. */
+.retiro-tag {
+  font-size:11px; font-weight:800; border-radius:10px; padding:3px 9px;
+  background:#117A65; color:#fff; white-space:nowrap; letter-spacing:.3px;
+}
+.order-card.retiro { border-left-color:#117A65; background:#E8F8F5; }
+.cuero-tag {
+  font-size:11px; font-weight:700; white-space:nowrap;
+  color:#935116; background:#FDEBD0; border-radius:8px; padding:2px 7px;
+}
+.cuero-tag.nc { color:#922B21; background:#FADBD8; }
+.cuero-check input { margin-right:6px; }
+.retiro-mini {
+  display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+  font-size:13px; font-weight:800; color:#117A65; white-space:nowrap;
+  padding:7px 11px; border:1.5px solid #A3E4D7; border-radius:9px; background:#E8F8F5;
+  -webkit-user-select:none; user-select:none;
+}
+.retiro-mini input { width:17px; height:17px; accent-color:#117A65; margin:0; }
+
+/* ── EXTRAS DESPLEGABLES (entrega / dirección / observación) ── */
+.form-extras-row {
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  margin:4px 0 12px;
+}
+.extras-toggle {
+  background:none; border:none; color:var(--blue); font-size:13px; font-weight:700;
+  cursor:pointer; padding:6px 2px; text-align:left;
+}
+.extras-body { display:none; }
+.extras-body.open { display:block; }
+
+/* ── TOGGLE cajas / unidades (productos anotados en caja) ── */
+.unit-toggle {
+  display:inline-flex; border:1.5px solid var(--border); border-radius:8px;
+  overflow:hidden; vertical-align:middle; margin-right:6px;
+}
+.unit-toggle button {
+  border:none; background:#fff; padding:3px 9px; font-size:11px;
+  font-weight:700; color:var(--gray); cursor:pointer;
+}
+.unit-toggle button.on { background:var(--navy); color:#fff; }
+
+/* Cantidad a la izquierda del nombre en las listas de productos */
+.detail-item.qty-left { justify-content:flex-start; gap:10px; }
+.detail-item.qty-left b { white-space:nowrap; }
+
+/* ── PAPELERA (solo PC): botón flotante abajo a la derecha ── */
+#papeleraFab {
+  position:fixed; bottom:24px; right:24px; z-index:150;
+  width:48px; height:48px; border-radius:50%; border:1.5px solid var(--border);
+  background:#fff; font-size:20px; cursor:pointer;
+  box-shadow:0 3px 12px rgba(0,0,0,.22);
+  display:flex; align-items:center; justify-content:center;
+}
+#papeleraFab:hover { background:var(--lred); border-color:var(--red); }
+#papeleraFab .pap-count {
+  position:absolute; top:-5px; right:-5px;
+  background:var(--red); color:#fff; border-radius:10px;
+  font-size:11px; font-weight:700; padding:1px 6px; display:none;
+}
+
+/* ── Botón "cargar" arriba de cada lista (abre modal, como en Fijos) ── */
+.new-btn-row { display:flex; justify-content:flex-end; margin-bottom:10px; }
+.new-btn-row .btn { width:auto; padding:10px 16px; }
+@media(max-width:767.98px) {
+  .new-btn-row .btn { width:100%; padding:14px; }
+}
+
+/* Fecha y hora se eligen solo con el widget (no se tipean). El botón
+   nativo del calendario/reloj se estira invisible sobre TODO el campo,
+   así cualquier toque en el rectángulo abre el selector, como un botón.
+   El iconito se repone como imagen de fondo a la derecha. */
+input[type="date"], input[type="time"] {
+  position:relative; cursor:pointer;
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:18px;
+}
+input[type="date"] {
+  background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ctext y='16' font-size='15'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E");
+}
+input[type="time"] {
+  background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ctext y='16' font-size='15'%3E%F0%9F%95%90%3C/text%3E%3C/svg%3E");
+}
+input[type="date"]:hover, input[type="time"]:hover { border-color:var(--blue); background-color:var(--lblue); }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  width:auto; height:auto; opacity:0; cursor:pointer;
+}
+
+/* ── PEDIDOS DESPACHADOS ARCHIVADOS ── */
+.archived-notice {
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  font-size:13px; color:var(--gray); opacity:.5; cursor:pointer;
+  padding:12px 14px; margin-top:8px; background:transparent;
+  border:1px dashed var(--border); border-radius:var(--radius);
+}
+.archived-notice:hover { opacity:.75; }
+.archived-list { opacity:.5; margin-top:8px; }
+
+/* ── MODAL ── */
+.overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:300;
+  display:none; align-items:flex-end; justify-content:center;
+}
+.overlay.open { display:flex; }
+.modal {
+  background:#fff; border-radius:20px 20px 0 0; width:100%; max-width:600px;
+  max-height:92vh; overflow-y:auto; padding:0 0 env(safe-area-inset-bottom);
+  animation:slideUp .25s ease;
+}
+@keyframes slideUp { from{transform:translateY(60px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modal-handle { width:40px; height:5px; background:#D5D8DC; border-radius:3px; margin:12px auto 0; }
+.modal-header {
+  padding:12px 16px 10px; display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid var(--lgray); position:sticky; top:0; background:#fff; z-index:10;
+}
+.modal-header h2 { font-size:17px; }
+.close-btn { width:32px; height:32px; border-radius:50%; border:none; background:var(--lgray); font-size:18px; cursor:pointer; }
+.modal-body { padding:16px; }
+
+/* ── FORMS ── */
+.field { margin-bottom:14px; }
+.field label { display:block; font-size:12px; font-weight:700; color:var(--gray); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+.field input, .field select, .field textarea {
+  width:100%; padding:11px 12px; border:1.5px solid var(--border);
+  border-radius:10px; font-size:15px; outline:none; transition:.2s; background:#fff;
+}
+.field input:focus, .field select:focus { border-color:var(--blue); }
+.field textarea { resize:none; }
+
+.row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+/* ── ITEM ROWS ── */
+.items-section { margin-bottom:14px; }
+.items-section h4 { font-size:13px; font-weight:700; color:var(--gray); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.item-row { margin-bottom:8px; }
+.del-btn {
+  width:36px; height:36px; border-radius:8px; border:1.5px solid var(--red);
+  background:#fff; color:var(--red); font-size:18px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center;
+}
+.add-item-btn {
+  width:100%; padding:10px; border:1.5px dashed var(--border); border-radius:10px;
+  background:#fff; font-size:14px; color:var(--gray); cursor:pointer; margin-bottom:4px;
+}
+.add-item-btn:hover { border-color:var(--navy); color:var(--navy); }
+
+/* ── PEDIDO ITEM ROW (producto libre + cantidad) ── */
+.ped-item-row { display:grid; grid-template-columns:84px 1fr 36px; gap:8px; align-items:center; }
+.ped-item-row input { padding:10px; border:1.5px solid var(--border); border-radius:10px; font-size:14px; outline:none; width:100%; transition:.2s; }
+.ped-item-row input:focus { border-color:var(--blue); }
+.qty-wrap { position:relative; }
+.qty-wrap .qty-unit {
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  font-size:12px; font-weight:700; color:var(--gray); pointer-events:none; display:none;
+}
+.qty-wrap.kg .qty-unit { display:block; }
+.qty-wrap.kg .qty-input { padding-right:32px; }
+.box-hint { font-size:12px; color:var(--blue); font-weight:600; margin:3px 0 0 4px; }
+.fetear-check {
+  display:none; align-items:center; gap:7px; margin:5px 0 0 4px;
+  font-size:13px; font-weight:700; color:var(--navy); cursor:pointer;
+  -webkit-user-select:none; user-select:none;
+}
+.fetear-check input { width:18px; height:18px; accent-color:var(--navy); cursor:pointer; margin:0; }
+.fetear-tag { color:var(--blue); font-weight:700; font-size:12px; white-space:nowrap; }
+
+/* ── TURNO (paneles Mañana/Tarde en la vista Reparto) ── */
+.turno-panel {
+  background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+  margin-bottom:10px; overflow:hidden;
+}
+.turno-head {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:15px 16px; font-size:16px; font-weight:700; cursor:pointer;
+}
+.turno-head .th-right { display:flex; align-items:center; gap:8px; color:var(--gray); font-size:13px; }
+.turno-body { padding:0 12px 12px; }
+.turno-empty { text-align:center; color:var(--gray); font-size:13px; padding:6px 0 12px; }
+.rep-row { display:flex; align-items:center; gap:8px; margin-top:8px; border-top:1px solid var(--lgray); padding-top:8px; }
+.rep-tag { font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px; color:var(--gray); background:var(--lgray); }
+.rep-tag.ok   { color:var(--green);  background:var(--lgreen); }
+.rep-tag.warn { color:var(--orange); background:var(--lorng); }
+.quitar-btn {
+  margin-left:auto; border:1.5px solid var(--border); background:#fff; color:var(--gray);
+  border-radius:8px; padding:5px 10px; font-size:12px; font-weight:700; cursor:pointer;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  width:100%; padding:14px; border-radius:12px; border:none; font-size:16px;
+  font-weight:700; cursor:pointer; transition:.15s;
+}
+.btn-primary  { background:var(--navy); color:#fff; }
+.btn-primary:active { background:var(--navy2); }
+.btn-primary:disabled { opacity:.6; cursor:default; }
+.btn-secondary { background:var(--lgray); color:var(--text); margin-top:8px; }
+.btn-danger   { background:var(--lred); color:var(--red); border:2px solid var(--red); margin-top:8px; }
+.btn-outline  { background:#fff; color:var(--navy); border:1.5px solid var(--navy); }
+
+/* ── DETAIL MODAL ── */
+.detail-section { margin-bottom:16px; }
+.detail-section h4 { font-size:12px; font-weight:700; color:var(--gray); text-transform:uppercase; margin-bottom:6px; }
+.detail-item { padding:8px 0; border-bottom:1px solid var(--lgray); display:flex; justify-content:space-between; }
+.detail-item:last-child { border-bottom:none; }
+.status-btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+.st-btn {
+  flex:1; padding:11px; border-radius:10px; border:2px solid var(--border);
+  font-size:14px; font-weight:700; cursor:pointer; background:#fff; min-width:100px;
+}
+.st-btn.act-Pendiente  { border-color:var(--orange); color:var(--orange); background:var(--lorng); }
+.st-btn.act-Despachado { border-color:var(--green);  color:var(--green);  background:var(--lgreen); }
+.st-btn.act-Cancelado  { border-color:var(--red);    color:var(--red);    background:var(--lred); }
+
+/* ── AUTOCOMPLETE ── */
+.ac-wrap { position:relative; }
+.ac-list {
+  position:absolute; top:100%; left:0; right:0; z-index:1000;
+  background:#fff; border:1.5px solid var(--blue); border-top:none;
+  border-radius:0 0 10px 10px; max-height:220px; overflow-y:auto;
+  box-shadow:0 8px 20px rgba(0,0,0,.15); display:none;
+}
+.ac-list.open { display:block; }
+.ac-item {
+  padding:10px 12px; cursor:pointer; font-size:14px; border-bottom:1px solid var(--lgray);
+}
+.ac-item:hover, .ac-item.sel { background:var(--lblue); }
+.ac-item strong { color:var(--navy); }
+.ac-cat { font-size:11px; color:var(--gray); }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:#1C2833; color:#fff; padding:10px 20px; border-radius:20px;
+  font-size:14px; font-weight:600; opacity:0; transition:.3s; z-index:1000;
+  pointer-events:none; white-space:nowrap;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ── LOADING ── */
+#loading {
+  position:fixed; inset:0; background:var(--navy); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:16px; z-index:9999;
+}
+#loading h2 { color:#fff; font-size:22px; }
+#loading p  { color:rgba(255,255,255,.6); font-size:14px; }
+.spinner {
+  width:44px; height:44px; border:4px solid rgba(255,255,255,.2);
+  border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── PEDIDOS FIJOS: chips de días ── */
+.dow-row { display:flex; gap:6px; flex-wrap:wrap; }
+.dow-chip {
+  flex:1; min-width:42px; padding:9px 0; border-radius:10px;
+  border:1.5px solid var(--border); background:#fff; font-size:13px;
+  font-weight:700; color:var(--gray); cursor:pointer; transition:.15s;
+}
+.dow-chip.on { background:var(--navy); border-color:var(--navy); color:#fff; }
+
+/* ── FETEO: lista de trabajo por día, reordenable (▲▼) y tildable ── */
+.fetl-day-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.fetl-day-head h3 { font-size:15px; color:var(--navy); }
+.fetl-day-head .badge { background:var(--orange); }
+.fetl-row { display:flex; align-items:center; gap:10px; padding:8px 6px; border-bottom:1px solid var(--lgray); }
+.fetl-row:last-child { border-bottom:none; }
+.fetl-row.done { background:var(--lgreen); border-radius:10px; }
+.fetl-qty { font-weight:800; color:var(--orange); white-space:nowrap; min-width:56px; font-size:15px; }
+.fetl-prod { flex:1; font-weight:600; font-size:14px; min-width:0; }
+.fetl-row.done .fetl-qty, .fetl-row.done .fetl-prod { color:var(--green); text-decoration:line-through; }
+.fetl-move { display:flex; flex-direction:column; gap:3px; }
+.fetl-move button {
+  width:32px; height:25px; border:1.5px solid var(--border); border-radius:7px;
+  background:#fff; color:var(--gray); font-size:11px; cursor:pointer; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.fetl-move button:disabled { opacity:.25; cursor:default; }
+.fetl-check {
+  width:40px; height:40px; border-radius:10px; border:1.5px solid var(--border);
+  background:#fff; font-size:17px; cursor:pointer; color:#CACFD2; flex-shrink:0;
+}
+.fetl-row.done .fetl-check { background:var(--green); border-color:var(--green); color:#fff; }
+
+/* ── STOCK COMPROMETIDO (solo PC, pestaña Pedidos): panel violeta
+   flotante al costado derecho. El contenido sigue centrado como
+   siempre. En pantallas anchas (≥1280 px) el panel entra en el margen
+   libre y se ve siempre; en PC más angostas queda oculto y se abre con
+   el botón 🟣 flotante. En mobile no existe. ── */
+#compPanel, #compFab { display:none; }
+#compPanel h4 {
+  font-size:12px; font-weight:800; color:#6C3483; text-transform:uppercase;
+  letter-spacing:.5px; margin-bottom:2px;
+}
+#compPanel .comp-note { font-size:11px; color:#884EA0; margin-bottom:8px; }
+.comp-item {
+  display:flex; gap:10px; align-items:baseline; font-size:13px;
+  padding:6px 0; border-bottom:1px solid #EBDEF0; color:#4A235A;
+}
+.comp-item:last-child { border-bottom:none; }
+.comp-item b { white-space:nowrap; color:#7D3C98; min-width:62px; }
+.comp-tag { font-size:10px; font-weight:700; color:#884EA0; white-space:nowrap; }
+@media(min-width:768px) {
+  #compPanel {
+    position:fixed; top:82px; right:16px; width:235px; z-index:120;
+    background:#FBF5FF; border:1.5px solid #C39BD3; border-radius:var(--radius);
+    padding:12px 14px; max-height:calc(100vh - 110px); overflow-y:auto;
+    box-shadow:0 3px 14px rgba(125,60,152,.18);
+  }
+  #compFab {
+    position:fixed; bottom:84px; right:24px; z-index:150;
+    width:48px; height:48px; border-radius:50%; border:1.5px solid #C39BD3;
+    background:#fff; font-size:20px; cursor:pointer;
+    box-shadow:0 3px 12px rgba(0,0,0,.22);
+    align-items:center; justify-content:center;
+  }
+  #compFab:hover { background:#F4ECF7; }
+}
+/* PC angosta: panel a demanda con el botón 🟣 */
+@media(min-width:768px) and (max-width:1279.98px) {
+  #compFab { display:flex; }
+  #compPanel.open { display:block; }
+}
+/* PC ancha: panel siempre visible en el margen libre */
+@media(min-width:1280px) {
+  #compPanel { display:block; }
+}
+
+/* ── BUSCADOR (solo PC) ── */
+#searchInput {
+  width:100%; padding:11px 40px 11px 12px; border:1.5px solid var(--border);
+  border-radius:10px; font-size:15px; outline:none; transition:.2s;
+}
+#searchInput:focus { border-color:var(--blue); }
+.search-clear {
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  border:none; background:var(--lgray); color:var(--gray); border-radius:50%;
+  width:26px; height:26px; font-size:13px; cursor:pointer;
+  display:none; align-items:center; justify-content:center;
+}
+
+/* ── BOTTOM NAV (solo mobile) ── */
+#bottomNav {
+  position:fixed; bottom:0; left:0; right:0; z-index:200;
+  display:flex; background:#fff; border-top:1px solid var(--border);
+  box-shadow:0 -2px 10px rgba(0,0,0,.08);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.bn-item {
+  flex:1; padding:7px 2px 9px; border:none; background:none; cursor:pointer;
+  font-size:10px; font-weight:700; color:var(--gray); min-width:0;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.bn-item span { font-size:19px; }
+.bn-item.on { color:var(--navy); }
+
+/* ── MOBILE: navegación abajo, tipografía táctil ── */
+@media(max-width:767.98px) {
+  .pc-only { display:none !important; }
+  main { padding-bottom:90px; }
+  .toast { bottom:90px; }
+  /* 16px evita que iOS haga zoom automático al enfocar un campo */
+  .field input, .field select, .field textarea,
+  .ped-item-row input { font-size:16px; }
+  .btn { padding:15px; }
+}
+
+/* ── PC: nav en el header, dos columnas, modales centrados ── */
+@media(min-width:768px) {
+  .mobile-only { display:none !important; }
+  main { max-width:1000px; padding:24px 32px 60px; }
+  header { padding:12px 24px; }
+  .order-list { grid-template-columns:1fr 1fr; }
+  .order-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.18); }
+  .overlay { align-items:center; padding:24px; }
+  .modal { border-radius:20px; max-width:560px; max-height:86vh; animation:popIn .18s ease; }
+  .modal-handle { display:none; }
+}
+@keyframes popIn { from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* ── PIN de acceso ── */
+#pinInput {
+  width:100%; padding:14px; border:1.5px solid var(--border); border-radius:12px;
+  font-size:26px; font-weight:700; text-align:center; letter-spacing:10px;
+  outline:none; transition:.2s;
+}
+#pinInput:focus { border-color:var(--blue); }
+#pinError { color:var(--red); font-size:13px; text-align:center; min-height:18px; margin-top:8px; }
+
+/* ── Cartel para instalar la app (iPhone no muestra ninguno solo) ── */
+#installBar {
+  display:none; position:fixed; left:12px; right:12px; z-index:250;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  background:var(--navy); color:#fff; border-radius:14px; padding:13px 14px;
+  box-shadow:0 4px 18px rgba(0,0,0,.3);
+  align-items:center; gap:11px; font-size:13.5px; line-height:1.45;
+}
+#installBar.show { display:flex; }
+#installBar .ib-x {
+  margin-left:auto; flex-shrink:0; align-self:flex-start;
+  background:rgba(255,255,255,.18); border:none; color:#fff;
+  width:26px; height:26px; border-radius:50%; font-size:13px; cursor:pointer;
+}
+#installBar b { display:block; margin-bottom:2px; }
+#installBar .ib-btn {
+  flex-shrink:0; background:#fff; color:var(--navy); border:none;
+  border-radius:9px; padding:9px 13px; font-size:13px; font-weight:700; cursor:pointer;
+}
+@media(max-width:767.98px) { #installBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <div class="spinner"></div>
+  <h2>Distribuidora Marcial</h2>
+  <p>Cargando datos…</p>
+</div>
+
+<!-- Who are you modal: primero el nombre, después el PIN -->
+<div class="overlay" id="whoModal">
+  <div class="modal" style="border-radius:20px;max-width:360px;margin:auto;padding:24px;">
+    <div class="modal-handle"></div>
+
+    <div id="whoPick">
+      <div style="text-align:center;padding:16px 0 8px;">
+        <div style="font-size:36px;margin-bottom:8px;">👤</div>
+        <h2 style="font-size:18px;margin-bottom:4px;">¿Quién sos?</h2>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Para registrar quién carga cada pedido</p>
+      </div>
+      <button class="menu-btn" onclick="pickWho('Joaquin')">👤 Joaquin</button>
+      <button class="menu-btn" onclick="pickWho('Oscar')">👤 Oscar</button>
+      <button class="menu-btn" onclick="pickWho('Thiago')">👤 Thiago</button>
+    </div>
+
+    <div id="whoPin" style="display:none">
+      <div style="text-align:center;padding:16px 0 8px;">
+        <div style="font-size:36px;margin-bottom:8px;">🔒</div>
+        <h2 style="font-size:18px;margin-bottom:4px;">Hola, <span id="whoPinName"></span></h2>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Escribí tu PIN para entrar</p>
+      </div>
+      <input type="password" id="pinInput" inputmode="numeric" autocomplete="off"
+        maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter')submitPin()">
+      <div id="pinError"></div>
+      <button class="btn btn-primary" id="pinBtn" style="margin-top:12px" onclick="submitPin()">Entrar</button>
+      <button class="btn btn-secondary" onclick="backToWhoPick()">← No soy yo</button>
+    </div>
+  </div>
+</div>
+
+<!-- App shell -->
+<div id="appShell" style="display:none">
+  <header>
+    <span>📦</span>
+    <h1 id="appTitle">Cargar Pedido</h1>
+    <nav id="pcNav" class="pc-only">
+      <button data-tab="cargar" class="on" onclick="goTab('cargar')">➕ Cargar</button>
+      <button data-tab="pedidos" onclick="goTab('pedidos')">🛒 Pedidos</button>
+      <!-- Reparto, Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
+           aviso (para reactivar alguno, descomentar acá, en el bottomNav
+           y en su panel tab-* / modal correspondiente más abajo):
+      <button data-tab="reparto" onclick="goTab('reparto')">🚚 Reparto</button>
+      <button data-tab="feteo" onclick="goTab('feteo')">🔪 Feteo</button>
+      <button data-tab="fijos" onclick="goTab('fijos')">📌 Fijos</button>
+      <button data-tab="muestras" onclick="goTab('muestras')">🎁 Muestras</button>
+      <button data-tab="visitar" onclick="goTab('visitar')">📍 Visitar</button>
+      -->
+    </nav>
+    <button id="whoBtn" onclick="openWhoModal()">👤 —</button>
+  </header>
+
+  <main>
+    <!-- CARGAR PEDIDO (página principal) -->
+    <div id="tab-cargar" class="tab-panel active">
+      <div class="form-card">
+        <div class="field">
+          <label>Cliente</label>
+          <div class="ac-wrap">
+            <input type="text" id="n_cliente" class="ac-input" placeholder="Nombre del cliente"
+              autocomplete="off" data-dir="n_direccion"
+              oninput="onClienteInput(this)"
+              onblur="closeClienteAcLater(this)">
+            <div class="ac-list"></div>
+          </div>
+        </div>
+        <div class="items-section">
+          <h4>Productos del pedido</h4>
+          <div id="cargarItemRows"></div>
+          <button class="add-item-btn" onclick="addItemRow('cargar')">＋ Agregar producto</button>
+        </div>
+        <div class="form-extras-row">
+          <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')">📅 Entrega, dirección y observación ▾</button>
+          <label class="retiro-mini"><input type="checkbox" id="n_retiro"> 🛻 RETIRO</label>
+        </div>
+        <div class="extras-body" id="n_extras">
+          <div class="row2">
+            <div class="field">
+              <label>¿Cuándo se entrega?</label>
+              <input type="date" id="n_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+            </div>
+            <div class="field">
+              <label>Dirección (opcional)</label>
+              <input type="text" id="n_direccion" placeholder="Ej: Av. San Martín 1234"
+                oninput="this.dataset.auto=''">
+            </div>
+          </div>
+          <div class="field">
+            <label>Observación (opcional)</label>
+            <textarea id="n_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
+      </div>
+    </div>
+
+    <!-- PEDIDOS -->
+    <div id="tab-pedidos" class="tab-panel">
+      <div id="pedidosMain">
+        <div class="form-card pc-only" style="padding:12px">
+          <div class="ac-wrap">
+            <input type="text" id="searchInput" placeholder="🔍 Buscar por cliente o producto…"
+              autocomplete="off" oninput="onSearchInput(this)"
+              onblur="setTimeout(()=>document.getElementById('searchAcList').classList.remove('open'),200)">
+            <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+            <div class="ac-list" id="searchAcList"></div>
+          </div>
+        </div>
+        <div id="pedidosList"></div>
+        <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
+          🗑<span class="pap-count" id="papeleraCount"></span>
+        </button>
+      </div>
+      <!-- Panel flotante (solo PC): lo ya comprometido en pedidos
+           pendientes. En PC angosta se abre/cierra con el botón 🟣. -->
+      <aside id="compPanel">
+        <h4>🟣 Stock comprometido</h4>
+        <p class="comp-note">Cantidades ya comprometidas en pedidos pendientes: esto NO se puede seguir ofreciendo.</p>
+        <div id="compList"></div>
+      </aside>
+      <button id="compFab" class="pc-only" title="Stock comprometido" onclick="toggleCompPanel()">🟣</button>
+    </div>
+
+    <!-- PEDIDOS FIJOS — oculto hasta nuevo aviso (descomentar este bloque
+         y los botones de navegación para reactivarlo)
+    <div id="tab-fijos" class="tab-panel">
+      <div class="pc-only" style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <button class="btn btn-outline" style="width:auto;padding:10px 16px" onclick="openFijoModal()">📌 Cargar pedido fijo</button>
+      </div>
+      <div id="fijosList"></div>
+    </div>
+    -->
+
+    <!-- REPARTO DEL DÍA — oculto hasta nuevo aviso (descomentar este
+         bloque y los botones de navegación para reactivarlo)
+    <div id="tab-reparto" class="tab-panel">
+      <div class="form-card">
+        <div class="row2" style="align-items:end">
+          <div class="field" style="margin-bottom:0">
+            <label>Día de reparto</label>
+            <input type="date" id="r_fecha" onchange="renderReparto()" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+          <button class="btn btn-outline" style="padding:11px" onclick="copyReparto()">📋 Copiar resumen</button>
+        </div>
+      </div>
+      <div id="repartoBody"></div>
+    </div>
+    -->
+
+    <!-- FETEO: grilla semanal de lo que hay que fetear (tildable) —
+         oculto hasta nuevo aviso (descomentar este bloque y los botones
+         de navegación para reactivarlo)
+    <div id="tab-feteo" class="tab-panel">
+      <div id="feteoBody"></div>
+    </div>
+    -->
+
+    <!-- MUESTRAS (registro aparte: no genera pedidos ni reparto) — oculto
+         hasta nuevo aviso (descomentar este bloque y los botones de
+         navegación para reactivarlo)
+    <div id="tab-muestras" class="tab-panel">
+      <div class="new-btn-row">
+        <button class="btn btn-primary" onclick="openMuestraNew()">➕ Cargar muestra</button>
+      </div>
+      <div id="muestrasList"></div>
+    </div>
+    -->
+
+    <!-- VISITAR (agenda de visitas a negocios) — oculto hasta nuevo aviso
+         (descomentar este bloque y los botones de navegación para
+         reactivarlo)
+    <div id="tab-visitar" class="tab-panel">
+      <div class="new-btn-row">
+        <button class="btn btn-primary" onclick="openVisitaNew()">➕ Cargar visita</button>
+      </div>
+      <div id="visitasList"></div>
+    </div>
+    -->
+  </main>
+
+  <!-- Navegación inferior (solo mobile) -->
+  <nav id="bottomNav" class="mobile-only">
+    <button data-tab="cargar" class="bn-item on" onclick="goTab('cargar')"><span>➕</span>Cargar</button>
+    <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span>🛒</span>Pedidos</button>
+    <!-- Reparto, Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
+    <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span>🚚</span>Reparto</button>
+    <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
+    <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
+    <button data-tab="muestras" class="bn-item" onclick="goTab('muestras')"><span>🎁</span>Muestras</button>
+    <button data-tab="visitar" class="bn-item" onclick="goTab('visitar')"><span>📍</span>Visitar</button>
+    -->
+  </nav>
+</div>
+
+<!-- MODAL: Cargar Muestra — oculto hasta nuevo aviso (junto con la pestaña Muestras)
+<div class="overlay" id="muestraNewModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>🎁 Cargar Muestra</h2>
+      <button class="close-btn" onclick="closeModal('muestraNewModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Cliente</label>
+        <div class="ac-wrap">
+          <input type="text" id="mu_cliente" class="ac-input" placeholder="Nombre del cliente"
+            autocomplete="off" data-dir="mu_direccion"
+            oninput="onClienteInput(this)"
+            onblur="closeClienteAcLater(this)">
+          <div class="ac-list"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Dirección (opcional)</label>
+        <input type="text" id="mu_direccion" placeholder="Ej: Av. San Martín 1234"
+          oninput="this.dataset.auto=''">
+      </div>
+      <div class="items-section">
+        <h4>Productos de la muestra</h4>
+        <div id="muItemRows"></div>
+        <button class="add-item-btn" onclick="addItemRow('mu')">＋ Agregar producto</button>
+      </div>
+      <div class="form-extras-row">
+        <button type="button" class="extras-toggle" id="mu_extrasBtn" onclick="toggleExtras('mu')">📅 Día, hora y observación ▾</button>
+      </div>
+      <div class="extras-body" id="mu_extras">
+        <div class="row2">
+          <div class="field">
+            <label>Día</label>
+            <input type="date" id="mu_dia" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+          <div class="field">
+            <label>Hora</label>
+            <input type="time" id="mu_hora" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observación (opcional)</label>
+          <textarea id="mu_notas" rows="2" placeholder="Ej: dejar con el encargado…"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="muSubmitBtn" onclick="submitMuestra()">Guardar Muestra</button>
+      <button class="btn btn-secondary" onclick="closeModal('muestraNewModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+-->
+
+<!-- ── MODAL: Editar Pedido ── -->
+<div class="overlay" id="pedidoModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>✏️ Editar Pedido</h2>
+      <button class="close-btn" onclick="closeModal('pedidoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="p_editId">
+      <div class="field">
+        <label>Cliente</label>
+        <div class="ac-wrap">
+          <input type="text" id="p_cliente" class="ac-input" placeholder="Nombre del cliente"
+            autocomplete="off" data-dir="p_direccion"
+            oninput="onClienteInput(this)"
+            onblur="closeClienteAcLater(this)">
+          <div class="ac-list"></div>
+        </div>
+      </div>
+      <div class="items-section">
+        <h4>Productos del pedido</h4>
+        <div id="pedItemRows"></div>
+        <button class="add-item-btn" onclick="addItemRow('ped')">＋ Agregar producto</button>
+      </div>
+      <div class="form-extras-row">
+        <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')">📅 Entrega, dirección y observación ▾</button>
+        <label class="retiro-mini"><input type="checkbox" id="p_retiro"> 🛻 RETIRO</label>
+      </div>
+      <div class="extras-body" id="p_extras">
+        <div class="row2">
+          <div class="field">
+            <label>¿Cuándo se entrega?</label>
+            <input type="date" id="p_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+          <div class="field">
+            <label>Dirección (opcional)</label>
+            <input type="text" id="p_direccion" placeholder="Ej: Av. San Martín 1234"
+              oninput="this.dataset.auto=''">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observación (opcional)</label>
+          <textarea id="p_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="submitEditPedido()">Guardar Cambios</button>
+      <button class="btn btn-secondary" onclick="closeModal('pedidoModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Detalle ── -->
+<div class="overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="detailTitle">Detalle</h2>
+      <button class="close-btn" onclick="closeModal('detailModal')">✕</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- MODAL: Pedido Fijo (crear/editar, solo PC) — oculto hasta nuevo
+     aviso (junto con la pestaña Fijos)
+<div class="overlay" id="fijoModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="fijoModalTitle">📌 Cargar Pedido Fijo</h2>
+      <button class="close-btn" onclick="closeModal('fijoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="f_editId">
+      <div class="field">
+        <label>Cliente</label>
+        <div class="ac-wrap">
+          <input type="text" id="f_cliente" class="ac-input" placeholder="Nombre del cliente"
+            autocomplete="off" data-dir="f_direccion"
+            oninput="onClienteInput(this)"
+            onblur="closeClienteAcLater(this)">
+          <div class="ac-list"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Días fijos de entrega</label>
+        <div class="dow-row">
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Lun</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Mar</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Mié</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Jue</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Vie</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Sáb</button>
+          <button type="button" class="dow-chip" onclick="this.classList.toggle('on')">Dom</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Dirección (opcional)</label>
+        <input type="text" id="f_direccion" placeholder="Ej: Av. San Martín 1234"
+          oninput="this.dataset.auto=''">
+      </div>
+      <div class="items-section">
+        <h4>Productos del pedido</h4>
+        <div id="fijoItemRows"></div>
+        <button class="add-item-btn" onclick="addItemRow('fijo')">＋ Agregar producto</button>
+      </div>
+      <div class="field">
+        <label>Observación (opcional)</label>
+        <textarea id="f_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
+      </div>
+      <button class="btn btn-primary" id="fijoSubmitBtn" onclick="submitFijo()">Guardar Pedido Fijo</button>
+      <button class="btn btn-secondary" onclick="closeModal('fijoModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+-->
+
+<!-- ── MODAL: Papelera de pedidos (solo PC) ── -->
+<div class="overlay" id="papeleraModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>🗑 Papelera de pedidos</h2>
+      <button class="close-btn" onclick="closeModal('papeleraModal')">✕</button>
+    </div>
+    <div class="modal-body" id="papeleraBody"></div>
+  </div>
+</div>
+
+<!-- ── MODAL: Agregar pedido a un turno ── -->
+<div class="overlay" id="turnoPickerModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="pickerTitle">Agregar pedido</h2>
+      <button class="close-btn" onclick="closeModal('turnoPickerModal')">✕</button>
+    </div>
+    <div class="modal-body" id="pickerBody"></div>
+  </div>
+</div>
+
+<!-- MODAL: Editar Muestra — oculto hasta nuevo aviso (junto con la pestaña Muestras)
+<div class="overlay" id="muestraModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>✏️ Editar Muestra</h2>
+      <button class="close-btn" onclick="closeModal('muestraModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="me_editId">
+      <div class="field">
+        <label>Cliente</label>
+        <div class="ac-wrap">
+          <input type="text" id="me_cliente" class="ac-input" placeholder="Nombre del cliente"
+            autocomplete="off" data-dir="me_direccion"
+            oninput="onClienteInput(this)"
+            onblur="closeClienteAcLater(this)">
+          <div class="ac-list"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Dirección (opcional)</label>
+        <input type="text" id="me_direccion" placeholder="Ej: Av. San Martín 1234"
+          oninput="this.dataset.auto=''">
+      </div>
+      <div class="items-section">
+        <h4>Productos de la muestra</h4>
+        <div id="meItemRows"></div>
+        <button class="add-item-btn" onclick="addItemRow('me')">＋ Agregar producto</button>
+      </div>
+      <div class="form-extras-row">
+        <button type="button" class="extras-toggle" id="me_extrasBtn" onclick="toggleExtras('me')">📅 Día, hora y observación ▾</button>
+      </div>
+      <div class="extras-body" id="me_extras">
+        <div class="row2">
+          <div class="field">
+            <label>Día</label>
+            <input type="date" id="me_dia" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+          <div class="field">
+            <label>Hora</label>
+            <input type="time" id="me_hora" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observación (opcional)</label>
+          <textarea id="me_notas" rows="2" placeholder="Ej: dejar con el encargado…"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="submitEditMuestra()">Guardar Cambios</button>
+      <button class="btn btn-secondary" onclick="closeModal('muestraModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+-->
+
+<!-- MODAL: Cargar Visita — oculto hasta nuevo aviso (junto con la pestaña Visitar)
+<div class="overlay" id="visitaNewModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>📍 Cargar Visita</h2>
+      <button class="close-btn" onclick="closeModal('visitaNewModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="row2">
+        <div class="field">
+          <label>Día</label>
+          <input type="date" id="v_dia" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+        </div>
+        <div class="field">
+          <label>Hora</label>
+          <input type="time" id="v_hora" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Nombre del negocio</label>
+        <input type="text" id="v_negocio" placeholder="Ej: Panadería La Espiga">
+      </div>
+      <div class="field">
+        <label>Observaciones importantes</label>
+        <textarea id="v_obs" rows="2" placeholder="Ej: hablar con el dueño por la mañana…"></textarea>
+      </div>
+      <button class="btn btn-primary" id="vSubmitBtn" onclick="submitVisita()">Guardar Visita</button>
+      <button class="btn btn-secondary" onclick="closeModal('visitaNewModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+-->
+
+<!-- MODAL: Editar Visita — oculto hasta nuevo aviso (junto con la pestaña Visitar)
+<div class="overlay" id="visitaModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>✏️ Editar Visita</h2>
+      <button class="close-btn" onclick="closeModal('visitaModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ve_editId">
+      <div class="row2">
+        <div class="field">
+          <label>Día</label>
+          <input type="date" id="ve_dia" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+        </div>
+        <div class="field">
+          <label>Hora</label>
+          <input type="time" id="ve_hora" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Nombre del negocio</label>
+        <input type="text" id="ve_negocio" placeholder="Ej: Panadería La Espiga">
+      </div>
+      <div class="field">
+        <label>Observaciones importantes</label>
+        <textarea id="ve_obs" rows="2" placeholder="Ej: hablar con el dueño por la mañana…"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="submitEditVisita()">Guardar Cambios</button>
+      <button class="btn btn-secondary" onclick="closeModal('visitaModal')">Cancelar</button>
+    </div>
+  </div>
+</div>
+-->
+
+<!-- Cartel para instalar la app en el celular -->
+<div id="installBar">
+  <div id="installText"></div>
+  <button class="ib-btn" id="installBtn" style="display:none" onclick="doInstall()">Instalar</button>
+  <button class="ib-x" onclick="dismissInstall()">✕</button>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  API — habla con Apps Script por fetch
+//
+//  Esta versión de la app NO vive dentro de Apps Script, así que no
+//  existe google.script.run. En su lugar se arma acá un objeto con la
+//  misma forma, que por dentro llama a la API con fetch. Gracias a eso
+//  el resto del código quedó igual que siempre:
+//
+//    google.script.run.withSuccessHandler(fn).savePedido(data)
+//
+//  sigue escribiéndose exactamente así en los ~30 lugares donde se usa.
+// ═══════════════════════════════════════════════════════════════
+const API_URL = 'https://script.google.com/macros/s/AKfycbxMpb8ojlpRzeTf6NaABTrxmgtI4aGz5YaZ-K-nhy-JLTSb_QCUyxpsHW4Ftug1tHvd/exec';
+
+// Las mismas funciones que la lista blanca de Code.js. Si alguna falta
+// acá, llamarla tira "no es una función" en vez de fallar en el servidor.
+const API_ACTIONS = [
+  'getAppData', 'savePedido', 'updatePedido', 'updatePedidoStatus',
+  'deletePedido', 'restorePedido', 'setPedidoTurno',
+  'saveMuestra', 'updateMuestra', 'setMuestraEstado', 'deleteMuestra',
+  'saveVisita', 'updateVisita', 'setVisitaEstado', 'deleteVisita',
+  'savePedidoFijo', 'updatePedidoFijo', 'setPedidoFijoEstado', 'deletePedidoFijo',
+  'setFeteoHecho', 'setFeteoOrden'
+];
+
+function apiCall(action, args, onOk, onErr) {
+  fetch(API_URL, {
+    method: 'POST',
+    // text/plain a propósito: con application/json el navegador manda
+    // primero un preflight OPTIONS que Apps Script no sabe contestar y
+    // la llamada falla entera. Así la trata como "simple request".
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ pin: state.pin || '', action: action, args: args || [] })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res && res.ok) { if (onOk) onOk(res.data); }
+      else if (onErr) onErr(new Error((res && res.error) || 'Error desconocido'));
+    })
+    .catch(() => {
+      // Sin señal el fetch se cae acá: conviene decirlo con esas palabras.
+      if (onErr) onErr(new Error(navigator.onLine
+        ? 'No se pudo conectar con el servidor'
+        : 'Sin conexión a internet'));
+    });
+}
+
+// Cada vez que se lee google.script.run se devuelve un objeto nuevo, para
+// que los handlers de una llamada no se mezclen con los de otra.
+function makeRunner() {
+  const h = {};
+  const runner = {
+    withSuccessHandler: function (fn) { h.ok = fn; return runner; },
+    withFailureHandler: function (fn) { h.err = fn; return runner; }
+  };
+  API_ACTIONS.forEach(action => {
+    runner[action] = function () {
+      apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
+      return runner;
+    };
+  });
+  return runner;
+}
+const google = { script: {} };
+Object.defineProperty(google.script, 'run', { get: makeRunner });
+
+// ═══════════════════════════════════════════════════════════════
+//  App State
+// ═══════════════════════════════════════════════════════════════
+let state = { products:[], pedidos:[], fijos:[], muestras:[], visitas:[], papelera:[], clientes:[], feteoHecho:[], feteoOrden:[], today:'', who:'—', pin:'' };
+let activeTab = 'cargar';
+let showArchived = false;
+let searchQuery = '';
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+// ═══════════════════════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════════════════════
+const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago'];
+
+// Nombre elegido en el primer paso, todavía sin PIN confirmado.
+let pendingWho = '';
+
+window.addEventListener('load', () => {
+  const savedWho = localStorage.getItem('dm_ped_who');
+  const savedPin = localStorage.getItem('dm_ped_pin');
+  // Solo entra derecho si guardó las dos cosas: el PIN se guarda recién
+  // cuando el servidor lo aceptó, así que si está, sirve.
+  if (savedWho && VENDEDORES.includes(savedWho) && savedPin) {
+    state.who = savedWho;
+    state.pin = savedPin;
+    pendingWho = savedWho;
+    document.getElementById('whoBtn').textContent = '👤 ' + savedWho;
+    loadData();
+  } else {
+    document.getElementById('loading').style.display = 'none';
+    showWhoPick();
+    document.getElementById('whoModal').classList.add('open');
+  }
+  checkInstallBar();
+});
+
+function showWhoPick() {
+  document.getElementById('whoPick').style.display = 'block';
+  document.getElementById('whoPin').style.display = 'none';
+}
+
+function backToWhoPick() { showWhoPick(); }
+
+// Paso 1: eligió el nombre. Siempre se pide el PIN, incluso si ya había
+// uno guardado: si está cambiando de usuario, el PIN es otro.
+function pickWho(name) {
+  pendingWho = name;
+  document.getElementById('whoPinName').textContent = name;
+  document.getElementById('whoPick').style.display = 'none';
+  document.getElementById('whoPin').style.display = 'block';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinError').textContent = '';
+  setTimeout(() => document.getElementById('pinInput').focus(), 120);
+}
+
+// Paso 2: el PIN no se valida acá — se manda al servidor y se ve si la
+// llamada pasa. Se guarda solo si funcionó (ver loadData).
+function submitPin() {
+  const pin = document.getElementById('pinInput').value.trim();
+  if (!pin) { document.getElementById('pinError').textContent = 'Escribí tu PIN'; return; }
+  const btn = document.getElementById('pinBtn');
+  btn.disabled = true; btn.textContent = 'Verificando…';
+  state.who = pendingWho;
+  state.pin = pin;
+  document.getElementById('whoBtn').textContent = '👤 ' + pendingWho;
+  document.getElementById('whoModal').classList.remove('open');
+  document.getElementById('loading').style.display = 'flex';
+  loadData();
+}
+
+function openWhoModal() {
+  showWhoPick();
+  document.getElementById('whoModal').classList.add('open');
+}
+
+function loadData() {
+  google.script.run
+    .withSuccessHandler(data => {
+      // El PIN sirvió: recién ahora se guarda para no volver a pedirlo.
+      localStorage.setItem('dm_ped_who', state.who);
+      localStorage.setItem('dm_ped_pin', state.pin);
+      const btn = document.getElementById('pinBtn');
+      btn.disabled = false; btn.textContent = 'Entrar';
+      state = { ...state, ...data };
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('appShell').style.display = 'block';
+      renderPedidos();
+      resetCargarForm();
+      setTab(activeTab);
+    })
+    .withFailureHandler(err => {
+      const msg = String((err && err.message) || err);
+      const btn = document.getElementById('pinBtn');
+      btn.disabled = false; btn.textContent = 'Entrar';
+      // PIN rechazado: se descarta el guardado y se vuelve a pedir, en vez
+      // de dejar la pantalla de error sin salida.
+      if (/PIN/i.test(msg)) {
+        state.pin = '';
+        localStorage.removeItem('dm_ped_pin');
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('whoModal').classList.add('open');
+        pickWho(pendingWho || state.who || 'Joaquin');
+        document.getElementById('pinError').textContent = 'PIN incorrecto. Probá de nuevo.';
+        return;
+      }
+      document.getElementById('loading').style.display = 'flex';
+      document.getElementById('loading').innerHTML =
+        `<p style="color:#fff;text-align:center;padding:0 20px">Error al cargar: ${esc(msg)}</p>
+         <button onclick="location.reload()" style="margin-top:12px;padding:10px 20px;border-radius:8px;border:none;cursor:pointer">Reintentar</button>`;
+    })
+    .getAppData();
+}
+
+function reload() {
+  google.script.run
+    .withSuccessHandler(data => { state = { ...state, ...data }; renderPedidos(); if (activeTab === 'reparto') renderReparto(); if (activeTab === 'feteo') renderFeteo(); toast('✓ Actualizado'); })
+    .withFailureHandler(e => toast('Error al actualizar: ' + e.message))
+    .getAppData();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════════
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto del día', feteo:'Feteo', fijos:'Pedidos Fijos', muestras:'Muestras', visitar:'Visitar' };
+
+function setTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('appTitle').textContent = TAB_TITLES[tab] || 'Distribuidora Marcial';
+  document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
+    .forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  // Reparto está oculto: la rama queda por si se reactiva la pestaña.
+  if (tab === 'reparto') {
+    const f = document.getElementById('r_fecha');
+    if (f) {
+      if (!f.value) f.value = state.today || '';
+      renderReparto();
+    }
+  }
+  if (tab === 'feteo') renderFeteo();
+  if (tab === 'fijos') renderFijos();
+  if (tab === 'muestras') renderMuestras();
+  if (tab === 'visitar') renderVisitas();
+  window.scrollTo(0, 0);
+}
+
+function goTab(tab) { setTab(tab); }
+
+// Las cargas de muestras y visitas viven en modales (como el de Fijos).
+// Abrirlos no borra lo escrito: si se cerró a mitad de una carga, al
+// reabrir sigue todo ahí. Se limpia solo al guardar.
+function openMuestraNew() {
+  document.getElementById('muestraNewModal').classList.add('open');
+}
+
+function openVisitaNew() {
+  document.getElementById('visitaNewModal').classList.add('open');
+}
+
+// Los campos de fecha/hora no se tipean: al tocarlos se abre el widget
+// del navegador (en el celular ya es el comportamiento nativo).
+function openPicker(el) {
+  if (el.showPicker) { try { el.showPicker(); } catch (e) {} }
+}
+function pickerKeys(e) {
+  return e.key === 'Tab' || e.key === 'Enter' || e.key === 'Escape';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FORM: Cargar Pedido (página principal)
+// ═══════════════════════════════════════════════════════════════
+function resetCargarForm() {
+  document.getElementById('n_cliente').value = '';
+  document.getElementById('n_direccion').value = '';
+  document.getElementById('n_direccion').dataset.auto = '';
+  document.getElementById('n_notas').value = '';
+  document.getElementById('n_fecha').value = '';
+  document.getElementById('n_retiro').checked = false;
+  document.getElementById('cargarItemRows').innerHTML = '';
+  setExtrasOpen('n', false);
+  addItemRow('cargar');
+}
+
+// Fecha de entrega, dirección y observación viven plegadas para no
+// hacer ruido; se abren al tocar el botoncito 📅.
+const EXTRAS_LABELS = {
+  n:  'Entrega, dirección y observación',
+  p:  'Entrega, dirección y observación',
+  mu: 'Día, hora y observación',
+  me: 'Día, hora y observación'
+};
+function setExtrasOpen(prefix, open) {
+  document.getElementById(prefix + '_extras').classList.toggle('open', open);
+  document.getElementById(prefix + '_extrasBtn').textContent =
+    '📅 ' + EXTRAS_LABELS[prefix] + ' ' + (open ? '▴' : '▾');
+}
+
+function toggleExtras(prefix) {
+  const isOpen = document.getElementById(prefix + '_extras').classList.contains('open');
+  setExtrasOpen(prefix, !isOpen);
+}
+
+function submitCargarPedido() {
+  const cliente      = document.getElementById('n_cliente').value.trim();
+  const direccion    = document.getElementById('n_direccion').value.trim();
+  const fechaEntrega = document.getElementById('n_fecha').value;
+  const notas        = document.getElementById('n_notas').value.trim();
+  const retiro       = document.getElementById('n_retiro').checked;
+  if (!cliente) { alert('Escribí el nombre del cliente'); return; }
+
+  const items = getItemRows('cargar');
+  if (!items.length) { alert('Agregá al menos un producto'); return; }
+
+  const btn = document.getElementById('cargarSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  google.script.run
+    .withSuccessHandler(() => {
+      btn.disabled = false; btn.textContent = 'Guardar Pedido';
+      toast('✓ Pedido guardado');
+      resetCargarForm();
+      window.scrollTo(0, 0);
+      reload();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false; btn.textContent = 'Guardar Pedido';
+      toast('Error: ' + e.message);
+    })
+    .savePedido({ cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PEDIDOS (visualización + editar/eliminar pendientes)
+// ═══════════════════════════════════════════════════════════════
+function pedidoCardHtml(p, extra) {
+  const fechas = [`Cargado ${fmtDate(p.fecha)}`];
+  if (p.fechaEntrega) fechas.push(`Entrega ${fmtDate(p.fechaEntrega)}`);
+  if (p.estado === 'Despachado' && p.fechaDespacho) fechas.push(`Despachado ${fmtDate(p.fechaDespacho)}`);
+  if (p.estado === 'Cancelado' && p.fechaDespacho) fechas.push(`Cancelado ${fmtDate(p.fechaDespacho)}`);
+  return `
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}" onclick="openPedidoDetail('${p.id}')">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">${esc(p.cliente)}${p.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(p.direccion)}</span>` : ''}</div>
+          <div class="oc-sub">${fechas.join(' · ')} · ${p.items.length} producto${p.items.length !== 1 ? 's' : ''}${p.quien ? ` · 👤 ${esc(p.quien)}` : ''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <span class="status-pill sp-${p.estado}">${p.estado}</span>
+          ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+          ${p.fijoId ? '<span class="fijo-tag">📌 FIJO</span>' : ''}
+        </div>
+      </div>
+      ${p.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
+      ${p.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${p.items.length - 3} más…</div>` : ''}
+      ${extra || ''}
+    </div>`;
+}
+
+// Tarjetas con un separador cada vez que cambia la fecha de carga
+// (la lista ya viene con lo más reciente arriba).
+function listWithDividers(list) {
+  let html = '', last = null;
+  list.forEach(p => {
+    if (p.fecha !== last) { html += dayDividerHtml(p.fecha); last = p.fecha; }
+    html += pedidoCardHtml(p);
+  });
+  return html;
+}
+
+function dayDividerHtml(f) {
+  let lbl = fmtDate(f) || 'Sin fecha';
+  if (f === state.today) lbl = 'Hoy · ' + lbl;
+  else if (daysSince(f) === 1) lbl = 'Ayer · ' + lbl;
+  return `<div class="day-divider">${lbl}</div>`;
+}
+
+function pedidoSectionHtml(est, list) {
+  if (!list.length) return '';
+  return `<div class="section-header"><h3>${est}</h3><span class="badge">${list.length}</span></div>` +
+    `<div class="order-list">${listWithDividers(list)}</div>`;
+}
+
+function renderPedidos() {
+  // Filtro del buscador (solo visible en PC): por cliente o producto.
+  let pedidos = state.pedidos;
+  const q = searchQuery.trim().toLowerCase();
+  if (q) {
+    pedidos = pedidos.filter(p =>
+      String(p.cliente || '').toLowerCase().includes(q) ||
+      (p.items || []).some(it => String(it.prod || '').toLowerCase().includes(q)));
+  }
+  const pend = [], desp = [], canc = [], arch = [];
+  pedidos.forEach(p => {
+    if (p.estado === 'Pendiente') pend.push(p);
+    else if (p.estado === 'Cancelado') {
+      (daysSince(p.fechaDespacho || p.fecha) > 7 ? arch : canc).push(p);
+    }
+    else if (p.estado === 'Despachado') {
+      (daysSince(p.fechaDespacho || p.fecha) > 7 ? arch : desp).push(p);
+    }
+  });
+
+  let html = '';
+  html += pedidoSectionHtml('Pendiente', pend);
+  html += pedidoSectionHtml('Despachado', desp);
+  html += pedidoSectionHtml('Cancelado', canc);
+
+  if (arch.length) {
+    html += `<div class="archived-notice" onclick="toggleArchived()">
+      <span>✓ ${arch.length} pedido${arch.length !== 1 ? 's' : ''} de hace más de 1 semana</span>
+      <span>${showArchived ? '▲' : '▼'}</span>
+    </div>`;
+    if (showArchived) {
+      html += `<div class="order-list archived-list">${listWithDividers(arch)}</div>`;
+    }
+  }
+
+  if (!html) {
+    html = q
+      ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
+      : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde ➕ Cargar Pedido</p>';
+  }
+  document.getElementById('pedidosList').innerHTML = html;
+  updatePapeleraFab();
+  renderComprometido();
+}
+
+// ── Stock comprometido (panel violeta, solo PC): total por producto de
+// todo lo pedido en pedidos Pendientes. Mismo dato que la hoja
+// "Comprometido" del spreadsheet.
+function renderComprometido() {
+  const el = document.getElementById('compList');
+  if (!el) return;
+  const pend = state.pedidos.filter(p => p.estado === 'Pendiente');
+  // De mayor a menor cantidad: lo más comprometido primero.
+  const totals = totalsOf(pend).sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  el.innerHTML = totals.length
+    ? totals.map(t => {
+        const tags = [];
+        if (t.fetear) tags.push('🔪 FETEAR');
+        if (t.fetear && isPanceta(t.prod)) tags.push(t.sinCuero ? 'SIN CUERO' : 'CON CUERO');
+        return `<div class="comp-item"><b>${itemLineLabel(t)}</b><span>${esc(t.prod)}${tags.length ? ` <span class="comp-tag">${tags.join(' · ')}</span>` : ''}</span></div>`;
+      }).join('')
+    : '<p style="font-size:12px;color:#884EA0">Nada comprometido: no hay pedidos pendientes.</p>';
+}
+
+// En PC angosta el panel violeta vive plegado: el botón 🟣 lo muestra.
+function toggleCompPanel() {
+  document.getElementById('compPanel').classList.toggle('open');
+}
+
+// ── Papelera (solo PC): pedidos eliminados, restaurables por 3 días ──
+function updatePapeleraFab() {
+  const n = (state.papelera || []).length;
+  const c = document.getElementById('papeleraCount');
+  c.textContent = n;
+  c.style.display = n ? 'block' : 'none';
+}
+
+function papeleraCardHtml(p) {
+  const rest = 3 - daysSince(p.fechaElim);
+  const cuando = rest <= 0 ? 'hoy' : (rest === 1 ? 'mañana' : 'en ' + rest + ' días');
+  const sub = ['Eliminado ' + fmtDate(p.fechaElim)];
+  if (p.elimPor) sub.push('👤 ' + esc(p.elimPor));
+  sub.push('se borra ' + cuando);
+  return `
+    <div class="order-card ${p.estado}" style="cursor:default;margin-bottom:8px">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">${esc(p.cliente)}${p.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(p.direccion)}</span>` : ''}</div>
+          <div class="oc-sub">${sub.join(' · ')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <span class="status-pill sp-${p.estado}">${p.estado}</span>
+          ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+        </div>
+      </div>
+      ${p.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
+      ${p.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${p.items.length - 3} más…</div>` : ''}
+      <div class="rep-row">
+        <button class="quitar-btn" style="margin-left:0" onclick="restorePedidoUi('${p.id}')">↩ Restaurar pedido</button>
+      </div>
+    </div>`;
+}
+
+function renderPapelera() {
+  const list = state.papelera || [];
+  document.getElementById('papeleraBody').innerHTML = list.length
+    ? `<p style="font-size:12px;color:var(--gray);margin-bottom:10px">Los pedidos eliminados se guardan acá 3 días y después se borran definitivamente.</p>`
+      + list.map(papeleraCardHtml).join('')
+    : '<p style="text-align:center;color:var(--gray);padding:30px">La papelera está vacía.<br>Los pedidos que elimines se guardan acá 3 días.</p>';
+}
+
+function openPapelera() {
+  renderPapelera();
+  document.getElementById('papeleraModal').classList.add('open');
+}
+
+function restorePedidoUi(id) {
+  // Optimista: sale de la papelera al toque; reload() confirma después.
+  state.papelera = (state.papelera || []).filter(p => p.id !== id);
+  renderPapelera();
+  updatePapeleraFab();
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Pedido restaurado'); reload(); }
+      else { toast('Error: ' + (r.error || 'No se pudo restaurar')); reload(); }
+    })
+    .withFailureHandler(e => { toast('Error: ' + e.message); reload(); })
+    .restorePedido(id);
+}
+
+function toggleArchived() {
+  showArchived = !showArchived;
+  renderPedidos();
+}
+
+// ── Buscador de pedidos (solo PC): cliente o producto, con lista
+// desplegable que aparece solo al escribir ──
+function onSearchInput(input) {
+  searchQuery = input.value;
+  document.getElementById('searchClear').style.display = input.value ? 'flex' : 'none';
+  renderPedidos();
+  const q = input.value.trim().toLowerCase();
+  const list = document.getElementById('searchAcList');
+  if (!q) { list.classList.remove('open'); list.innerHTML = ''; return; }
+  const cli = (state.clientes || []).filter(c => c.n.toLowerCase().includes(q)).slice(0, 15);
+  const prods = (state.products || []).filter(p => p.n.toLowerCase().includes(q)).slice(0, 15);
+  if (!cli.length && !prods.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
+  const hl = s => esc(s).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>');
+  list.innerHTML =
+    cli.map(c => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(c.n)}')">${hl(c.n)}<div class="ac-cat">👤 Cliente</div></div>`).join('') +
+    prods.map(p => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(p.n)}')">${hl(p.n)}<div class="ac-cat">📦 Producto</div></div>`).join('');
+  list.classList.add('open');
+}
+
+function selectSearch(e, name) {
+  e.preventDefault();
+  const input = document.getElementById('searchInput');
+  input.value = name;
+  searchQuery = name;
+  document.getElementById('searchAcList').classList.remove('open');
+  document.getElementById('searchClear').style.display = 'flex';
+  renderPedidos();
+}
+
+function clearSearch() {
+  const input = document.getElementById('searchInput');
+  input.value = '';
+  searchQuery = '';
+  document.getElementById('searchAcList').classList.remove('open');
+  document.getElementById('searchClear').style.display = 'none';
+  renderPedidos();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PEDIDOS FIJOS (se cargan desde la PC; se ven en PC y mobile)
+// ═══════════════════════════════════════════════════════════════
+function fijoDias(f) {
+  return DIAS_SEMANA.filter((d, i) => f.dias && f.dias[i]).join(' · ');
+}
+
+function fijoCardHtml(f) {
+  const est = f.estado === 'Pausado' ? 'Pausado' : 'Activo';
+  return `
+    <div class="order-card ${est}" onclick="openFijoDetail('${f.id}')">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">📌 ${esc(f.cliente)}${f.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(f.direccion)}</span>` : ''}</div>
+          <div class="oc-sub">📅 ${fijoDias(f) || 'Sin días'} · ${f.items.length} producto${f.items.length !== 1 ? 's' : ''}${f.quien ? ` · 👤 ${esc(f.quien)}` : ''}</div>
+        </div>
+        <span class="status-pill sp-${est}">${est}</span>
+      </div>
+      ${f.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
+      ${f.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${f.items.length - 3} más…</div>` : ''}
+    </div>`;
+}
+
+function renderFijos() {
+  const list = state.fijos || [];
+  let html;
+  if (list.length) {
+    html = `<div class="section-header"><h3>📌 Pedidos fijos</h3><span class="badge">${list.length}</span></div>
+      <div class="order-list">${list.map(fijoCardHtml).join('')}</div>
+      <p style="text-align:center;color:var(--gray);font-size:12px;padding:4px 16px">Los domingos se generan por adelantado los pedidos de toda la semana, marcados 📌 FIJO, listos para sumarles productos.</p>`;
+  } else {
+    html = `<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos fijos todavía.<br>
+      <span class="pc-only" style="display:inline">Cargalos con el botón 📌 de acá arriba.</span>
+      <span class="mobile-only">Se cargan desde la computadora.</span></p>`;
+  }
+  document.getElementById('fijosList').innerHTML = html;
+}
+
+function openFijoDetail(id) {
+  const f = (state.fijos || []).find(x => x.id === id);
+  if (!f) return;
+  const est = f.estado === 'Pausado' ? 'Pausado' : 'Activo';
+  document.getElementById('detailTitle').textContent = '📌 ' + (f.cliente || id);
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-section">
+      <h4>Info</h4>
+      <div class="detail-item"><span>Cliente</span><b>${esc(f.cliente)}</b></div>
+      ${f.direccion ? `<div class="detail-item"><span>Dirección</span><b>${esc(f.direccion)}</b></div>` : ''}
+      <div class="detail-item"><span>Días de entrega</span><b>${fijoDias(f) || '—'}</b></div>
+      <div class="detail-item"><span>Estado</span><span class="status-pill sp-${est}">${est}</span></div>
+      ${f.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(f.quien)}</b></div>` : ''}
+      ${f.notas ? `<div class="detail-item"><span>Observación</span><b>${esc(f.notas)}</b></div>` : ''}
+    </div>
+    <div class="detail-section">
+      <h4>Productos</h4>
+      ${f.items.map(it => `<div class="detail-item qty-left"><b>${itemLineLabel(it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>`).join('')}
+    </div>
+    <button class="btn btn-outline" onclick="toggleFijoEstado('${f.id}')">${est === 'Pausado' ? '▶️ Reactivar' : '⏸ Pausar'}</button>
+    <div class="pc-only"><button class="btn btn-outline" style="margin-top:8px" onclick="openFijoEdit('${f.id}')">✏️ Editar pedido fijo</button></div>
+    <button class="btn btn-danger" onclick="confirmDeleteFijo('${f.id}')">🗑 Eliminar pedido fijo</button>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function toggleFijoEstado(id) {
+  const f = (state.fijos || []).find(x => x.id === id);
+  if (!f) return;
+  const nuevo = f.estado === 'Pausado' ? 'Activo' : 'Pausado';
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast(nuevo === 'Activo' ? '✓ Pedido fijo reactivado' : '✓ Pedido fijo pausado'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .setPedidoFijoEstado(id, nuevo);
+}
+
+function confirmDeleteFijo(id) {
+  const f = (state.fijos || []).find(x => x.id === id);
+  if (!f) return;
+  if (!confirm(`¿Eliminar el pedido fijo de "${f.cliente}"?\nLos pedidos ya generados no se borran.`)) return;
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Pedido fijo eliminado'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo eliminar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .deletePedidoFijo(id);
+}
+
+function openFijoModal() {
+  document.getElementById('f_editId').value = '';
+  document.getElementById('fijoModalTitle').textContent = '📌 Cargar Pedido Fijo';
+  document.getElementById('f_cliente').value = '';
+  document.getElementById('f_direccion').value = '';
+  document.getElementById('f_direccion').dataset.auto = '';
+  document.getElementById('f_notas').value = '';
+  document.querySelectorAll('#fijoModal .dow-chip').forEach(c => c.classList.remove('on'));
+  document.getElementById('fijoItemRows').innerHTML = '';
+  addItemRow('fijo');
+  document.getElementById('fijoModal').classList.add('open');
+}
+
+function openFijoEdit(id) {
+  const f = (state.fijos || []).find(x => x.id === id);
+  if (!f) return;
+  closeModal('detailModal');
+  openFijoModal();
+  document.getElementById('f_editId').value = id;
+  document.getElementById('fijoModalTitle').textContent = '✏️ Editar Pedido Fijo';
+  document.getElementById('f_cliente').value = f.cliente || '';
+  document.getElementById('f_direccion').value = f.direccion || '';
+  document.getElementById('f_notas').value = f.notas || '';
+  document.querySelectorAll('#fijoModal .dow-chip').forEach((c, i) => c.classList.toggle('on', !!f.dias[i]));
+  const cont = document.getElementById('fijoItemRows');
+  cont.innerHTML = '';
+  (f.items || []).forEach(it => addItemRowWith('fijo', it));
+  if (!cont.children.length) addItemRow('fijo');
+}
+
+function submitFijo() {
+  const cliente   = document.getElementById('f_cliente').value.trim();
+  const direccion = document.getElementById('f_direccion').value.trim();
+  const notas     = document.getElementById('f_notas').value.trim();
+  const dias = [...document.querySelectorAll('#fijoModal .dow-chip')].map(c => c.classList.contains('on'));
+  if (!cliente) { alert('Escribí el nombre del cliente'); return; }
+  if (!dias.some(Boolean)) { alert('Elegí al menos un día fijo de entrega'); return; }
+  const items = getItemRows('fijo');
+  if (!items.length) { alert('Agregá al menos un producto'); return; }
+
+  const editId = document.getElementById('f_editId').value;
+  const btn = document.getElementById('fijoSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  const done = ok => {
+    btn.disabled = false; btn.textContent = 'Guardar Pedido Fijo';
+    if (ok) { closeModal('fijoModal'); reload(); }
+  };
+  const runner = google.script.run
+    .withSuccessHandler(r => {
+      if (r && r.ok === false) { toast('Error: ' + (r.error || 'No se pudo guardar')); done(false); return; }
+      toast(editId ? '✓ Pedido fijo actualizado' : '✓ Pedido fijo guardado');
+      done(true);
+    })
+    .withFailureHandler(e => { toast('Error: ' + e.message); done(false); });
+  if (editId) runner.updatePedidoFijo({ id: editId, cliente, direccion, notas, dias, items });
+  else runner.savePedidoFijo({ cliente, direccion, notas, dias, items, quien: state.who });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MUESTRAS (registro aparte: no genera pedidos ni entra al reparto)
+// ═══════════════════════════════════════════════════════════════
+function resetMuestraForm() {
+  ['mu_cliente','mu_direccion','mu_dia','mu_hora','mu_notas']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('mu_direccion').dataset.auto = '';
+  document.getElementById('muItemRows').innerHTML = '';
+  setExtrasOpen('mu', false);
+  addItemRow('mu');
+}
+
+function submitMuestra() {
+  const cliente = document.getElementById('mu_cliente').value.trim();
+  if (!cliente) { alert('Escribí el nombre del cliente'); return; }
+  const items = getItemRows('mu');
+  if (!items.length) { alert('Agregá al menos un producto'); return; }
+  const data = {
+    cliente,
+    direccion: document.getElementById('mu_direccion').value.trim(),
+    dia:       document.getElementById('mu_dia').value,
+    hora:      document.getElementById('mu_hora').value,
+    notas:     document.getElementById('mu_notas').value.trim(),
+    items, quien: state.who
+  };
+  const btn = document.getElementById('muSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  google.script.run
+    .withSuccessHandler(() => {
+      btn.disabled = false; btn.textContent = 'Guardar Muestra';
+      closeModal('muestraNewModal');
+      toast('✓ Muestra guardada');
+      resetMuestraForm();
+      window.scrollTo(0, 0);
+      reload();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false; btn.textContent = 'Guardar Muestra';
+      toast('Error: ' + e.message);
+    })
+    .saveMuestra(data);
+}
+
+function muestraCardHtml(m) {
+  const hecho = m.estado === 'Hecho';
+  const sub = ['Cargada ' + fmtDate(m.fecha)];
+  if (m.dia || m.hora) sub.push('📅 ' + [fmtDate(m.dia), m.hora].filter(Boolean).join(' '));
+  sub.push(m.items.length + ' producto' + (m.items.length !== 1 ? 's' : ''));
+  if (m.quien) sub.push('👤 ' + esc(m.quien));
+  return `
+    <div class="order-card ${hecho ? 'Despachado' : 'Pendiente'}" onclick="openMuestraDetail('${m.id}')">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">${esc(m.cliente)}${m.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(m.direccion)}</span>` : ''}</div>
+          <div class="oc-sub">${sub.join(' · ')}</div>
+        </div>
+        <span class="status-pill ${hecho ? 'sp-Despachado' : 'sp-Pendiente'}">${hecho ? '✓ Hecho' : 'Pendiente'}</span>
+      </div>
+      ${m.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
+      ${m.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${m.items.length - 3} más…</div>` : ''}
+      ${m.notas ? `<div class="oc-items">⚠ ${esc(m.notas)}</div>` : ''}
+    </div>`;
+}
+
+function renderMuestras() {
+  const list = state.muestras || [];
+  const pend = list.filter(m => m.estado !== 'Hecho');
+  const hechas = list.filter(m => m.estado === 'Hecho');
+  let html = '';
+  if (pend.length) html += `<div class="section-header"><h3>Pendientes</h3><span class="badge">${pend.length}</span></div>
+    <div class="order-list">${pend.map(muestraCardHtml).join('')}</div>`;
+  if (hechas.length) html += `<div class="section-header"><h3>Hechas</h3><span class="badge">${hechas.length}</span></div>
+    <div class="order-list">${hechas.map(muestraCardHtml).join('')}</div>`;
+  if (!html) html = '<p style="text-align:center;color:var(--gray);padding:40px">Sin muestras anotadas todavía.<br>Cargá la primera con el botón ➕ de acá arriba.</p>';
+  document.getElementById('muestrasList').innerHTML = html;
+}
+
+function openMuestraDetail(id) {
+  const m = (state.muestras || []).find(x => x.id === id);
+  if (!m) return;
+  const hecho = m.estado === 'Hecho';
+  document.getElementById('detailTitle').textContent = '🎁 ' + (m.cliente || id);
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-section">
+      <h4>Info</h4>
+      <div class="detail-item"><span>Cliente</span><b>${esc(m.cliente)}</b></div>
+      ${m.direccion ? `<div class="detail-item"><span>Dirección</span><b>${esc(m.direccion)}</b></div>` : ''}
+      <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(m.fecha)}</b></div>
+      ${m.dia ? `<div class="detail-item"><span>Día</span><b>${fmtDate(m.dia)}</b></div>` : ''}
+      ${m.hora ? `<div class="detail-item"><span>Hora</span><b>${esc(m.hora)}</b></div>` : ''}
+      <div class="detail-item"><span>Estado</span><span class="status-pill ${hecho ? 'sp-Despachado' : 'sp-Pendiente'}">${hecho ? '✓ Hecho' : 'Pendiente'}</span></div>
+      ${m.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(m.quien)}</b></div>` : ''}
+      ${m.notas ? `<div class="detail-item"><span>Observación</span><b>${esc(m.notas)}</b></div>` : ''}
+    </div>
+    <div class="detail-section">
+      <h4>Productos</h4>
+      ${m.items.map(it => `<div class="detail-item qty-left"><b>${itemLineLabel(it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>`).join('')}
+    </div>
+    <div class="detail-section"><div class="status-btns">
+      ${hecho
+        ? `<button class="st-btn act-Pendiente" onclick="toggleMuestraEstado('${m.id}')">↩ Volver a Pendiente</button>`
+        : `<button class="st-btn act-Despachado" onclick="toggleMuestraEstado('${m.id}')">✓ Marcar hecho</button>`}
+    </div></div>
+    <button class="btn btn-outline" onclick="openMuestraEdit('${m.id}')">✏️ Editar muestra</button>
+    <button class="btn btn-danger" onclick="confirmDeleteMuestra('${m.id}')">🗑 Eliminar muestra</button>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function toggleMuestraEstado(id) {
+  const m = (state.muestras || []).find(x => x.id === id);
+  if (!m) return;
+  const nuevo = m.estado === 'Hecho' ? 'Pendiente' : 'Hecho';
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast(nuevo === 'Hecho' ? '✓ Muestra marcada como hecha' : '✓ Muestra pendiente de nuevo'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .setMuestraEstado(id, nuevo);
+}
+
+function openMuestraEdit(id) {
+  const m = (state.muestras || []).find(x => x.id === id);
+  if (!m) return;
+  closeModal('detailModal');
+  document.getElementById('me_editId').value = id;
+  document.getElementById('me_cliente').value = m.cliente || '';
+  document.getElementById('me_direccion').value = m.direccion || '';
+  document.getElementById('me_direccion').dataset.auto = '';
+  document.getElementById('me_dia').value = m.dia || '';
+  document.getElementById('me_hora').value = m.hora || '';
+  document.getElementById('me_notas').value = m.notas || '';
+  setExtrasOpen('me', !!(m.dia || m.hora || m.notas));
+  const cont = document.getElementById('meItemRows');
+  cont.innerHTML = '';
+  (m.items || []).forEach(it => addItemRowWith('me', it));
+  if (!cont.children.length) addItemRow('me');
+  document.getElementById('muestraModal').classList.add('open');
+}
+
+function submitEditMuestra() {
+  const cliente = document.getElementById('me_cliente').value.trim();
+  if (!cliente) { alert('Escribí el nombre del cliente'); return; }
+  const items = getItemRows('me');
+  if (!items.length) { alert('Agregá al menos un producto'); return; }
+  const editId = document.getElementById('me_editId').value;
+  if (!editId) { closeModal('muestraModal'); return; }
+  closeModal('muestraModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Muestra actualizada'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .updateMuestra({
+      id: editId, cliente,
+      direccion: document.getElementById('me_direccion').value.trim(),
+      dia:       document.getElementById('me_dia').value,
+      hora:      document.getElementById('me_hora').value,
+      notas:     document.getElementById('me_notas').value.trim(),
+      items
+    });
+}
+
+function confirmDeleteMuestra(id) {
+  const m = (state.muestras || []).find(x => x.id === id);
+  if (!m) return;
+  if (!confirm(`¿Eliminar la muestra de "${m.cliente}"?\nEsta acción no se puede deshacer.`)) return;
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Muestra eliminada'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo eliminar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .deleteMuestra(id);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VISITAR (agenda de visitas a negocios)
+// ═══════════════════════════════════════════════════════════════
+function resetVisitaForm() {
+  ['v_dia','v_hora','v_negocio','v_obs'].forEach(id => document.getElementById(id).value = '');
+}
+
+function submitVisita() {
+  const negocio = document.getElementById('v_negocio').value.trim();
+  if (!negocio) { alert('Escribí el nombre del negocio'); return; }
+  const data = {
+    negocio,
+    dia:  document.getElementById('v_dia').value,
+    hora: document.getElementById('v_hora').value,
+    obs:  document.getElementById('v_obs').value.trim(),
+    quien: state.who
+  };
+  const btn = document.getElementById('vSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  google.script.run
+    .withSuccessHandler(() => {
+      btn.disabled = false; btn.textContent = 'Guardar Visita';
+      closeModal('visitaNewModal');
+      toast('✓ Visita guardada');
+      resetVisitaForm();
+      window.scrollTo(0, 0);
+      reload();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false; btn.textContent = 'Guardar Visita';
+      toast('Error: ' + e.message);
+    })
+    .saveVisita(data);
+}
+
+function visitaCardHtml(v) {
+  const hecho = v.estado === 'Hecho';
+  const sub = [];
+  if (v.dia || v.hora) sub.push('📅 ' + [fmtDate(v.dia), v.hora].filter(Boolean).join(' '));
+  sub.push('Cargada ' + fmtDate(v.fecha));
+  if (v.quien) sub.push('👤 ' + esc(v.quien));
+  return `
+    <div class="order-card ${hecho ? 'Despachado' : 'Pendiente'}" onclick="openVisitaDetail('${v.id}')">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">🏪 ${esc(v.negocio)}</div>
+          <div class="oc-sub">${sub.join(' · ')}</div>
+        </div>
+        <span class="status-pill ${hecho ? 'sp-Despachado' : 'sp-Pendiente'}">${hecho ? '✓ Hecho' : 'Pendiente'}</span>
+      </div>
+      ${v.obs ? `<div class="oc-items">⚠ ${esc(v.obs)}</div>` : ''}
+    </div>`;
+}
+
+function renderVisitas() {
+  const list = state.visitas || [];
+  // Las pendientes se ordenan como agenda: primero las de día/hora más
+  // próximos; las sin día van al final.
+  const rank = v => (v.dia || '9999-99-99') + ' ' + (v.hora || '99:99');
+  const pend = list.filter(v => v.estado !== 'Hecho')
+    .sort((a, b) => rank(a).localeCompare(rank(b)));
+  const hechas = list.filter(v => v.estado === 'Hecho');
+  let html = '';
+  if (pend.length) html += `<div class="section-header"><h3>Pendientes</h3><span class="badge">${pend.length}</span></div>
+    <div class="order-list">${pend.map(visitaCardHtml).join('')}</div>`;
+  if (hechas.length) html += `<div class="section-header"><h3>Hechas</h3><span class="badge">${hechas.length}</span></div>
+    <div class="order-list">${hechas.map(visitaCardHtml).join('')}</div>`;
+  if (!html) html = '<p style="text-align:center;color:var(--gray);padding:40px">Sin visitas anotadas todavía.<br>Cargá la primera con el botón ➕ de acá arriba.</p>';
+  document.getElementById('visitasList').innerHTML = html;
+}
+
+function openVisitaDetail(id) {
+  const v = (state.visitas || []).find(x => x.id === id);
+  if (!v) return;
+  const hecho = v.estado === 'Hecho';
+  document.getElementById('detailTitle').textContent = '🏪 ' + (v.negocio || id);
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-section">
+      <h4>Info</h4>
+      <div class="detail-item"><span>Negocio</span><b>${esc(v.negocio)}</b></div>
+      ${v.dia ? `<div class="detail-item"><span>Día</span><b>${fmtDate(v.dia)}</b></div>` : ''}
+      ${v.hora ? `<div class="detail-item"><span>Hora</span><b>${esc(v.hora)}</b></div>` : ''}
+      <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(v.fecha)}</b></div>
+      <div class="detail-item"><span>Estado</span><span class="status-pill ${hecho ? 'sp-Despachado' : 'sp-Pendiente'}">${hecho ? '✓ Hecho' : 'Pendiente'}</span></div>
+      ${v.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(v.quien)}</b></div>` : ''}
+      ${v.obs ? `<div class="detail-item"><span>Observaciones</span><b>${esc(v.obs)}</b></div>` : ''}
+    </div>
+    <div class="detail-section"><div class="status-btns">
+      ${hecho
+        ? `<button class="st-btn act-Pendiente" onclick="toggleVisitaEstado('${v.id}')">↩ Volver a Pendiente</button>`
+        : `<button class="st-btn act-Despachado" onclick="toggleVisitaEstado('${v.id}')">✓ Marcar hecho</button>`}
+    </div></div>
+    <button class="btn btn-outline" onclick="openVisitaEdit('${v.id}')">✏️ Editar visita</button>
+    <button class="btn btn-danger" onclick="confirmDeleteVisita('${v.id}')">🗑 Eliminar visita</button>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function toggleVisitaEstado(id) {
+  const v = (state.visitas || []).find(x => x.id === id);
+  if (!v) return;
+  const nuevo = v.estado === 'Hecho' ? 'Pendiente' : 'Hecho';
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast(nuevo === 'Hecho' ? '✓ Visita marcada como hecha' : '✓ Visita pendiente de nuevo'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .setVisitaEstado(id, nuevo);
+}
+
+function openVisitaEdit(id) {
+  const v = (state.visitas || []).find(x => x.id === id);
+  if (!v) return;
+  closeModal('detailModal');
+  document.getElementById('ve_editId').value = id;
+  document.getElementById('ve_dia').value = v.dia || '';
+  document.getElementById('ve_hora').value = v.hora || '';
+  document.getElementById('ve_negocio').value = v.negocio || '';
+  document.getElementById('ve_obs').value = v.obs || '';
+  document.getElementById('visitaModal').classList.add('open');
+}
+
+function submitEditVisita() {
+  const negocio = document.getElementById('ve_negocio').value.trim();
+  if (!negocio) { alert('Escribí el nombre del negocio'); return; }
+  const editId = document.getElementById('ve_editId').value;
+  if (!editId) { closeModal('visitaModal'); return; }
+  closeModal('visitaModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Visita actualizada'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .updateVisita({
+      id: editId, negocio,
+      dia:  document.getElementById('ve_dia').value,
+      hora: document.getElementById('ve_hora').value,
+      obs:  document.getElementById('ve_obs').value.trim()
+    });
+}
+
+function confirmDeleteVisita(id) {
+  const v = (state.visitas || []).find(x => x.id === id);
+  if (!v) return;
+  if (!confirm(`¿Eliminar la visita a "${v.negocio}"?\nEsta acción no se puede deshacer.`)) return;
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Visita eliminada'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo eliminar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .deleteVisita(id);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  REPARTO DEL DÍA (resumen de entregas pendientes + qué cargar)
+// ═══════════════════════════════════════════════════════════════
+function sortByCliente(list) {
+  return list.slice().sort((a, b) =>
+    String(a.cliente).localeCompare(String(b.cliente), 'es', { sensitivity: 'base' }));
+}
+
+// Totales por producto de una lista de pedidos (para saber qué cargar).
+// Lo que va feteado se acumula aparte de lo que va entero.
+function totalsOf(list) {
+  const acc = {};
+  list.forEach(p => p.items.forEach(it => {
+    // La panceta feteada se separa por cuero (con/sin); el resto no.
+    const cuero = (it.fetear && isPanceta(it.prod)) ? (it.sinCuero ? '|sc' : '|cc') : '';
+    // Las unidades sueltas de un producto de caja se suman aparte de las
+    // cajas enteras, en su propia fila.
+    const un = it.unidades ? '|un' : '';
+    const k = String(it.prod).trim().toLowerCase() + (it.fetear ? '|fetear' : '') + cuero + un;
+    if (!acc[k]) acc[k] = { prod: String(it.prod).trim(), fetear: !!it.fetear, sinCuero: !!it.sinCuero, unidades: !!it.unidades, qty: 0 };
+    acc[k].qty += Number(it.qty) || 0;
+  }));
+  return Object.values(acc)
+    .sort((a, b) => a.prod.localeCompare(b.prod, 'es', { sensitivity: 'base' })
+      || (a.fetear ? 1 : 0) - (b.fetear ? 1 : 0)
+      || (a.unidades ? 1 : 0) - (b.unidades ? 1 : 0));
+}
+
+// En la vista Reparto entran los pendientes del día elegido, los que no
+// tienen fecha de entrega y los atrasados de días anteriores.
+function repartoData() {
+  const date = document.getElementById('r_fecha').value || state.today;
+  // Los retiros no van a reparto: el cliente los pasa a buscar.
+  const pend = state.pedidos.filter(p => p.estado === 'Pendiente' && !p.retiro);
+  const enJuego = pend.filter(p => !p.fechaEntrega || p.fechaEntrega <= date);
+  return {
+    date, enJuego,
+    man: enJuego.filter(p => p.turno === 'Mañana'),
+    tar: enJuego.filter(p => p.turno === 'Tarde')
+  };
+}
+
+let repartoOpen = { 'Mañana': true, 'Tarde': false };
+let pickerTurno = '';
+
+function toggleTurno(turno) {
+  repartoOpen[turno] = !repartoOpen[turno];
+  renderReparto();
+}
+
+function fechaTagHtml(p, date) {
+  if (!p.fechaEntrega) return '<span class="rep-tag warn">Sin fecha de entrega</span>';
+  if (p.fechaEntrega === date) return '<span class="rep-tag ok">📅 Entrega este día</span>';
+  return '<span class="rep-tag warn">⚠ Era para el ' + fmtDate(p.fechaEntrega) + '</span>';
+}
+
+function repartoCardExtra(p, date) {
+  return `<div class="rep-row" onclick="event.stopPropagation()">
+    ${fechaTagHtml(p, date)}
+    <button class="quitar-btn" onclick="setTurno('${p.id}','')">✕ Quitar</button>
+  </div>`;
+}
+
+function cargarHtml(list) {
+  const totals = totalsOf(list);
+  if (!totals.length) return '';
+  return `<div style="background:var(--lgray);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+    <h4 style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📦 Qué cargar</h4>
+    ${totals.map(t => `<div class="detail-item qty-left"><b>${itemLineLabel(t)}</b><span>${esc(t.prod)}${itemTags(t)}</span></div>`).join('')}
+  </div>`;
+}
+
+function turnoPanelHtml(turno, icon, list, date) {
+  const open = repartoOpen[turno];
+  let body = '';
+  if (open) {
+    body = cargarHtml(list)
+      + (list.length
+          ? `<div class="order-list">${sortByCliente(list).map(p => pedidoCardHtml(p, repartoCardExtra(p, date))).join('')}</div>`
+          : `<p class="turno-empty">Todavía no hay pedidos en este turno.</p>`)
+      + `<button class="add-item-btn" onclick="openTurnoPicker('${turno}')">＋ Agregar pedido a ${turno}</button>`;
+    body = `<div class="turno-body">${body}</div>`;
+  }
+  return `<div class="turno-panel">
+    <div class="turno-head" onclick="toggleTurno('${turno}')">
+      <span>${icon} ${turno}</span>
+      <span class="th-right"><span class="badge">${list.length}</span>${open ? '▲' : '▼'}</span>
+    </div>
+    ${body}
+  </div>`;
+}
+
+function renderReparto() {
+  const { date, enJuego, man, tar } = repartoData();
+  const sinAsignar = enJuego.filter(p => p.turno !== 'Mañana' && p.turno !== 'Tarde').length;
+
+  let html = turnoPanelHtml('Mañana', '🌅', man, date)
+           + turnoPanelHtml('Tarde', '🌇', tar, date);
+
+  if (sinAsignar) {
+    html += `<p style="text-align:center;color:var(--gray);font-size:13px;padding:8px">
+      ${sinAsignar} pedido${sinAsignar !== 1 ? 's' : ''} pendiente${sinAsignar !== 1 ? 's' : ''} sin turno — agregalos con ＋ desde Mañana o Tarde</p>`;
+  } else if (!man.length && !tar.length) {
+    html += '<p style="text-align:center;color:var(--gray);padding:30px">No hay pedidos pendientes para repartir este día 🎉</p>';
+  }
+  document.getElementById('repartoBody').innerHTML = html;
+}
+
+// ── Selector de pedidos para un turno ──
+function openTurnoPicker(turno) {
+  pickerTurno = turno;
+  document.getElementById('pickerTitle').textContent =
+    'Agregar a ' + (turno === 'Mañana' ? '🌅 Mañana' : '🌇 Tarde');
+  renderPicker();
+  document.getElementById('turnoPickerModal').classList.add('open');
+}
+
+function renderPicker() {
+  const { date, enJuego } = repartoData();
+  const cand = enJuego.filter(p => p.turno !== pickerTurno);
+  const rank = p => p.fechaEntrega === date ? 0 : (p.fechaEntrega ? 1 : 2);
+  cand.sort((a, b) => rank(a) - rank(b)
+    || String(a.cliente).localeCompare(String(b.cliente), 'es', { sensitivity: 'base' }));
+
+  document.getElementById('pickerBody').innerHTML = cand.length ? cand.map(p => `
+    <div class="order-card Pendiente" style="margin-bottom:8px" onclick="pickPedido('${p.id}')">
+      <div class="oc-top">
+        <div>
+          <div class="oc-main">${esc(p.cliente)}</div>
+          <div class="oc-sub">${p.items.length} producto${p.items.length !== 1 ? 's' : ''}${p.direccion ? ' · ' + esc(p.direccion) : ''}${p.turno ? ' · ahora en ' + p.turno : ''}</div>
+        </div>
+        ${fechaTagHtml(p, date)}
+      </div>
+    </div>`).join('')
+    : '<p style="text-align:center;color:var(--gray);padding:30px">No hay más pedidos pendientes para agregar.</p>';
+}
+
+function pickPedido(id) {
+  closeModal('turnoPickerModal');
+  setTurno(id, pickerTurno);
+}
+
+// Asigna el turno de un pedido ('' lo saca del turno).
+function setTurno(id, turno) {
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p) return;
+  p.turno = turno;   // actualización optimista para que responda al toque
+  renderReparto();
+  google.script.run
+    .withSuccessHandler(r => { if (!r.ok) { toast('Error: ' + (r.error || 'No se pudo guardar')); reload(); } })
+    .withFailureHandler(e => { toast('Error: ' + e.message); reload(); })
+    .setPedidoTurno(id, turno);
+}
+
+// Arma el resumen en texto plano (listo para pegar en WhatsApp) y lo copia.
+function copyReparto() {
+  const { date, man, tar } = repartoData();
+  if (!man.length && !tar.length) { toast('No hay pedidos en Mañana ni en Tarde'); return; }
+  let txt = '🚚 Reparto ' + fmtDate(date) + '\n';
+
+  const bloque = (titulo, list) => {
+    if (!list.length) return;
+    txt += '\n══ ' + titulo + ' (' + list.length + ') ══\n📦 Cargar:\n';
+    totalsOf(list).forEach(t => { txt += '• ' + t.prod + (t.fetear ? ' (FETEAR)' : '') + ': ' + qtyLabel(t.prod, t.qty, t.fetear, t.unidades) + '\n'; });
+    txt += '👥 Entregas:\n';
+    sortByCliente(list).forEach((p, i) => {
+      const nota = !p.fechaEntrega ? ' (sin fecha de entrega)'
+        : (p.fechaEntrega !== date ? ' (era para el ' + fmtDate(p.fechaEntrega) + ')' : '');
+      txt += (i + 1) + '. ' + p.cliente + nota + (p.direccion ? ' — ' + p.direccion : '') + '\n';
+      p.items.forEach(it => { txt += '   • ' + it.prod + (it.fetear ? ' (FETEAR)' : '') + ': ' + qtyLabel(it.prod, it.qty, it.fetear, it.unidades) + '\n'; });
+      if (p.notas) txt += '   ⚠ ' + p.notas + '\n';
+    });
+  };
+
+  bloque('MAÑANA', man);
+  bloque('TARDE', tar);
+  copyText(txt.trim());
+}
+
+function copyText(txt) {
+  const done = () => toast('✓ Resumen copiado');
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch (e) { toast('No se pudo copiar'); }
+    ta.remove();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(done, fallback);
+  } else fallback();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FETEO: lista de trabajo por día (PC y mobile), en base a los
+//  pedidos pendientes con productos tildados "para fetear". El que
+//  fetea puede reordenar cada día a gusto con ▲▼ (el orden queda en
+//  la hoja "Feteo Orden", compartido) y tildar lo ya feteado (hoja
+//  "Feteo Hecho", verde acá y en la hoja Feteo).
+// ═══════════════════════════════════════════════════════════════
+function ymdOf(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Nombre con el que se muestra un ítem feteado en la grilla (la panceta
+// va en filas separadas por cuero, igual que en la hoja Feteo).
+function fetDisplayName(it) {
+  const suffix = isPanceta(it.prod) ? (it.sinCuero ? ' — SIN CUERO' : ' — CON CUERO') : '';
+  return String(it.prod).trim() + suffix;
+}
+
+function feteoDoneSet() {
+  const set = {};
+  (state.feteoHecho || []).forEach(x => set[x.fecha + '|' + x.prod.toLowerCase()] = true);
+  return set;
+}
+
+// Orden de la lista de cada día tal como quedó dibujada (para saber
+// entre qué ítems se mueve al tocar ▲▼).
+let feteoLists = {};
+
+function renderFeteo() {
+  const pend = state.pedidos.filter(p => p.estado === 'Pendiente');
+  const done = feteoDoneSet();
+  const t0 = new Date((state.today || '') + 'T00:00:00');
+  const mon = new Date(t0);
+  mon.setDate(t0.getDate() - ((t0.getDay() + 6) % 7));
+  const dayDates = [];
+  for (let d = 0; d < 14; d++) { // semana en curso + la siguiente
+    const dd = new Date(mon); dd.setDate(mon.getDate() + d);
+    dayDates.push(ymdOf(dd));
+  }
+
+  // Suma por día × producto, solo ítems "para fetear" (la panceta va
+  // separada por con/sin cuero, igual que en la hoja Feteo).
+  const porDia = {};
+  pend.forEach(p => {
+    if (!p.fechaEntrega || dayDates.indexOf(p.fechaEntrega) === -1) return;
+    p.items.forEach(it => {
+      if (!it.fetear) return;
+      const disp = fetDisplayName(it);
+      const k = disp.toLowerCase();
+      if (!porDia[p.fechaEntrega]) porDia[p.fechaEntrega] = {};
+      if (!porDia[p.fechaEntrega][k]) porDia[p.fechaEntrega][k] = { prod: disp, qty: 0 };
+      porDia[p.fechaEntrega][k].qty += Number(it.qty) || 0;
+    });
+  });
+
+  let html = `<p style="font-size:12.5px;color:var(--gray);margin:0 2px 10px">
+    Todo lo tildado 🔪 "para fetear" de los pedidos pendientes, por día de entrega.
+    Ordenalo a gusto con ▲▼ (el orden queda guardado para todos) y tildá ✓ lo ya feteado.</p>`;
+  feteoLists = {};
+  let hayAlgo = false;
+
+  dayDates.forEach(f => {
+    const items = porDia[f] ? Object.values(porDia[f]) : [];
+    if (!items.length) return;
+    hayAlgo = true;
+
+    // Orden guardado en "Feteo Orden" para este día; lo que no esté en
+    // la lista guardada va al final, en orden alfabético.
+    const saved = (state.feteoOrden || [])
+      .filter(x => x.fecha === f)
+      .sort((a, b) => a.orden - b.orden)
+      .map(x => x.prod.toLowerCase());
+    items.sort((a, b) => {
+      const ia = saved.indexOf(a.prod.toLowerCase()), ib = saved.indexOf(b.prod.toLowerCase());
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+        || a.prod.localeCompare(b.prod, 'es', { sensitivity: 'base' });
+    });
+    feteoLists[f] = items.map(x => x.prod);
+
+    const d = new Date(f + 'T00:00:00');
+    const dow = (d.getDay() + 6) % 7;
+    let label = DIAS_SEMANA[dow] + ' ' + fmtDate(f).slice(0, 5);
+    if (f === state.today) label += ' · HOY';
+    else if (f < state.today) label += ' · atrasado';
+    const totKg = items.reduce((a, x) => a + x.qty, 0);
+
+    const rows = items.map((x, i) => {
+      const isDone = done[f + '|' + x.prod.toLowerCase()];
+      return `<div class="fetl-row${isDone ? ' done' : ''}">
+        <div class="fetl-move">
+          <button ${i === 0 ? 'disabled' : ''} onclick="moveFeteoItem('${f}',${i},-1)">▲</button>
+          <button ${i === items.length - 1 ? 'disabled' : ''} onclick="moveFeteoItem('${f}',${i},1)">▼</button>
+        </div>
+        <span class="fetl-qty">${round2(x.qty)} kg</span>
+        <span class="fetl-prod">${esc(x.prod)}</span>
+        <button class="fetl-check" title="Marcar como ya feteado"
+          onclick="toggleFeteoHecho('${f}','${escAttr(x.prod)}')">✓</button>
+      </div>`;
+    }).join('');
+
+    html += `<div class="form-card">
+      <div class="fetl-day-head">
+        <h3>📅 ${label}</h3>
+        <span class="badge">${round2(totKg)} kg</span>
+      </div>
+      ${rows}
+    </div>`;
+  });
+
+  // Ítems para fetear de pedidos sin fecha de entrega: no se pueden
+  // ubicar en la grilla, se listan aparte (sin tilde).
+  const sf = {};
+  pend.filter(p => !p.fechaEntrega).forEach(p => p.items.forEach(it => {
+    if (!it.fetear) return;
+    const disp = fetDisplayName(it);
+    const k = disp.toLowerCase();
+    if (!sf[k]) sf[k] = { prod: disp, qty: 0 };
+    sf[k].qty += Number(it.qty) || 0;
+  }));
+  const sfl = Object.values(sf).sort((a, b) => a.prod.localeCompare(b.prod, 'es', { sensitivity: 'base' }));
+  if (sfl.length) {
+    html += `<div class="form-card">
+      <div class="section-header" style="margin-top:0"><h3>⚠ Pedidos sin fecha de entrega</h3></div>
+      ${sfl.map(x => `<div class="detail-item qty-left"><b>${round2(x.qty)} kg</b><span>${esc(x.prod)}</span></div>`).join('')}
+    </div>`;
+  }
+
+  if (!hayAlgo && !sfl.length) {
+    html += '<p style="text-align:center;color:var(--gray);padding:30px">No hay nada para fetear en estas dos semanas 🎉</p>';
+  }
+  document.getElementById('feteoBody').innerHTML = html;
+}
+
+// Mueve un ítem de la lista de un día una posición hacia arriba o
+// abajo. Optimista: se redibuja al toque y el guardado confirma después.
+function moveFeteoItem(fecha, idx, dir) {
+  const list = (feteoLists[fecha] || []).slice();
+  const j = idx + dir;
+  if (idx < 0 || idx >= list.length || j < 0 || j >= list.length) return;
+  const tmp = list[idx]; list[idx] = list[j]; list[j] = tmp;
+  // El orden nuevo pisa el guardado en el estado local y se redibuja.
+  state.feteoOrden = (state.feteoOrden || []).filter(x => x.fecha !== fecha)
+    .concat(list.map((p, i) => ({ fecha, prod: p, orden: i + 1 })));
+  renderFeteo();
+  google.script.run
+    .withSuccessHandler(r => { if (!r.ok) { toast('Error: no se pudo guardar el orden'); reload(); } })
+    .withFailureHandler(e => { toast('Error: ' + e.message); reload(); })
+    .setFeteoOrden(fecha, list);
+}
+
+// Marca/desmarca un ítem de la lista como ya feteado. Optimista: se
+// pinta al toque y el guardado confirma después.
+function toggleFeteoHecho(fecha, prod) {
+  const k = prod.toLowerCase();
+  const ya = (state.feteoHecho || []).some(x => x.fecha === fecha && x.prod.toLowerCase() === k);
+  if (ya) state.feteoHecho = state.feteoHecho.filter(x => !(x.fecha === fecha && x.prod.toLowerCase() === k));
+  else state.feteoHecho = (state.feteoHecho || []).concat([{ fecha, prod }]);
+  renderFeteo();
+  google.script.run
+    .withSuccessHandler(r => { if (!r.ok) { toast('Error: no se pudo guardar'); reload(); } })
+    .withFailureHandler(e => { toast('Error: ' + e.message); reload(); })
+    .setFeteoHecho(fecha, prod, !ya, state.who);
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return 0;
+  const d = new Date(dateStr + 'T00:00:00');
+  const t = new Date((state.today || '') + 'T00:00:00');
+  if (isNaN(d) || isNaN(t)) return 0;
+  return Math.floor((t - d) / 86400000);
+}
+
+function openPedidoDetail(id) {
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('detailTitle').textContent = '🛒 ' + (p.cliente || id);
+
+  let stBtns = '';
+  if (p.estado === 'Pendiente') stBtns = `
+    <button class="st-btn act-Despachado" onclick="changePedidoStatus('${p.id}','Despachado')">✓ Marcar Despachado</button>
+    <button class="st-btn act-Cancelado"  onclick="changePedidoStatus('${p.id}','Cancelado')">✕ Cancelar</button>`;
+  if (p.estado === 'Despachado') stBtns = `<button class="st-btn act-Pendiente" onclick="changePedidoStatus('${p.id}','Pendiente')">↩ Volver a Pendiente</button>`;
+
+  const acciones =
+    `${stBtns ? `<div class="detail-section"><h4>Cambiar estado</h4><div class="status-btns">${stBtns}</div></div>` : ''}` +
+    (p.estado === 'Pendiente' ? `
+    <button class="btn btn-outline" onclick="openPedidoEdit('${p.id}')">✏️ Editar pedido</button>` : '') +
+    (p.estado === 'Pendiente' || p.estado === 'Cancelado' ? `
+    <button class="btn btn-danger" onclick="confirmDeletePedido('${p.id}')">🗑 Eliminar pedido</button>` : '');
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-section">
+      <h4>Info</h4>
+      <div class="detail-item"><span>Cliente</span><b>${esc(p.cliente)}</b></div>
+      ${p.direccion ? `<div class="detail-item"><span>Dirección</span><b>${esc(p.direccion)}</b></div>` : ''}
+      <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(p.fecha)}</b></div>
+      ${p.fechaEntrega ? `<div class="detail-item"><span>Entrega estipulada</span><b>${fmtDate(p.fechaEntrega)}</b></div>` : ''}
+      <div class="detail-item"><span>Entrega</span><b>${p.retiro ? '🛻 RETIRO — pasa a buscar' : '🚚 Reparto'}</b></div>
+      ${p.turno && !p.retiro ? `<div class="detail-item"><span>Turno de reparto</span><b>${p.turno === 'Mañana' ? '🌅 Mañana' : '🌇 Tarde'}</b></div>` : ''}
+      ${p.fechaDespacho ? `<div class="detail-item"><span>${p.estado === 'Cancelado' ? 'Cancelado el' : 'Despachado el'}</span><b>${fmtDate(p.fechaDespacho)}</b></div>` : ''}
+      <div class="detail-item"><span>Estado</span><span class="status-pill sp-${p.estado}">${p.estado}</span></div>
+      ${p.fijoId ? '<div class="detail-item"><span>Origen</span><span class="fijo-tag">📌 Pedido fijo</span></div>' : ''}
+      ${p.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(p.quien)}</b></div>` : ''}
+      ${p.notas ? `<div class="detail-item"><span>Observación</span><b>${esc(p.notas)}</b></div>` : ''}
+    </div>
+    <div class="detail-section">
+      <h4>Productos</h4>
+      ${p.items.map(it => `<div class="detail-item qty-left"><b>${itemLineLabel(it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>`).join('')}
+    </div>
+    ${acciones}
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function changePedidoStatus(id, estado) {
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Estado actualizado'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .updatePedidoStatus(id, estado);
+}
+
+function confirmDeletePedido(id) {
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`¿Eliminar el pedido de "${p.cliente}"?\nQueda 3 días en la papelera 🗑 (en la PC) por si hay que restaurarlo.`)) return;
+  closeModal('detailModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Pedido eliminado'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo eliminar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .deletePedido(id, state.who);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FORM: Editar Pedido
+// ═══════════════════════════════════════════════════════════════
+function openPedidoEdit(id) {
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p) return;
+  closeModal('detailModal');
+  document.getElementById('p_editId').value = id;
+  document.getElementById('p_cliente').value = p.cliente || '';
+  document.getElementById('p_direccion').value = p.direccion || '';
+  document.getElementById('p_direccion').dataset.auto = '';
+  document.getElementById('p_notas').value = p.notas || '';
+  document.getElementById('p_fecha').value = p.fechaEntrega || '';
+  document.getElementById('p_retiro').checked = !!p.retiro;
+  // Si el pedido ya tiene fecha, dirección u observación, los extras
+  // arrancan abiertos para que se vean; si no, quedan plegados.
+  setExtrasOpen('p', !!(p.fechaEntrega || p.direccion || p.notas));
+  const cont = document.getElementById('pedItemRows');
+  cont.innerHTML = '';
+  (p.items || []).forEach(it => addItemRowWith('ped', it));
+  if (!cont.children.length) addItemRow('ped');
+  document.getElementById('pedidoModal').classList.add('open');
+}
+
+function submitEditPedido() {
+  const cliente      = document.getElementById('p_cliente').value.trim();
+  const direccion    = document.getElementById('p_direccion').value.trim();
+  const fechaEntrega = document.getElementById('p_fecha').value;
+  const notas        = document.getElementById('p_notas').value.trim();
+  const retiro       = document.getElementById('p_retiro').checked;
+  if (!cliente) { alert('Escribí el nombre del cliente'); return; }
+
+  const items = getItemRows('ped');
+  if (!items.length) { alert('Agregá al menos un producto'); return; }
+
+  const editId = document.getElementById('p_editId').value;
+  if (!editId) { closeModal('pedidoModal'); return; }
+  closeModal('pedidoModal');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Pedido actualizado'); reload(); }
+      else toast('Error: ' + (r.error || 'No se pudo actualizar'));
+    })
+    .withFailureHandler(e => toast('Error: ' + e.message))
+    .updatePedido({ id: editId, cliente, direccion, fechaEntrega, notas, items, retiro });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ITEM ROWS (producto de texto libre; si lo escrito coincide con el
+//  catálogo, aparece la lista desplegable para elegirlo — opcional)
+// ═══════════════════════════════════════════════════════════════
+let rowCount = 0;
+const ROW_CONTAINERS = { cargar:'cargarItemRows', ped:'pedItemRows', fijo:'fijoItemRows', mu:'muItemRows', me:'meItemRows' };
+
+function addItemRow(type) {
+  const container = document.getElementById(ROW_CONTAINERS[type]);
+  const existing = container.querySelectorAll('.item-row').length;
+  if (existing >= 20) { toast('Máximo 20 productos por pedido'); return; }
+
+  const id = 'row_' + (++rowCount);
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = 'item-row';
+  div.innerHTML = `
+    <div class="ped-item-row">
+      <div class="qty-wrap">
+        <input type="number" class="qty-input" placeholder="Cant." min="0.1" step="0.1" value="1"
+          oninput="updateBoxHint(this.closest('.item-row'))">
+        <span class="qty-unit">kg</span>
+      </div>
+      <div class="ac-wrap">
+        <input type="text" class="ac-input" placeholder="Producto…"
+          autocomplete="off"
+          oninput="onAcInput(this)"
+          onblur="setTimeout(()=>closeAc(this),200)">
+        <div class="ac-list"></div>
+      </div>
+      <button class="del-btn" onclick="removeRow('${id}')">✕</button>
+    </div>
+    <div class="box-hint" style="display:none"></div>
+    <label class="fetear-check"><input type="checkbox" class="fetear-input"
+      onchange="updateBoxHint(this.closest('.item-row'))"> 🔪 Para fetear</label>
+    <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> 🚫 Sin cuero (por defecto va con cuero)</label>
+  `;
+  container.appendChild(div);
+}
+
+// Muestra debajo de la fila en qué se anota el producto y, si es por
+// caja con conversión cargada, el equivalente en unidades. También
+// muestra el tick "Para fetear" si el producto está marcado "Se fetea"
+// en la hoja Productos, y el sufijo "kg" en la cantidad cuando el
+// producto se anota en kg — o cuando está tildado el fetear, porque lo
+// feteado se anota siempre en kg.
+function updateBoxHint(rowEl) {
+  if (!rowEl) return;
+  const hint = rowEl.querySelector('.box-hint');
+  if (!hint) return;
+  const p = prodInfo(rowEl.querySelector('.ac-input').value);
+  const qty = parseFloat(rowEl.querySelector('.qty-input').value) || 0;
+  const fetOn = !!(p && p.fetea && rowEl.querySelector('.fetear-input').checked);
+  // Producto anotado en caja con conversión: se puede cargar la cantidad
+  // en cajas (default) o en unidades sueltas — ej: 30 panes que no llegan
+  // a una caja. El modo elegido vive en dataset.unidades de la fila.
+  const esCaja = !fetOn && p && p.u === 'caja' && p.box > 0;
+  const enUn = esCaja && rowEl.dataset.unidades === '1';
+
+  let html = '';
+  if (fetOn && p.u && p.u !== 'kg') {
+    html = 'Feteado: se anota en kg';
+  } else if (esCaja) {
+    const toggle = `<span class="unit-toggle">` +
+      `<button type="button" class="${enUn ? '' : 'on'}" onclick="setRowUnidades(this,false)">cajas</button>` +
+      `<button type="button" class="${enUn ? 'on' : ''}" onclick="setRowUnidades(this,true)">un.</button></span>`;
+    if (enUn) html = toggle + (qty > 0 ? round2(qty) + ' unidad' + (qty === 1 ? '' : 'es') : '');
+    else html = toggle + (qty > 0 ? round2(qty) + ' caja' + (qty === 1 ? '' : 's') + ' = ' + round2(qty * p.box) + ' unidades' : '');
+  } else if (p && p.u) {
+    html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : esc(p.u));
+  }
+  hint.innerHTML = html;
+  hint.style.display = html ? 'block' : 'none';
+  const fet = rowEl.querySelector('.fetear-check');
+  if (fet) fet.style.display = (p && p.fetea) ? 'flex' : 'none';
+  // "Sin cuero" solo aparece si el producto es panceta y está para fetear.
+  const cuero = rowEl.querySelector('.cuero-check');
+  if (cuero) cuero.style.display = (fetOn && isPanceta(rowEl.querySelector('.ac-input').value)) ? 'flex' : 'none';
+  const wrap = rowEl.querySelector('.qty-wrap');
+  const suf = ((p && p.u === 'kg') || fetOn) ? 'kg' : (enUn ? 'un.' : '');
+  wrap.querySelector('.qty-unit').textContent = suf || 'kg';
+  wrap.classList.toggle('kg', !!suf);
+}
+
+// Cambia el modo cajas/unidades de una fila de producto.
+function setRowUnidades(btn, un) {
+  const row = btn.closest('.item-row');
+  row.dataset.unidades = un ? '1' : '';
+  updateBoxHint(row);
+}
+
+// Agrega una fila de producto ya completada (usado al editar un pedido)
+function addItemRowWith(type, it) {
+  addItemRow(type);
+  const container = document.getElementById(ROW_CONTAINERS[type]);
+  const row = container.lastElementChild;
+  if (!row) return;
+  row.querySelector('.ac-input').value = it.prod;
+  row.querySelector('.qty-input').value = it.qty;
+  row.querySelector('.fetear-input').checked = !!it.fetear;
+  row.querySelector('.sincuero-input').checked = !!it.sinCuero;
+  row.dataset.unidades = it.unidades ? '1' : '';
+  updateBoxHint(row);
+}
+
+function removeRow(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function getItemRows(type) {
+  const container = document.getElementById(ROW_CONTAINERS[type]);
+  const rows = container.querySelectorAll('.item-row');
+  const items = [];
+  rows.forEach(row => {
+    const prod = row.querySelector('.ac-input').value.trim();
+    const qty  = parseFloat(row.querySelector('.qty-input').value);
+    if (!prod) return;
+    const it = { prod, qty: qty > 0 ? qty : 1 };
+    // El tick solo vale si el producto sigue siendo feteable (por si se
+    // tildó y después se cambió el nombre por otro producto).
+    const info = prodInfo(prod);
+    if (info && info.fetea && row.querySelector('.fetear-input').checked) it.fetear = true;
+    // "Sin cuero" solo cuenta si es panceta y quedó para fetear.
+    if (it.fetear && isPanceta(prod) && row.querySelector('.sincuero-input').checked) it.sinCuero = true;
+    // El modo "unidades sueltas" solo vale para productos anotados en
+    // caja con conversión (y nunca junto con fetear, que va en kg).
+    if (!it.fetear && info && info.u === 'caja' && info.box > 0 && row.dataset.unidades === '1') it.unidades = true;
+    items.push(it);
+  });
+  return items;
+}
+
+// Sugerencias de producto: solo se despliegan si lo escrito coincide
+// con algo del catálogo. Lo escrito vale igual aunque no coincida.
+function onAcInput(input) {
+  updateBoxHint(input.closest('.item-row'));
+  const q = input.value.trim().toLowerCase();
+  const list = input.nextElementSibling;
+  if (!q) { list.classList.remove('open'); return; }
+
+  // Los más pedidos (columna "Veces pedido (30 días)" de la hoja
+  // Productos) salen primero en la lista.
+  const filtered = (state.products || [])
+    .filter(p => p.n.toLowerCase().includes(q) || (p.c||'').toLowerCase().includes(q))
+    .sort((a, b) => (b.pop || 0) - (a.pop || 0)
+      || a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }))
+    .slice(0, 40);
+
+  if (!filtered.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
+  list.innerHTML = filtered.map(p => {
+    const hl = q ? esc(p.n).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>') : esc(p.n);
+    const sub = p.c || (p.u ? 'se anota en ' + p.u + (p.u === 'caja' && p.box ? ' · 1 caja = ' + p.box + ' un.' : '') : '');
+    return `<div class="ac-item" onmousedown="selectAc(event,'${escAttr(p.n)}')">
+      ${hl}${sub ? `<div class="ac-cat">${esc(sub)}</div>` : ''}
+    </div>`;
+  }).join('');
+  list.classList.add('open');
+}
+
+function selectAc(e, prod) {
+  e.preventDefault();
+  const input = e.target.closest('.ac-wrap').querySelector('.ac-input');
+  input.value = prod;
+  input.closest('.ac-wrap').querySelector('.ac-list').classList.remove('open');
+  updateBoxHint(input.closest('.item-row'));
+  const qtyInput = input.closest('.item-row').querySelector('.qty-input');
+  qtyInput.focus(); qtyInput.select();
+}
+
+function closeAc(input) {
+  input.nextElementSibling.classList.remove('open');
+}
+
+// Autocomplete de clientes (hoja "Clientes"; permite también nombres
+// nuevos). Al elegir o coincidir un cliente guardado, se autocompleta la
+// dirección, que queda editable.
+function onClienteInput(input) {
+  const q = input.value.trim().toLowerCase();
+  const list = input.nextElementSibling;
+  // Si se borra el cliente, la dirección que se había rellenado sola
+  // también se borra (la escrita a mano no se toca).
+  if (!q) {
+    const dirInput = document.getElementById(input.dataset.dir || '');
+    if (dirInput && dirInput.dataset.auto) { dirInput.value = ''; dirInput.dataset.auto = ''; }
+    list.classList.remove('open'); list.innerHTML = '';
+    return;
+  }
+  const data = (state.clientes || [])
+    .filter(c => c.n.toLowerCase().includes(q))
+    .slice(0, 40);
+
+  if (!data.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
+  list.innerHTML = data.map(c => {
+    const hl = q ? esc(c.n).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>') : esc(c.n);
+    return `<div class="ac-item" onmousedown="selectCliente(event,'${escAttr(c.n)}')">
+      ${hl}${c.d ? `<div class="ac-cat">${esc(c.d)}</div>` : ''}
+    </div>`;
+  }).join('');
+  list.classList.add('open');
+}
+
+function selectCliente(e, name) {
+  e.preventDefault();
+  const wrap = e.target.closest('.ac-wrap');
+  const input = wrap.querySelector('.ac-input');
+  input.value = name;
+  wrap.querySelector('.ac-list').classList.remove('open');
+  const c = (state.clientes || []).find(x => x.n.toLowerCase() === name.toLowerCase());
+  const dirInput = document.getElementById(input.dataset.dir || '');
+  if (c && c.d && dirInput) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
+}
+
+function closeClienteAcLater(input) {
+  setTimeout(() => {
+    const list = input.nextElementSibling;
+    if (list) list.classList.remove('open');
+    // Si lo escrito coincide con un cliente guardado y la dirección está
+    // vacía, se rellena sola (editable).
+    const c = (state.clientes || []).find(x => x.n.toLowerCase() === input.value.trim().toLowerCase());
+    const dirInput = document.getElementById(input.dataset.dir || '');
+    if (c && c.d && dirInput && !dirInput.value.trim()) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
+  }, 200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Helpers
+// ═══════════════════════════════════════════════════════════════
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(s) { return String(s || '').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
+function escReg(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function fmtDate(d) {
+  if (!d) return '';
+  const s = String(d);
+  if (s.includes('-')) { const [y,m,dd] = s.split('-'); return `${dd}/${m}/${y}`; }
+  return s;
+}
+
+// Info de catálogo de un producto (hoja "Productos"), por nombre.
+function prodInfo(name) {
+  const k = String(name || '').trim().toLowerCase();
+  return (state.products || []).find(x => x.n.toLowerCase() === k);
+}
+function round2(n) { return Math.round(n * 100) / 100; }
+
+// La opción "sin cuero" solo aplica a la PANCETA (no jamón, etc.).
+function isPanceta(name) { return /panceta/i.test(String(name || '')); }
+
+// Etiquetas visuales de un ítem: 🔪 FETEAR y, si es panceta feteada,
+// CON CUERO / SIN CUERO. Se usa en tarjetas, detalle y "qué cargar".
+function itemTags(it) {
+  let s = it.fetear ? ' <span class="fetear-tag">🔪 FETEAR</span>' : '';
+  if (it.fetear && isPanceta(it.prod)) s += it.sinCuero
+    ? ' <span class="cuero-tag nc">🚫 SIN CUERO</span>'
+    : ' <span class="cuero-tag">CON CUERO</span>';
+  return s;
+}
+
+// "2 cajas (= 96 un.)", "12 kg", "5 un." o "× 3" si no está en el
+// catálogo. Lo feteado va siempre en kg, se anote en lo que se anote.
+// Un producto de caja cargado como unidades sueltas se muestra "30 un.".
+function qtyLabel(prod, qty, fetear, unidades) {
+  const p = prodInfo(prod);
+  const q = round2(Number(qty) || 0);
+  if (fetear) return q + ' kg';
+  if (!p || !p.u) return '× ' + q;
+  if (p.u === 'caja') {
+    if (unidades) return q + ' un.';
+    const conv = p.box ? ' (= ' + round2(q * p.box) + ' un.)' : '';
+    return q + ' caja' + (q === 1 ? '' : 's') + conv;
+  }
+  if (p.u === 'kg') return q + ' kg';
+  if (p.u === 'unidad') return q + ' un.';
+  return q + ' ' + p.u;
+}
+
+// Renglón de producto con la cantidad SIEMPRE a la izquierda del nombre.
+function itemLineLabel(it) {
+  return qtyLabel(it.prod, it.qty, it.fetear, it.unidades);
+}
+
+// Close modals on overlay click. El de usuario solo es obligatorio la
+// primera vez: si ya hay un usuario con PIN validado, tocar afuera lo
+// cierra. Sin PIN no se puede cerrar, o quedaría una app sin datos.
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => {
+    if (e.target !== o) return;
+    if (o.id === 'whoModal' && (!VENDEDORES.includes(state.who) || !state.pin)) return;
+    o.classList.remove('open');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  PWA: service worker e instalación
+// ═══════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // Sin service worker la app anda igual, solo pierde el modo offline.
+    });
+  });
+}
+
+function isStandalone() {
+  return window.navigator.standalone === true ||
+         window.matchMedia('(display-mode: standalone)').matches;
+}
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+         // iPad con iPadOS se hace pasar por Mac, pero tiene pantalla táctil.
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+let deferredInstall = null;
+
+// Android y Chrome de escritorio avisan que se puede instalar; ahí sale
+// el botón "Instalar" y el sistema hace todo.
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  checkInstallBar();
+});
+
+function doInstall() {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  deferredInstall.userChoice.finally(() => {
+    deferredInstall = null;
+    dismissInstall();
+  });
+}
+
+// iPhone nunca ofrece instalar solo: hay que explicarle al usuario los dos
+// toques. Se muestra una vez y queda descartado si lo cierra.
+function checkInstallBar() {
+  if (isStandalone()) return;                              // ya está instalada
+  if (localStorage.getItem('dm_install_off')) return;      // ya lo cerró
+  const bar = document.getElementById('installBar');
+  const txt = document.getElementById('installText');
+  if (deferredInstall) {
+    txt.innerHTML = '<b>📲 Instalá la app</b>Para tenerla en la pantalla de inicio.';
+    document.getElementById('installBtn').style.display = 'block';
+  } else if (isIOS()) {
+    txt.innerHTML = '<b>📲 Instalá la app</b>Tocá <b style="display:inline">Compartir</b> abajo y elegí <b style="display:inline">“Agregar a inicio”</b>.';
+  } else {
+    return; // otros navegadores: no hay nada útil que decir
+  }
+  bar.classList.add('show');
+}
+
+function dismissInstall() {
+  localStorage.setItem('dm_install_off', '1');
+  document.getElementById('installBar').classList.remove('show');
+}
+</script>
+</body>
+</html>
