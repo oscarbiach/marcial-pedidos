@@ -840,6 +840,23 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 #refreshDot.on { display:block; }
 
+/* ── Instrucciones de instalación ── */
+.link-instalar {
+  display:block; width:100%; margin-top:6px; padding:12px;
+  background:none; border:none; color:var(--blue);
+  font-size:13.5px; font-weight:700; cursor:pointer;
+}
+.ins-txt { font-size:14px; color:var(--gray); line-height:1.5; margin-bottom:14px; }
+.ins-paso {
+  display:flex; gap:12px; align-items:flex-start;
+  font-size:14.5px; line-height:1.45; margin-bottom:14px;
+}
+.ins-n {
+  flex-shrink:0; width:26px; height:26px; border-radius:50%;
+  background:var(--navy); color:#fff; font-size:13px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+
 /* ── Cartel para instalar la app (iPhone no muestra ninguno solo) ── */
 #installBar {
   display:none; position:fixed; left:12px; right:12px; z-index:250;
@@ -885,6 +902,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
       <button class="menu-btn" onclick="pickWho('Joaquin')">👤 Joaquin</button>
       <button class="menu-btn" onclick="pickWho('Oscar')">👤 Oscar</button>
       <button class="menu-btn" onclick="pickWho('Thiago')">👤 Thiago</button>
+      <!-- Siempre disponible: sirve para instalársela a un compañero
+           aunque el cartel de abajo ya no esté apareciendo. -->
+      <button class="link-instalar" onclick="abrirInstalar()">📲 Cómo instalar la app</button>
     </div>
 
     <div id="whoPin" style="display:none">
@@ -1092,6 +1112,18 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   </div>
 </div>
 
+<!-- ── MODAL: cómo instalar la app ── -->
+<div class="overlay" id="instalarModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>📲 Instalar la app</h2>
+      <button class="close-btn" onclick="closeModal('instalarModal')">✕</button>
+    </div>
+    <div class="modal-body" id="instalarBody"></div>
+  </div>
+</div>
+
 <!-- ── SELECTOR DE PRODUCTO A PANTALLA COMPLETA (solo celular) ──
      Dos pantallas: elegir el producto y poner la cantidad. La segunda usa
      teclado propio para que el del sistema no tape nada. -->
@@ -1139,8 +1171,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 <!-- Cartel para instalar la app en el celular -->
 <div id="installBar">
   <div id="installText"></div>
-  <button class="ib-btn" id="installBtn" style="display:none" onclick="doInstall()">Instalar</button>
-  <button class="ib-x" onclick="dismissInstall()">✕</button>
+  <button class="ib-btn" id="installBtn" style="display:none">Instalar</button>
+  <button class="ib-x" onclick="dismissInstall()" title="Recordármelo en una semana">✕</button>
 </div>
 
 <!-- Toast -->
@@ -2801,27 +2833,83 @@ function doInstall() {
   });
 }
 
-// iPhone nunca ofrece instalar solo: hay que explicarle al usuario los dos
-// toques. Se muestra una vez y queda descartado si lo cierra.
+function esAndroid()  { return /android/i.test(navigator.userAgent); }
+function esFirefox()  { return /firefox|fxios/i.test(navigator.userAgent); }
+
+// El cartel de abajo. Aparece mientras la app no esté instalada, en
+// celular y en PC. Antes en PC no mostraba nada cuando el navegador no
+// ofrecía instalación nativa: se iba por un "return" sin decir palabra.
 function checkInstallBar() {
-  if (isStandalone()) return;                              // ya está instalada
-  if (localStorage.getItem('dm_install_off')) return;      // ya lo cerró
   const bar = document.getElementById('installBar');
   const txt = document.getElementById('installText');
+  const btn = document.getElementById('installBtn');
+  if (!bar) return;
+  if (isStandalone()) { bar.classList.remove('show'); return; }
+
+  // Si lo cerró, se calla una semana — no para siempre. Antes quedaba
+  // descartado de por vida y no había forma de recuperarlo, ni siquiera
+  // para instalarla en el teléfono de otro.
+  const hasta = Number(localStorage.getItem('dm_install_off') || 0);
+  if (hasta && Date.now() < hasta) { bar.classList.remove('show'); return; }
+
   if (deferredInstall) {
-    txt.innerHTML = '<b>📲 Instalá la app</b>Para tenerla en la pantalla de inicio.';
-    document.getElementById('installBtn').style.display = 'block';
-  } else if (isIOS()) {
-    txt.innerHTML = '<b>📲 Instalá la app</b>Tocá <b style="display:inline">Compartir</b> abajo y elegí <b style="display:inline">“Agregar a inicio”</b>.';
+    txt.innerHTML = '<b>📲 Instalá la app</b>Para tenerla siempre a mano.';
+    btn.textContent = 'Instalar';
+    btn.onclick = doInstall;
   } else {
-    return; // otros navegadores: no hay nada útil que decir
+    txt.innerHTML = '<b>📲 Instalá la app</b>' +
+      (isIOS() ? 'En iPhone se hace con dos toques.' : 'Para abrirla sin el navegador.');
+    btn.textContent = 'Cómo';
+    btn.onclick = abrirInstalar;
   }
+  btn.style.display = 'block';
   bar.classList.add('show');
 }
 
 function dismissInstall() {
-  localStorage.setItem('dm_install_off', '1');
+  // Una semana de silencio, y después vuelve a ofrecerse.
+  localStorage.setItem('dm_install_off', String(Date.now() + 7 * 24 * 3600 * 1000));
   document.getElementById('installBar').classList.remove('show');
+}
+
+// Instrucciones según el aparato y el navegador. Se puede abrir cuando
+// uno quiera desde el menú 👤, así se le puede instalar a un compañero
+// aunque el cartel ya no esté.
+function abrirInstalar() {
+  const b = document.getElementById('instalarBody');
+  const paso = (n, t) => `<div class="ins-paso"><span class="ins-n">${n}</span><span>${t}</span></div>`;
+  let html;
+
+  if (isStandalone()) {
+    html = `<p class="ins-txt">✅ Ya la estás usando instalada. No hay nada que hacer.</p>`;
+  } else if (isIOS()) {
+    html = `<p class="ins-txt">En iPhone y iPad la app se agrega desde Safari.</p>` +
+      paso(1, 'Abrí esta página con <b>Safari</b>. Desde Chrome no se puede instalar.') +
+      paso(2, 'Tocá <b>Compartir</b>: el cuadradito con la flecha ↑, abajo en el centro.') +
+      paso(3, 'Deslizá el menú hacia abajo y tocá <b>“Agregar a inicio”</b>.') +
+      paso(4, 'Confirmá con <b>Agregar</b>, arriba a la derecha.') +
+      `<p class="ins-txt">Te queda el ícono en la pantalla y abre a pantalla completa, sin barra del navegador.</p>`;
+  } else if (deferredInstall) {
+    html = `<p class="ins-txt">Este navegador puede instalarla de una.</p>
+      <button class="btn btn-primary" onclick="doInstall()">📲 Instalar ahora</button>`;
+  } else if (esFirefox()) {
+    html = `<p class="ins-txt">⚠️ Firefox no permite instalar aplicaciones web.</p>` +
+      `<p class="ins-txt">Abrí <b>oscarbiach.github.io/marcial-pedidos</b> con <b>Chrome</b> o <b>Edge</b> y desde ahí vas a poder instalarla.</p>`;
+  } else if (esAndroid()) {
+    html = paso(1, 'Abrí el menú del navegador: los <b>tres puntos ⋮</b> de arriba a la derecha.') +
+      paso(2, 'Elegí <b>“Instalar app”</b> o <b>“Agregar a pantalla principal”</b>.') +
+      paso(3, 'Confirmá con <b>Instalar</b>.');
+  } else {
+    html = `<p class="ins-txt">En la computadora, con Chrome o Edge:</p>` +
+      paso(1, 'Mirá el final de la barra de direcciones: aparece un ícono de <b>instalar</b> (una pantallita con una flecha).') +
+      paso(2, 'Si no lo ves, abrí el menú <b>⋮</b> y buscá <b>“Instalar Distribuidora Marcial”</b>.') +
+      paso(3, 'Confirmá con <b>Instalar</b>.') +
+      `<p class="ins-txt">Queda como un programa más: se abre en su propia ventana, sin pestañas ni barra de direcciones.</p>`;
+  }
+
+  b.innerHTML = html;
+  document.getElementById('whoModal').classList.remove('open');
+  document.getElementById('instalarModal').classList.add('open');
 }
 </script>
 </body>
