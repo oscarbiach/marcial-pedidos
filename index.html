@@ -478,6 +478,17 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 @media(max-width:767.98px) { #colaAviso { bottom:calc(78px + env(safe-area-inset-bottom)); } }
 
+/* Cierre del día: confirma que nada quedó sin enviar */
+.dia-check {
+  display:flex; flex-direction:column; gap:2px;
+  border-radius:12px; padding:11px 14px; margin-bottom:12px;
+  font-size:13px; line-height:1.4;
+}
+.dia-check b { font-size:13.5px; }
+.dia-check span { font-size:12px; opacity:.85; }
+.dia-check.bien { background:var(--lgreen); color:var(--green); }
+.dia-check.malo { background:var(--lred);   color:var(--red); }
+
 /* Tarjeta de un pedido que todavía no confirmó el servidor */
 .order-card.en-cola { opacity:.72; border-left-color:var(--blue); }
 .cola-tag {
@@ -1173,6 +1184,15 @@ function procesarCola() {
 // que algo quedó a medio camino, así que no se puede cerrar.
 function actualizarAvisoCola() {
   const n = colaLeer().length;
+  // Globito rojo en el ícono de la pantalla de inicio. Es el único aviso
+  // que se ve con la app CERRADA: si quedó un pedido sin enviar, el
+  // número queda ahí hasta que salga. (iPhone: solo si está instalada.)
+  try {
+    if (navigator.setAppBadge) {
+      if (n) navigator.setAppBadge(n); else navigator.clearAppBadge();
+    }
+  } catch (e) { /* si el sistema no lo soporta, se sigue igual */ }
+
   const el = document.getElementById('colaAviso');
   if (!el) return;
   if (!n) { el.classList.remove('show'); return; }
@@ -1266,6 +1286,34 @@ function pedidoSectionHtml(est, list) {
     `<div class="order-list">${listWithDividers(list)}</div>`;
 }
 
+// Cierre del día: reemplaza al control contra WhatsApp. Dice, sin que
+// haya que acordarse de nada, si todo lo cargado hoy ya está en el
+// servidor. Si algo quedó colgado, lo grita en vez de esperar a que
+// alguien lo note.
+//
+// Cuenta solo los pedidos cargados HOY: los del servidor ya están
+// confirmados por definición (vinieron de ahí), y los de la cola se
+// distinguen por la marca enCola/errorCola.
+function resumenDelDiaHtml() {
+  if (searchQuery.trim()) return '';   // con el buscador activo no aplica
+  const hoy = state.today;
+  const deHoy = (state.pedidos || []).filter(p => p.fecha === hoy);
+  if (!deHoy.length) return '';
+  const colgados = deHoy.filter(p => p.enCola || p.errorCola).length;
+  const enServidor = deHoy.length - colgados;
+
+  if (colgados) {
+    return `<div class="dia-check malo">
+      <b>⚠ ${colgados} de los ${deHoy.length} pedidos de hoy todavía NO llegaron al servidor</b>
+      <span>Están guardados en este celular. No cierres la app hasta que salgan.</span>
+    </div>`;
+  }
+  return `<div class="dia-check bien">
+    <b>✅ Los ${enServidor} pedidos de hoy están guardados en el servidor</b>
+    <span>No quedó nada colgado en este celular.</span>
+  </div>`;
+}
+
 function renderPedidos() {
   // Filtro del buscador (solo visible en PC): por cliente o producto.
   let pedidos = state.pedidos;
@@ -1286,7 +1334,7 @@ function renderPedidos() {
     }
   });
 
-  let html = '';
+  let html = resumenDelDiaHtml();
   html += pedidoSectionHtml('Pendiente', pend);
   html += pedidoSectionHtml('Despachado', desp);
   html += pedidoSectionHtml('Cancelado', canc);
@@ -1914,8 +1962,17 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Cuando vuelve la señal, lo que haya quedado sin enviar sale solo.
+// ── Reintentos: cuantas más oportunidades, más chica la ventana en la
+// que un pedido puede quedar solo en el celular ──
+// Vuelve la señal.
 window.addEventListener('online', () => procesarCola());
+// Se vuelve a la app (cambió de app, apagó y prendió la pantalla…).
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) procesarCola();
+});
+window.addEventListener('focus', () => procesarCola());
+// Y mientras quede algo sin enviar, se reintenta solo cada 20 segundos.
+setInterval(() => { if (colaLeer().length) procesarCola(); }, 20000);
 
 function isStandalone() {
   return window.navigator.standalone === true ||
