@@ -554,7 +554,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
        abajo), para que el panel arranque justo debajo del header y termine
        justo arriba de la barra: recién ahí el centrado es el de la
        pantalla y no el de una caja corrida. */
-    min-height:var(--alto-util, calc(100vh - 157px));
+    /* El padding de abajo es lo que evita que, con el pedido largo, el
+       botón Guardar termine tapado por la barra de navegación. Como el
+       box-sizing es border-box, se suma al min-height para que el área
+       donde se centra siga siendo exactamente --alto-util. */
+    min-height:calc(var(--alto-util, calc(100vh - 157px)) + 90px);
+    padding-bottom:90px;
     margin:-12px 0 -90px;
     display:flex; flex-direction:column; justify-content:center;
   }
@@ -675,11 +680,17 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .pk-teclado button:active { background:var(--lblue); }
 #pkConfirmar { flex-shrink:0; margin-top:2px; }
 
-/* ── Lista de productos del pedido (celular) ──
-   Con el selector, las filas con campos de texto ya no se tocan a mano:
-   se muestran como renglones legibles y grandes, y se tocan para
-   corregir. En PC no aplica: ahí se sigue escribiendo en las filas. */
-.item-resumen { display:none; }
+/* ── Lista de productos del pedido ──
+   El renglón legible es solo de celular; en PC se sigue escribiendo en
+   las filas con campos, así que ahí se oculta.
+   OJO: esto va dentro de un media query de PC a propósito. Antes era un
+   ".item-resumen { display:none }" suelto, y como estaba MÁS ABAJO en el
+   archivo que la regla de celular —misma especificidad, gana la última—
+   terminaba ocultando los productos también en el celular: se agregaban
+   al pedido pero no se veían en pantalla. */
+@media(min-width:768px) {
+  .item-resumen { display:none; }
+}
 
 /* ── Cola de envío ── */
 #colaAviso {
@@ -1079,8 +1090,11 @@ const API_ACTIONS = [
   'setFeteoHecho', 'setFeteoOrden'
 ];
 
-function apiCall(action, args, onOk, onErr) {
-  fetch(API_URL, {
+// Una llamada sola, sin reintentos. Distingue los tres modos de fallar,
+// porque tratarlos igual llevaba a mostrar "no se pudo conectar" cuando en
+// realidad el servidor había contestado (mal).
+function apiIntento(action, args) {
+  return fetch(API_URL, {
     method: 'POST',
     // text/plain a propósito: con application/json el navegador manda
     // primero un preflight OPTIONS que Apps Script no sabe contestar y
@@ -1088,16 +1102,52 @@ function apiCall(action, args, onOk, onErr) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ pin: state.pin || '', action: action, args: args || [] })
   })
-    .then(r => r.json())
+    .then(r => r.text().then(txt => {
+      if (!r.ok) {
+        const e = new Error('El servidor respondió ' + r.status);
+        e.transitorio = r.status >= 500 || r.status === 429;
+        throw e;
+      }
+      try {
+        return JSON.parse(txt);
+      } catch (x) {
+        // Apps Script devuelve una página HTML cuando se pasa de cuota,
+        // cuando hay demasiadas llamadas juntas o mientras se está
+        // desplegando. Antes esto se reportaba como falta de conexión.
+        const e = new Error('El servidor devolvió una respuesta inesperada');
+        e.transitorio = true;
+        e.detalle = txt.slice(0, 120);
+        throw e;
+      }
+    }))
+    .catch(err => {
+      if (err && err.transitorio !== undefined) throw err;
+      // Acá cae la red: sin señal, DNS, timeout del sistema.
+      const e = new Error(navigator.onLine
+        ? 'No se pudo conectar con el servidor'
+        : 'Sin conexión a internet');
+      e.transitorio = true;
+      throw e;
+    });
+}
+
+// Con reintentos: un tropiezo pasajero no tiene por qué llegarle al
+// usuario. Reintentar es seguro incluso al guardar, porque el id lo pone
+// el celular y el servidor no escribe dos veces el mismo pedido.
+function apiCall(action, args, onOk, onErr, intento) {
+  const n = intento || 0;
+  apiIntento(action, args)
     .then(res => {
       if (res && res.ok) { if (onOk) onOk(res.data); }
       else if (onErr) onErr(new Error((res && res.error) || 'Error desconocido'));
     })
-    .catch(() => {
-      // Sin señal el fetch se cae acá: conviene decirlo con esas palabras.
-      if (onErr) onErr(new Error(navigator.onLine
-        ? 'No se pudo conectar con el servidor'
-        : 'Sin conexión a internet'));
+    .catch(err => {
+      if (err.transitorio && n < 2) {
+        setTimeout(() => apiCall(action, args, onOk, onErr, n + 1), n === 0 ? 1200 : 4000);
+        return;
+      }
+      if (err.detalle) console.warn('Respuesta del servidor:', err.detalle);
+      if (onErr) onErr(err);
     });
 }
 
@@ -1290,11 +1340,19 @@ function loadData(silencioso) {
 
 // Momento del último refresco, para no pedir datos de gusto.
 let ultimoRefresh = 0;
+// Candado: volver a la app, enfocarla y entrar a Pedidos podían disparar
+// tres pedidos de datos encimados. Apps Script limita las ejecuciones
+// simultáneas, y de ahí salían las respuestas raras.
+let refrescando = false;
 
 // manual = lo pidió el usuario con el botón Actualizar. En ese caso el
 // botón se bloquea, gira y avisa al terminar; los refrescos automáticos
 // pasan callados.
 function reload(manual) {
+  // Si ya hay uno en curso se descarta, salvo que lo haya pedido la
+  // persona con el botón: ahí conviene esperar al que está andando.
+  if (refrescando) return;
+  refrescando = true;
   const btn = document.getElementById('refreshBtn');
   if (manual && btn) {
     btn.disabled = true;
@@ -1319,6 +1377,7 @@ function reload(manual) {
       restaurarCola();
       renderPedidos();
       soltarBoton();
+      refrescando = false;
       if (manual) {
         // Si aparecieron pedidos de otro, se dice cuántos: es el dato que
         // se está buscando al tocar Actualizar.
@@ -1331,7 +1390,11 @@ function reload(manual) {
     .withFailureHandler(e => {
       marcarRefrescando(false);
       soltarBoton();
-      toast('Error al actualizar: ' + e.message);
+      refrescando = false;
+      // Un refresco fallido no le cambia el día a nadie: los pedidos que se
+      // ven siguen siendo los últimos que llegaron. Solo se avisa si lo
+      // pidió la persona; los automáticos se callan.
+      if (manual) toast('Error al actualizar: ' + e.message);
     })
     .getAppData();
 }
