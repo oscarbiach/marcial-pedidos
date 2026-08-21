@@ -110,10 +110,37 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .order-card.Pendiente  { border-left-color:var(--orange); }
 .order-card.Despachado { border-left-color:var(--green); }
 .order-card.Cancelado  { border-left-color:var(--red); opacity:.65; }
-.oc-top { display:flex; justify-content:space-between; align-items:flex-start; }
-.oc-main { font-size:15px; font-weight:700; }
-.oc-sub  { font-size:12px; color:var(--gray); margin-top:2px; }
-.oc-items { font-size:12px; color:var(--gray); margin-top:6px; border-top:1px solid var(--lgray); padding-top:6px; }
+.oc-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.oc-main {
+  font-size:15.5px; font-weight:700; line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.oc-sub  {
+  font-size:12px; color:var(--gray); margin-top:3px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.oc-pills { display:flex; flex-direction:column; gap:4px; align-items:flex-end; flex-shrink:0; }
+/* Fecha que importa, como chip: se encuentra de un vistazo en vez de
+   quedar perdida en una fila de texto separada por puntos. */
+.oc-chip {
+  font-size:11px; font-weight:700; border-radius:8px; padding:2px 8px;
+  background:var(--lgray); color:var(--gray); white-space:nowrap;
+}
+.oc-chip.ok { background:var(--lgreen); color:var(--green); }
+/* Productos: cantidad en su propia columna, para que se lean en vertical
+   de un tirón en vez de tener que buscarlas dentro de cada renglón.
+   La grilla va en el CONTENEDOR, no en cada renglón: si cada ítem fuera
+   su propia grilla, cada uno mediría su columna por separado y las
+   cantidades no quedarían alineadas entre sí. */
+.oc-items {
+  display:grid; grid-template-columns:auto 1fr; column-gap:9px; row-gap:3px;
+  align-items:baseline; margin-top:8px;
+  border-top:1px solid var(--lgray); padding-top:7px;
+  font-size:12.5px; color:var(--gray);
+}
+.oc-q { font-weight:700; color:var(--text); text-align:right; white-space:nowrap; }
+.oc-p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.oc-mas { grid-column:1 / -1; color:var(--blue); font-weight:600; }
 .status-pill {
   font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px; white-space:nowrap;
 }
@@ -353,11 +380,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 @keyframes spin { to { transform:rotate(360deg); } }
 
-/* ── STOCK COMPROMETIDO (solo PC, pestaña Pedidos): panel violeta
-   flotante al costado derecho. El contenido sigue centrado como
-   siempre. En pantallas anchas (≥1280 px) el panel entra en el margen
-   libre y se ve siempre; en PC más angostas queda oculto y se abre con
-   el botón 🟣 flotante. En mobile no existe. ── */
+/* ── STOCK COMPROMETIDO (solo PC, pestaña Pedidos) ──
+   Vive detrás de un botón flotante 🟣, igual que la papelera: es un dato
+   de consulta, no algo que haya que estar mirando todo el tiempo. Antes
+   en pantallas anchas se mostraba siempre y competía con los pedidos.
+   En mobile no existe. ── */
 #compPanel, #compFab { display:none; }
 #compPanel h4 {
   font-size:12px; font-weight:800; color:#6C3483; text-transform:uppercase;
@@ -386,15 +413,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     align-items:center; justify-content:center;
   }
   #compFab:hover { background:#F4ECF7; }
-}
-/* PC angosta: panel a demanda con el botón 🟣 */
-@media(min-width:768px) and (max-width:1279.98px) {
+  /* El botón está siempre; el panel solo cuando se lo pide. */
   #compFab { display:flex; }
   #compPanel.open { display:block; }
-}
-/* PC ancha: panel siempre visible en el margen libre */
-@media(min-width:1280px) {
-  #compPanel { display:block; }
 }
 
 /* ── BUSCADOR (solo PC) ── */
@@ -441,6 +462,10 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .mobile-only { display:none !important; }
   main { max-width:1000px; padding:24px 32px 60px; }
   header { padding:12px 24px; }
+  /* El formulario de carga no necesita 1000 px de ancho: se centra en una
+     columna cómoda de lectura. Los campos quedan a la mano y no hay que
+     barrer la vista de punta a punta. */
+  #tab-cargar .form-card { max-width:600px; margin-left:auto; margin-right:auto; }
   .order-list { grid-template-columns:1fr 1fr; }
   .order-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.18); }
   .overlay { align-items:center; padding:24px; }
@@ -1301,29 +1326,50 @@ function restaurarCola() {
 // ═══════════════════════════════════════════════════════════════
 //  PEDIDOS (visualización + editar/eliminar pendientes)
 // ═══════════════════════════════════════════════════════════════
-function pedidoCardHtml(p, extra) {
-  const fechas = [`Cargado ${fmtDate(p.fecha)}`];
-  if (p.fechaEntrega) fechas.push(`Entrega ${fmtDate(p.fechaEntrega)}`);
-  if (p.estado === 'Despachado' && p.fechaDespacho) fechas.push(`Despachado ${fmtDate(p.fechaDespacho)}`);
-  if (p.estado === 'Cancelado' && p.fechaDespacho) fechas.push(`Cancelado ${fmtDate(p.fechaDespacho)}`);
+// dd/MM, para las fechas dentro de una tarjeta (el año casi nunca aporta).
+function fmtDiaMes(d) {
+  const s = fmtDate(d);
+  return s ? s.slice(0, 5) : '';
+}
+
+function pedidoCardHtml(p) {
   const sinConfirmar = p.enCola || p.errorCola;
+
+  // La fecha de CARGA no se repite acá: ya la dice el separador de día que
+  // encabeza cada grupo de la lista. Antes iba en todas las tarjetas y era
+  // la mitad del ruido de la línea gris.
+  const meta = [];
+  if (p.direccion) meta.push(esc(p.direccion));
+  meta.push(p.items.length + ' producto' + (p.items.length !== 1 ? 's' : ''));
+  if (p.quien) meta.push(esc(p.quien));
+
+  // Las fechas que sí importan van como chip, no perdidas en una lista
+  // separada por puntos.
+  let chip = '';
+  if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">✓ ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
+
   return `
     <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}" onclick="openPedidoDetail('${p.id}')">
       <div class="oc-top">
-        <div>
-          <div class="oc-main">${esc(p.cliente)}${p.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(p.direccion)}</span>` : ''}</div>
-          <div class="oc-sub">${fechas.join(' · ')} · ${p.items.length} producto${p.items.length !== 1 ? 's' : ''}${p.quien ? ` · 👤 ${esc(p.quien)}` : ''}</div>
+        <div style="min-width:0">
+          <div class="oc-main">${esc(p.cliente)}</div>
+          <div class="oc-sub">${meta.join(' · ')}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
           ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
           ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
           ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
+          ${chip}
         </div>
       </div>
-      ${p.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
-      ${p.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${p.items.length - 3} más…</div>` : ''}
-      ${extra || ''}
+      <div class="oc-items">
+        ${p.items.slice(0, 3).map(it => `
+          <span class="oc-q">${itemLabelCorto(it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
+        ${p.items.length > 3 ? `<div class="oc-mas">+ ${p.items.length - 3} más…</div>` : ''}
+      </div>
     </div>`;
 }
 
@@ -1459,23 +1505,28 @@ function updatePapeleraFab() {
 function papeleraCardHtml(p) {
   const rest = 3 - daysSince(p.fechaElim);
   const cuando = rest <= 0 ? 'hoy' : (rest === 1 ? 'mañana' : 'en ' + rest + ' días');
-  const sub = ['Eliminado ' + fmtDate(p.fechaElim)];
-  if (p.elimPor) sub.push('👤 ' + esc(p.elimPor));
+  const sub = [];
+  if (p.direccion) sub.push(esc(p.direccion));
+  sub.push('Eliminado ' + fmtDate(p.fechaElim));
+  if (p.elimPor) sub.push(esc(p.elimPor));
   sub.push('se borra ' + cuando);
   return `
     <div class="order-card ${p.estado}" style="cursor:default;margin-bottom:8px">
       <div class="oc-top">
-        <div>
-          <div class="oc-main">${esc(p.cliente)}${p.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(p.direccion)}</span>` : ''}</div>
+        <div style="min-width:0">
+          <div class="oc-main">${esc(p.cliente)}</div>
           <div class="oc-sub">${sub.join(' · ')}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
           ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         </div>
       </div>
-      ${p.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
-      ${p.items.length > 3 ? `<div class="oc-items" style="color:var(--blue)">+ ${p.items.length - 3} más…</div>` : ''}
+      <div class="oc-items">
+        ${p.items.slice(0, 3).map(it => `
+          <span class="oc-q">${itemLabelCorto(it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
+        ${p.items.length > 3 ? `<div class="oc-mas">+ ${p.items.length - 3} más…</div>` : ''}
+      </div>
       <div class="rep-row">
         <button class="quitar-btn" style="margin-left:0" onclick="restorePedidoUi('${p.id}')">↩ Restaurar pedido</button>
       </div>
@@ -2003,6 +2054,14 @@ function qtyLabel(prod, qty, fetear, unidades) {
 // Renglón de producto con la cantidad SIEMPRE a la izquierda del nombre.
 function itemLineLabel(it) {
   return qtyLabel(it.prod, it.qty, it.fetear, it.unidades);
+}
+
+// Igual, pero sin la equivalencia entre paréntesis ("1 caja (= 48 un.)"
+// → "1 caja"). En las tarjetas de la lista esa aclaración ocupa más de lo
+// que aporta y le come el lugar al nombre del producto; en el detalle del
+// pedido sí se muestra completa.
+function itemLabelCorto(it) {
+  return itemLineLabel(it).replace(/\s*\(=[^)]*\)\s*$/, '');
 }
 
 // Close modals on overlay click. El de usuario solo es obligatorio la
