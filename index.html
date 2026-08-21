@@ -520,6 +520,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 #pinInput:focus { border-color:var(--blue); }
 #pinError { color:var(--red); font-size:13px; text-align:center; min-height:18px; margin-top:8px; }
 
+/* Rueditita en el header mientras se refrescan los datos de fondo */
+#refreshDot {
+  width:14px; height:14px; border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite;
+  display:none; flex-shrink:0;
+}
+#refreshDot.on { display:block; }
+
 /* ── Cartel para instalar la app (iPhone no muestra ninguno solo) ── */
 #installBar {
   display:none; position:fixed; left:12px; right:12px; z-index:250;
@@ -587,6 +595,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   <header>
     <span>📦</span>
     <h1 id="appTitle">Cargar Pedido</h1>
+    <div id="refreshDot" title="Actualizando…"></div>
     <nav id="pcNav" class="pc-only">
       <button data-tab="cargar" class="on" onclick="goTab('cargar')">➕ Cargar</button>
       <button data-tab="pedidos" onclick="goTab('pedidos')">🛒 Pedidos</button>
@@ -1161,6 +1170,33 @@ const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago'];
 // Nombre elegido en el primer paso, todavía sin PIN confirmado.
 let pendingWho = '';
 
+// ── Caché de los datos ──
+// Traer todo del servidor tarda unos segundos. Se guarda la última copia
+// en el celular: al abrir, la app muestra eso al instante y se actualiza
+// sola de fondo. Deja de sentirse trabada aunque el servidor tarde igual.
+const CACHE_KEY = 'dm_ped_cache';
+
+function guardarCache(data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }
+  catch (e) { /* si no entra (celular sin espacio), se sigue sin caché */ }
+}
+
+function leerCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); }
+  catch (e) { return null; }
+}
+
+function mostrarApp() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  renderPedidos();
+  setTab(activeTab);
+}
+
+function marcarRefrescando(on) {
+  document.getElementById('refreshDot').classList.toggle('on', on);
+}
+
 window.addEventListener('load', () => {
   const savedWho = localStorage.getItem('dm_ped_who');
   const savedPin = localStorage.getItem('dm_ped_pin');
@@ -1171,7 +1207,17 @@ window.addEventListener('load', () => {
     state.pin = savedPin;
     pendingWho = savedWho;
     document.getElementById('whoBtn').textContent = '👤 ' + savedWho;
-    loadData();
+    // Si hay copia guardada, la app abre YA con los últimos datos y se
+    // actualiza de fondo. Si no (primera vez), espera al servidor.
+    const cache = leerCache();
+    if (cache) {
+      state = { ...state, ...cache };
+      mostrarApp();
+      resetCargarForm();
+      loadData(true);
+    } else {
+      loadData();
+    }
   } else {
     document.getElementById('loading').style.display = 'none';
     showWhoPick();
@@ -1219,25 +1265,32 @@ function openWhoModal() {
   document.getElementById('whoModal').classList.add('open');
 }
 
-function loadData() {
+// silencioso = la app ya está en pantalla con datos de la caché y esto es
+// solo un refresco de fondo: no se toca el formulario ni se tapa nada.
+function loadData(silencioso) {
+  if (silencioso) marcarRefrescando(true);
   google.script.run
     .withSuccessHandler(data => {
       // El PIN sirvió: recién ahora se guarda para no volver a pedirlo.
       localStorage.setItem('dm_ped_who', state.who);
       localStorage.setItem('dm_ped_pin', state.pin);
+      guardarCache(data);
       const btn = document.getElementById('pinBtn');
       btn.disabled = false; btn.textContent = 'Entrar';
       state = { ...state, ...data };
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('appShell').style.display = 'block';
-      renderPedidos();
+      marcarRefrescando(false);
+      if (silencioso) { renderPedidos(); return; }
+      mostrarApp();
       resetCargarForm();
-      setTab(activeTab);
     })
     .withFailureHandler(err => {
       const msg = String((err && err.message) || err);
       const btn = document.getElementById('pinBtn');
       btn.disabled = false; btn.textContent = 'Entrar';
+      marcarRefrescando(false);
+      // Refresco de fondo fallido (sin señal): la app sigue con lo que ya
+      // tenía en pantalla, no se le rompe nada al usuario.
+      if (silencioso) { toast('Sin conexión: mostrando lo último guardado'); return; }
       // PIN rechazado: se descarta el guardado y se vuelve a pedir, en vez
       // de dejar la pantalla de error sin salida.
       if (/PIN/i.test(msg)) {
@@ -1258,9 +1311,17 @@ function loadData() {
 }
 
 function reload() {
+  marcarRefrescando(true);
   google.script.run
-    .withSuccessHandler(data => { state = { ...state, ...data }; renderPedidos(); if (activeTab === 'reparto') renderReparto(); if (activeTab === 'feteo') renderFeteo(); toast('✓ Actualizado'); })
-    .withFailureHandler(e => toast('Error al actualizar: ' + e.message))
+    .withSuccessHandler(data => {
+      guardarCache(data);
+      state = { ...state, ...data };
+      marcarRefrescando(false);
+      renderPedidos();
+      if (activeTab === 'reparto') renderReparto();
+      if (activeTab === 'feteo') renderFeteo();
+    })
+    .withFailureHandler(e => { marcarRefrescando(false); toast('Error al actualizar: ' + e.message); })
     .getAppData();
 }
 
