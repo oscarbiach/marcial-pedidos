@@ -41,7 +41,30 @@
   --radius: 12px;
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--lgray); color:var(--text); min-height:100vh; }
+
+/* ── Comportamiento en el celular ──
+   touch-action:manipulation apaga el zoom por doble toque. iOS ignora
+   user-scalable=no desde iOS 10, así que esta es la única forma de que
+   tocar rápido dos veces (por ejemplo el teclado numérico) no agrande
+   la pantalla. El pellizco para agrandar sigue funcionando. */
+* { touch-action:manipulation; }
+
+/* El fondo va también en <html>: cuando iOS estira la página al final
+   del scroll, lo que asoma es este color y no el blanco del navegador.
+   overscroll-behavior corta el rebote y el "tirar para recargar". */
+html {
+  background:var(--lgray);
+  overscroll-behavior:none;
+  -webkit-text-size-adjust:100%;
+}
+body {
+  font-family:'Segoe UI',system-ui,sans-serif; background:var(--lgray);
+  color:var(--text); min-height:100vh;
+  overscroll-behavior:none;
+  /* Nada puede desbordar a los costados: es lo que hacía que la pantalla
+     quedara corrida y se vieran los bordes. */
+  overflow-x:hidden; width:100%;
+}
 
 /* ── HEADER ── */
 header {
@@ -462,17 +485,97 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .mobile-only { display:none !important; }
   main { max-width:1000px; padding:24px 32px 60px; }
   header { padding:12px 24px; }
-  /* El formulario de carga no necesita 1000 px de ancho: se centra en una
-     columna cómoda de lectura. Los campos quedan a la mano y no hay que
-     barrer la vista de punta a punta. */
-  #tab-cargar .form-card { max-width:600px; margin-left:auto; margin-right:auto; }
-  .order-list { grid-template-columns:1fr 1fr; }
+  /* El formulario de carga se centra en los dos ejes y respira: es la
+     pantalla donde más se trabaja, así que los campos van grandes y
+     separados en vez de estirados a lo ancho de la pantalla. Si el
+     pedido crece y no entra, deja de centrarse y scrollea normal. */
+  #tab-cargar.active {
+    display:flex; align-items:center; justify-content:center;
+    /* 55px es el alto del header. Los márgenes negativos anulan el padding
+       de main (24 arriba, 60 abajo): sin eso el formulario queda 60px más
+       arriba del centro real de la pantalla. */
+    min-height:calc(100vh - 55px);
+    margin:-24px 0 -60px;
+  }
+  #tab-cargar .form-card {
+    width:100%; max-width:660px; padding:32px 34px; border-radius:16px;
+    /* Sin esto el centrado flex cuenta el margen de abajo como parte de la
+       tarjeta y la deja 6px más arriba de lo que corresponde. */
+    margin-bottom:0;
+  }
+  #tab-cargar .field { margin-bottom:20px; }
+  #tab-cargar .field label { font-size:12.5px; margin-bottom:8px; }
+  #tab-cargar .field input,
+  #tab-cargar .field textarea { padding:14px 15px; font-size:16px; border-radius:12px; }
+  #tab-cargar .items-section h4 { font-size:12.5px; margin-bottom:11px; }
+  #tab-cargar .ped-item-row { grid-template-columns:110px 1fr 44px; gap:11px; }
+  #tab-cargar .ped-item-row input { padding:13px 12px; font-size:15px; border-radius:11px; }
+  #tab-cargar .del-btn { width:44px; height:44px; font-size:19px; }
+  #tab-cargar .item-row { margin-bottom:11px; }
+  #tab-cargar .add-item-btn { padding:14px; font-size:14.5px; border-radius:12px; }
+  #tab-cargar #cargarSubmitBtn { padding:17px; font-size:17px; border-radius:13px; margin-top:4px; }
+
+  /* Pedidos: tarjetas con más aire, que era lo apretado. */
+  .order-list { grid-template-columns:1fr 1fr; gap:12px; }
+  .order-card { padding:15px 17px; }
+  .oc-main { font-size:16.5px; }
+  .oc-sub { font-size:12.5px; }
+  .oc-items { font-size:13px; row-gap:4px; padding-top:9px; margin-top:10px; }
+  .section-header h3 { font-size:16px; }
   .order-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.18); }
   .overlay { align-items:center; padding:24px; }
   .modal { border-radius:20px; max-width:560px; max-height:86vh; animation:popIn .18s ease; }
   .modal-handle { display:none; }
 }
 @keyframes popIn { from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* ══════════════════════════════════════════════════════════════
+   CARGA DE PEDIDO EN CELULAR
+   Es la pantalla donde se pasa el día: todo lo que hay que tocar es
+   grande, y lo secundario se achica para no competir.
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:767.98px) {
+  /* La tarjeta ocupa el alto disponible y el contenido queda centrado:
+     con pedidos cortos no queda todo apretado arriba. */
+  #tab-cargar { min-height:calc(100vh - 190px); display:flex; flex-direction:column; justify-content:center; }
+  #tab-cargar .form-card { padding:18px 16px; }
+
+  /* Cliente: el campo más importante de la pantalla. */
+  #tab-cargar .field label { font-size:12.5px; margin-bottom:7px; }
+  #tab-cargar #n_cliente { padding:16px 14px; font-size:17px; border-radius:13px; }
+
+  #tab-cargar .items-section h4 { font-size:12.5px; margin-bottom:9px; }
+  #tab-cargar .items-section { margin-bottom:16px; }
+
+  /* Renglón de producto cargado: grande y tocable entero para corregir. */
+  .ped-item-row, .box-hint, .fetear-check, .cuero-check { display:none !important; }
+  .item-resumen {
+    display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:11px;
+    background:#fff; border:1.5px solid var(--border); border-radius:13px;
+    padding:15px 13px; font-size:15.5px; cursor:pointer;
+  }
+  .item-resumen .ir-q { font-weight:800; color:var(--navy); white-space:nowrap; }
+  .item-resumen .ir-n { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item-resumen .ir-x {
+    width:38px; height:38px; border-radius:10px; border:1.5px solid var(--red);
+    background:#fff; color:var(--red); font-size:16px; line-height:1; cursor:pointer;
+  }
+  .add-item-btn { padding:17px; font-size:15.5px; font-weight:700; border-radius:13px; }
+  #cargarSubmitBtn { padding:18px; font-size:17px; border-radius:14px; }
+
+  /* Entrega, dirección y observación: pasan a segundo plano. Son chips
+     chicos abajo de todo, y el de fecha avisa si ya hay algo cargado
+     para no tener que abrirlo a controlar. */
+  .form-extras-row { gap:8px; margin:2px 0 14px; }
+  .extras-toggle {
+    font-size:12.5px; font-weight:700; padding:9px 12px;
+    border:1.5px solid var(--border); border-radius:10px; background:#fff;
+    color:var(--gray);
+  }
+  .extras-toggle.cargado { border-color:var(--blue); color:var(--blue); background:var(--lblue); }
+  .retiro-mini { font-size:12.5px; padding:9px 12px; }
+  .retiro-mini input { width:19px; height:19px; }
+}
 
 /* ── PIN de acceso ── */
 #pinInput {
@@ -552,52 +655,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .pk-teclado button:active { background:var(--lblue); }
 #pkConfirmar { flex-shrink:0; margin-top:2px; }
 
-/* ── Lista compacta de productos del pedido (celular) ──
-   Con el selector, las filas con inputs ya no se tocan a mano: se
-   muestran como renglones legibles y se tocan para corregir. */
+/* ── Lista de productos del pedido (celular) ──
+   Con el selector, las filas con campos de texto ya no se tocan a mano:
+   se muestran como renglones legibles y grandes, y se tocan para
+   corregir. En PC no aplica: ahí se sigue escribiendo en las filas. */
 .item-resumen { display:none; }
-body.modo-nuevo .ped-item-row,
-body.modo-nuevo .box-hint,
-body.modo-nuevo .fetear-check,
-body.modo-nuevo .cuero-check { display:none !important; }
-body.modo-nuevo .item-resumen {
-  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
-  background:#fff; border:1.5px solid var(--border); border-radius:12px;
-  padding:13px 12px; font-size:15px; cursor:pointer;
-}
-body.modo-nuevo .item-resumen .ir-q { font-weight:800; color:var(--navy); white-space:nowrap; }
-body.modo-nuevo .item-resumen .ir-n { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-body.modo-nuevo .item-resumen .ir-x {
-  width:32px; height:32px; border-radius:8px; border:1.5px solid var(--red);
-  background:#fff; color:var(--red); font-size:15px; line-height:1; cursor:pointer;
-}
-body.modo-nuevo .add-item-btn { padding:15px; font-size:15px; font-weight:700; }
-
-/* ── Modo B: asistente de dos pasos ── */
-.pasos { display:none; gap:8px; margin-bottom:12px; }
-body.modo-b .pasos { display:flex; }
-.paso-chip {
-  flex:1; text-align:center; font-size:12px; font-weight:700; color:var(--gray);
-  background:#fff; border:1.5px solid var(--border); border-radius:10px; padding:9px 4px;
-}
-.paso-chip.on { background:var(--navy); border-color:var(--navy); color:#fff; }
-body.modo-b.paso-2 #grupoCliente { display:none; }
-body.modo-b.paso-1 #grupoProductos,
-body.modo-b.paso-1 #cargarSubmitBtn { display:none; }
-body.modo-b.paso-2 #btnPaso1 { display:block; }
-#btnPaso1, #btnPaso2 { display:none; }
-body.modo-b.paso-1 #btnPaso2 { display:block; }
-
-/* Barra para volver al modo normal mientras se prueban las variantes */
-#modoBar {
-  display:none; font-size:12px; color:var(--gray); text-align:center;
-  padding:10px 12px 0;
-}
-body.modo-nuevo #modoBar { display:block; }
-#modoBar button {
-  background:none; border:none; color:var(--blue); font-weight:700;
-  font-size:12px; cursor:pointer; text-decoration:underline; padding:2px 4px;
-}
 
 /* ── Cola de envío ── */
 #colaAviso {
@@ -752,33 +814,22 @@ body.modo-nuevo #modoBar { display:block; }
   <main>
     <!-- CARGAR PEDIDO (página principal) -->
     <div id="tab-cargar" class="tab-panel active">
-      <!-- Solo visible mientras se prueban las variantes de celular -->
-      <div id="modoBar"></div>
       <div class="form-card">
-        <!-- Indicador de pasos: solo en el modo B -->
-        <div class="pasos">
-          <div class="paso-chip" id="chipPaso1">1 · Cliente</div>
-          <div class="paso-chip" id="chipPaso2">2 · Productos</div>
-        </div>
-        <div id="grupoCliente">
-          <div class="field">
-            <label>Cliente</label>
-            <div class="ac-wrap">
-              <input type="text" id="n_cliente" class="ac-input" placeholder="Nombre del cliente"
-                autocomplete="off" data-dir="n_direccion"
-                oninput="onClienteInput(this)"
-                onblur="closeClienteAcLater(this)">
-              <div class="ac-list"></div>
-            </div>
+        <div class="field">
+          <label>Cliente</label>
+          <div class="ac-wrap">
+            <input type="text" id="n_cliente" class="ac-input" placeholder="Nombre del cliente"
+              autocomplete="off" data-dir="n_direccion"
+              oninput="onClienteInput(this)"
+              onblur="closeClienteAcLater(this)">
+            <div class="ac-list"></div>
           </div>
         </div>
-        <div class="items-section" id="grupoProductos">
+        <div class="items-section">
           <h4>Productos del pedido</h4>
           <div id="cargarItemRows"></div>
           <button class="add-item-btn" onclick="agregarProducto('cargar')">＋ Agregar producto</button>
         </div>
-        <button class="btn btn-primary" id="btnPaso2" onclick="irAPaso(2)">Siguiente → Productos</button>
-        <button class="btn btn-secondary" id="btnPaso1" onclick="irAPaso(1)">← Volver al cliente</button>
         <div class="form-extras-row">
           <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')">📅 Entrega, dirección y observación ▾</button>
           <label class="retiro-mini"><input type="checkbox" id="n_retiro"> 🛻 RETIRO</label>
@@ -1093,9 +1144,9 @@ function marcarRefrescando(on) {
 }
 
 window.addEventListener('load', () => {
-  // Modo de carga: por URL (?modo=a) o el que quedó guardado.
-  const porUrl = new URLSearchParams(location.search).get('modo');
-  aplicarModo(porUrl || localStorage.getItem('dm_modo') || 'clasico');
+  // La prueba de variantes terminó: quedó el selector a pantalla completa
+  // en celular. Se limpia lo que hubiera quedado guardado.
+  localStorage.removeItem('dm_modo');
 
   const savedWho = localStorage.getItem('dm_ped_who');
   const savedPin = localStorage.getItem('dm_ped_pin');
@@ -1307,22 +1358,49 @@ function resetCargarForm() {
   document.getElementById('n_retiro').checked = false;
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
-  // En los modos nuevos no se arranca con una fila vacía: los productos se
-  // agregan desde el selector, y una fila sin nada sería ruido.
-  if (modoCarga === 'clasico') addItemRow('cargar');
-  if (modoCarga === 'b') irAPaso(1);
+  // En celular no se arranca con una fila vacía: los productos entran por
+  // el selector y una fila sin nada sería ruido. En PC sí, para poder
+  // empezar a escribir directo.
+  if (!esMobile()) addItemRow('cargar');
 }
 
 // Fecha de entrega, dirección y observación viven plegadas para no
 // hacer ruido; se abren al tocar el botoncito 📅.
+// En celular el texto largo hace que el chip envuelva en dos renglones y
+// deje de verse chico, que es justo lo que se buscaba.
 const EXTRAS_LABELS = {
   n: 'Entrega, dirección y observación',
   p: 'Entrega, dirección y observación'
 };
+function etiquetaExtras(prefix) {
+  return esMobile() ? 'Entrega y más' : EXTRAS_LABELS[prefix];
+}
 function setExtrasOpen(prefix, open) {
   document.getElementById(prefix + '_extras').classList.toggle('open', open);
   document.getElementById(prefix + '_extrasBtn').textContent =
-    '📅 ' + EXTRAS_LABELS[prefix] + ' ' + (open ? '▴' : '▾');
+    '📅 ' + etiquetaExtras(prefix) + ' ' + (open ? '▴' : '▾');
+  actualizarChipExtras(prefix);
+}
+
+// Estando plegado, el chip dice si adentro hay algo cargado. Sin esto hay
+// que abrirlo cada vez solo para controlar.
+function actualizarChipExtras(prefix) {
+  const btn = document.getElementById(prefix + '_extrasBtn');
+  if (!btn) return;
+  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  const fecha = prefix === 'n' ? val('n_fecha') : val('p_fecha');
+  const dir   = prefix === 'n' ? val('n_direccion') : val('p_direccion');
+  const nota  = prefix === 'n' ? val('n_notas') : val('p_notas');
+  const hay = !!(fecha || dir || nota);
+  btn.classList.toggle('cargado', hay);
+  const abierto = document.getElementById(prefix + '_extras').classList.contains('open');
+  if (hay && !abierto) {
+    const partes = [];
+    if (fecha) partes.push(fmtDiaMes(fecha));
+    if (dir) partes.push('dirección');
+    if (nota) partes.push('obs.');
+    btn.textContent = '📅 ' + partes.join(' · ') + ' ▾';
+  }
 }
 
 function toggleExtras(prefix) {
@@ -1355,59 +1433,14 @@ function submitCargarPedido() {
   toast('✓ Pedido guardado');
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  MODOS DE CARGA EN CELULAR (prueba)
-//
-//  Tres formas de cargar los productos, para comparar con el celular en
-//  la mano. Se elige con ?modo=a / ?modo=b / ?modo=clasico y queda
-//  guardada. Cambia SOLO cómo se juntan los productos: el pedido que se
-//  arma y el camino de guardado son los mismos en los tres, así que
-//  probar no pone en riesgo ningún pedido.
-//
-//    clasico → como está hoy: filas con campos de texto
-//    a       → una pantalla, y agregar producto abre el selector grande
-//    b       → asistente de 2 pasos (cliente → productos), mismo selector
-// ═══════════════════════════════════════════════════════════════
-let modoCarga = 'clasico';
+// En celular los productos se cargan con el selector a pantalla completa;
+// en PC, escribiendo en las filas de siempre, que con teclado real es más
+// rápido que abrir una pantalla aparte.
+function esMobile() { return window.innerWidth < 768; }
 
-function aplicarModo(m) {
-  modoCarga = (m === 'a' || m === 'b') ? m : 'clasico';
-  localStorage.setItem('dm_modo', modoCarga);
-  document.body.classList.toggle('modo-nuevo', modoCarga !== 'clasico');
-  document.body.classList.toggle('modo-a', modoCarga === 'a');
-  document.body.classList.toggle('modo-b', modoCarga === 'b');
-  if (modoCarga === 'b') irAPaso(1); else document.body.classList.remove('paso-1', 'paso-2');
-  const bar = document.getElementById('modoBar');
-  if (bar) {
-    bar.innerHTML = 'Probando el modo <b>' + modoCarga.toUpperCase() + '</b> · ' +
-      (modoCarga === 'a'
-        ? '<button onclick="aplicarModo(\'b\')">probar el B</button>'
-        : '<button onclick="aplicarModo(\'a\')">probar el A</button>') +
-      '<button onclick="aplicarModo(\'clasico\')">volver al normal</button>';
-  }
-}
-
-function irAPaso(n) {
-  document.body.classList.toggle('paso-1', n === 1);
-  document.body.classList.toggle('paso-2', n === 2);
-  document.getElementById('chipPaso1').classList.toggle('on', n === 1);
-  document.getElementById('chipPaso2').classList.toggle('on', n === 2);
-  if (n === 2 && !document.getElementById('n_cliente').value.trim()) {
-    // Sin cliente no tiene sentido pasar: se vuelve y se avisa.
-    document.body.classList.add('paso-1'); document.body.classList.remove('paso-2');
-    document.getElementById('chipPaso1').classList.add('on');
-    document.getElementById('chipPaso2').classList.remove('on');
-    alert('Escribí el nombre del cliente');
-    return;
-  }
-  window.scrollTo(0, 0);
-}
-
-// Punto de entrada del botón "Agregar producto": según el modo abre el
-// selector grande o crea la fila de siempre.
 function agregarProducto(destino) {
-  if (modoCarga === 'clasico') { addItemRow(destino); return; }
-  abrirPicker(destino, null);
+  if (esMobile()) abrirPicker(destino, null);
+  else addItemRow(destino);
 }
 
 // ═══════════════════════════════════════════════════════════════
