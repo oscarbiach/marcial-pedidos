@@ -693,29 +693,22 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   VISTA B: PEDIDOS COMO BLOQUES (prueba, solo celular)
+   PEDIDOS COMO BLOQUES (solo celular)
 
-   La tarjeta de hoy pone el nombre del cliente y las etiquetas de estado
-   en la MISMA fila, así que el nombre pierde ancho y se corta con
-   puntitos justo en el dato que más se busca. Acá se separan en pisos:
-   arriba las etiquetas, abajo el nombre solo, con todo el ancho y
-   pudiendo ocupar dos renglones.
+   La tarjeta que se usaba antes ponía el nombre del cliente y las
+   etiquetas de estado en la MISMA fila, así que el nombre perdía ancho y
+   se cortaba con puntitos justo en el dato que más se busca. Acá van
+   separados en pisos: arriba las etiquetas, abajo el nombre solo, con
+   todo el ancho y pudiendo ocupar dos renglones.
 
    El bloque va de borde a borde (anula el padding de main) con esquinas
    bien redondeadas, y los productos van en un panel hundido adentro: se
    lee como un bloque con secciones y no como texto apilado.
-   ══════════════════════════════════════════════════════════════ */
-#vistaBar { display:none; }
-@media(max-width:767.98px) {
-  #vistaBar {
-    display:flex; align-items:center; gap:8px; justify-content:center;
-    font-size:12px; color:var(--gray); padding:10px 0 2px;
-  }
-  #vistaBar button {
-    background:#fff; border:1.5px solid var(--border); border-radius:9px;
-    color:var(--navy); font-weight:700; font-size:12px; padding:7px 11px; cursor:pointer;
-  }
 
+   En PC se siguen usando las tarjetas en dos columnas, que aprovechan
+   mejor el ancho de pantalla.
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:767.98px) {
   .pedido-blk {
     position:relative;
     background:#fff; border-radius:18px; overflow:hidden;
@@ -777,8 +770,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
   /* Los separadores por día quedan hacia adentro: los bloques van a los
      bordes y los títulos no, y ese contraste marca los grupos. */
-  body.vista-b .day-divider { margin:14px 0 10px; font-size:12.5px; }
-  body.vista-b .order-list { gap:12px; }
+  .day-divider { margin:14px 0 10px; font-size:12.5px; }
+  .order-list { gap:12px; }
 }
 
 /* ── Cola de envío ── */
@@ -992,9 +985,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
           </button>
         </div>
-        <!-- Prueba de vista (solo celular): tarjetas como hasta ahora, o
-             bloques a lo ancho. Se puede volver atrás cuando se quiera. -->
-        <div id="vistaBar" class="mobile-only"></div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
           🗑<span class="pap-count" id="papeleraCount"></span>
@@ -1311,9 +1301,8 @@ window.addEventListener('load', () => {
   // La prueba de variantes de carga terminó: quedó el selector a pantalla
   // completa en celular. Se limpia lo que hubiera quedado guardado.
   localStorage.removeItem('dm_modo');
-  // Vista de la lista de pedidos: se puede forzar con ?vista=b / ?vista=a.
-  const vistaUrl = new URLSearchParams(location.search).get('vista');
-  aplicarVista(vistaUrl || vistaPedidos);
+  // Las pruebas de vista terminaron: en celular quedaron los bloques.
+  localStorage.removeItem('dm_vista');
 
   const savedWho = localStorage.getItem('dm_ped_who');
   const savedPin = localStorage.getItem('dm_ped_pin');
@@ -1970,28 +1959,8 @@ function fmtDiaMes(d) {
   return s ? s.slice(0, 5) : '';
 }
 
-// ── Vista de la lista de pedidos en celular (prueba) ──
-//   'a' = tarjetas, como venía;  'b' = bloques a lo ancho.
-let vistaPedidos = localStorage.getItem('dm_vista') || 'a';
-
-function aplicarVista(v) {
-  vistaPedidos = (v === 'b') ? 'b' : 'a';
-  localStorage.setItem('dm_vista', vistaPedidos);
-  document.body.classList.toggle('vista-b', vistaPedidos === 'b');
-  pintarBarraVista();
-  renderPedidos();
-}
-
-function pintarBarraVista() {
-  const bar = document.getElementById('vistaBar');
-  if (!bar) return;
-  bar.innerHTML = vistaPedidos === 'b'
-    ? 'Vista en bloques <button onclick="aplicarVista(\'a\')">Volver a tarjetas</button>'
-    : 'Vista en tarjetas <button onclick="aplicarVista(\'b\')">Probar bloques</button>';
-}
-
-// Bloque de un pedido (vista B, celular). La diferencia con la tarjeta no
-// es decorativa: acá el cliente tiene todo el ancho para él, en vez de
+// Bloque de un pedido (celular). La diferencia con la tarjeta de PC no es
+// decorativa: acá el cliente tiene todo el ancho para él, en vez de
 // pelearlo con las etiquetas de estado y cortarse con puntitos.
 function pedidoBloqueHtml(p) {
   const sinConfirmar = p.enCola || p.errorCola;
@@ -2032,9 +2001,8 @@ function pedidoBloqueHtml(p) {
 }
 
 function pedidoCardHtml(p) {
-  // La vista en bloques es solo de celular: en PC las dos columnas de
-  // tarjetas aprovechan mejor el ancho.
-  if (vistaPedidos === 'b' && esMobile()) return pedidoBloqueHtml(p);
+  // En celular, bloques; en PC, la tarjeta de dos columnas de acá abajo.
+  if (esMobile()) return pedidoBloqueHtml(p);
 
   const sinConfirmar = p.enCola || p.errorCola;
 
