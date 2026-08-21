@@ -692,6 +692,95 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .item-resumen { display:none; }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   VISTA B: PEDIDOS COMO BLOQUES (prueba, solo celular)
+
+   La tarjeta de hoy pone el nombre del cliente y las etiquetas de estado
+   en la MISMA fila, así que el nombre pierde ancho y se corta con
+   puntitos justo en el dato que más se busca. Acá se separan en pisos:
+   arriba las etiquetas, abajo el nombre solo, con todo el ancho y
+   pudiendo ocupar dos renglones.
+
+   El bloque va de borde a borde (anula el padding de main) con esquinas
+   bien redondeadas, y los productos van en un panel hundido adentro: se
+   lee como un bloque con secciones y no como texto apilado.
+   ══════════════════════════════════════════════════════════════ */
+#vistaBar { display:none; }
+@media(max-width:767.98px) {
+  #vistaBar {
+    display:flex; align-items:center; gap:8px; justify-content:center;
+    font-size:12px; color:var(--gray); padding:10px 0 2px;
+  }
+  #vistaBar button {
+    background:#fff; border:1.5px solid var(--border); border-radius:9px;
+    color:var(--navy); font-weight:700; font-size:12px; padding:7px 11px; cursor:pointer;
+  }
+
+  .pedido-blk {
+    position:relative;
+    background:#fff; border-radius:18px; overflow:hidden;
+    box-shadow:0 2px 10px rgba(0,0,0,.10);
+    /* De borde a borde: anula los 12px de padding de main. */
+    margin:0 -12px; padding:14px 16px 0;
+    cursor:pointer; -webkit-user-select:none; user-select:none;
+  }
+  .pedido-blk:active { background:#FBFCFD; }
+  /* Cinta de color al costado: el estado se reconoce sin leer. */
+  .pedido-blk::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:var(--border);
+  }
+  .pedido-blk.Pendiente::before  { background:var(--orange); }
+  .pedido-blk.Despachado::before { background:var(--green); }
+  .pedido-blk.Cancelado::before  { background:var(--red); }
+  .pedido-blk.Cancelado { opacity:.62; }
+  .pedido-blk.retiro::before { background:#117A65; }
+  .pedido-blk.en-cola { opacity:.75; }
+  .pedido-blk.en-cola::before { background:var(--blue); }
+  /* Un pedido que NO llegó al servidor no puede verse igual que uno que
+     está saliendo: la cinta se pone roja y el bloque no se atenúa. */
+  .pedido-blk.blk-error { opacity:1; }
+  .pedido-blk.blk-error::before { background:var(--red); }
+
+  /* Piso 1: etiquetas */
+  .blk-top { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
+  .blk-fecha { margin-left:auto; font-size:12px; font-weight:700; color:var(--gray); white-space:nowrap; }
+
+  /* Piso 2: el cliente, con todo el ancho y sin cortarse */
+  .blk-cliente {
+    font-size:18.5px; font-weight:800; line-height:1.22; letter-spacing:-.2px;
+    word-break:break-word;
+  }
+  .blk-dir { font-size:13px; color:var(--gray); margin-top:3px; line-height:1.35; }
+
+  /* Piso 3: los productos, en un panel hundido */
+  .blk-prods {
+    display:grid; grid-template-columns:auto 1fr; column-gap:11px; row-gap:7px;
+    align-items:baseline;
+    background:var(--lgray); border-radius:13px;
+    padding:12px 13px; margin:12px 0 0;
+  }
+  .blk-q {
+    font-size:14.5px; font-weight:800; color:var(--navy);
+    text-align:right; white-space:nowrap;
+  }
+  .blk-n { font-size:14.5px; color:var(--text); min-width:0; line-height:1.3; }
+  .blk-mas { grid-column:1/-1; font-size:13px; font-weight:700; color:var(--blue); }
+
+  /* Piso 4: quién y cuántos, al pie y en voz baja */
+  .blk-pie {
+    display:flex; align-items:center; gap:8px;
+    font-size:12px; color:var(--gray);
+    padding:11px 0 13px;
+  }
+  .blk-pie .blk-quien { font-weight:700; }
+
+  /* Los separadores por día quedan hacia adentro: los bloques van a los
+     bordes y los títulos no, y ese contraste marca los grupos. */
+  body.vista-b .day-divider { margin:14px 0 10px; font-size:12.5px; }
+  body.vista-b .order-list { gap:12px; }
+}
+
 /* ── Cola de envío ── */
 #colaAviso {
   display:none; position:fixed; left:12px; right:12px; z-index:240;
@@ -903,6 +992,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
           </button>
         </div>
+        <!-- Prueba de vista (solo celular): tarjetas como hasta ahora, o
+             bloques a lo ancho. Se puede volver atrás cuando se quiera. -->
+        <div id="vistaBar" class="mobile-only"></div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
           🗑<span class="pap-count" id="papeleraCount"></span>
@@ -1216,9 +1308,12 @@ function marcarRefrescando(on) {
 }
 
 window.addEventListener('load', () => {
-  // La prueba de variantes terminó: quedó el selector a pantalla completa
-  // en celular. Se limpia lo que hubiera quedado guardado.
+  // La prueba de variantes de carga terminó: quedó el selector a pantalla
+  // completa en celular. Se limpia lo que hubiera quedado guardado.
   localStorage.removeItem('dm_modo');
+  // Vista de la lista de pedidos: se puede forzar con ?vista=b / ?vista=a.
+  const vistaUrl = new URLSearchParams(location.search).get('vista');
+  aplicarVista(vistaUrl || vistaPedidos);
 
   const savedWho = localStorage.getItem('dm_ped_who');
   const savedPin = localStorage.getItem('dm_ped_pin');
@@ -1875,7 +1970,72 @@ function fmtDiaMes(d) {
   return s ? s.slice(0, 5) : '';
 }
 
+// ── Vista de la lista de pedidos en celular (prueba) ──
+//   'a' = tarjetas, como venía;  'b' = bloques a lo ancho.
+let vistaPedidos = localStorage.getItem('dm_vista') || 'a';
+
+function aplicarVista(v) {
+  vistaPedidos = (v === 'b') ? 'b' : 'a';
+  localStorage.setItem('dm_vista', vistaPedidos);
+  document.body.classList.toggle('vista-b', vistaPedidos === 'b');
+  pintarBarraVista();
+  renderPedidos();
+}
+
+function pintarBarraVista() {
+  const bar = document.getElementById('vistaBar');
+  if (!bar) return;
+  bar.innerHTML = vistaPedidos === 'b'
+    ? 'Vista en bloques <button onclick="aplicarVista(\'a\')">Volver a tarjetas</button>'
+    : 'Vista en tarjetas <button onclick="aplicarVista(\'b\')">Probar bloques</button>';
+}
+
+// Bloque de un pedido (vista B, celular). La diferencia con la tarjeta no
+// es decorativa: acá el cliente tiene todo el ancho para él, en vez de
+// pelearlo con las etiquetas de estado y cortarse con puntitos.
+function pedidoBloqueHtml(p) {
+  const sinConfirmar = p.enCola || p.errorCola;
+
+  let fecha = '';
+  if (p.estado === 'Despachado' && p.fechaDespacho) fecha = '✓ ' + fmtDiaMes(p.fechaDespacho);
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = '✕ ' + fmtDiaMes(p.fechaDespacho);
+  else if (p.fechaEntrega) fecha = '📅 ' + fmtDiaMes(p.fechaEntrega);
+
+  // Se muestran hasta 4 productos: uno más que en la tarjeta, porque acá
+  // entran cómodos y evita tener que abrir el detalle en la mayoría.
+  const muestra = p.items.slice(0, 4);
+  const resto = p.items.length - muestra.length;
+
+  return `
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}"
+         onclick="openPedidoDetail('${p.id}')">
+      <div class="blk-top">
+        <span class="status-pill sp-${p.estado}">${p.estado}</span>
+        ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+        ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
+        ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
+        ${fecha ? `<span class="blk-fecha">${fecha}</span>` : ''}
+      </div>
+      <div class="blk-cliente">${esc(p.cliente)}</div>
+      ${p.direccion ? `<div class="blk-dir">${esc(p.direccion)}</div>` : ''}
+      <div class="blk-prods">
+        ${muestra.map(it => `
+          <span class="blk-q">${itemLabelCorto(it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
+        ${resto > 0 ? `<div class="blk-mas">+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
+      </div>
+      <div class="blk-pie">
+        ${p.quien ? `<span class="blk-quien">👤 ${esc(p.quien)}</span>` : ''}
+        <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
+        ${p.notas ? `<span>⚠ ${esc(p.notas)}</span>` : ''}
+      </div>
+    </div>`;
+}
+
 function pedidoCardHtml(p) {
+  // La vista en bloques es solo de celular: en PC las dos columnas de
+  // tarjetas aprovechan mejor el ancho.
+  if (vistaPedidos === 'b' && esMobile()) return pedidoBloqueHtml(p);
+
   const sinConfirmar = p.enCola || p.errorCola;
 
   // La fecha de CARGA no se repite acá: ya la dice el separador de día que
