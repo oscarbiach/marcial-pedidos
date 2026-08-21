@@ -483,6 +483,122 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 #pinInput:focus { border-color:var(--blue); }
 #pinError { color:var(--red); font-size:13px; text-align:center; min-height:18px; margin-top:8px; }
 
+/* ══ SELECTOR DE PRODUCTO A PANTALLA COMPLETA (celular) ══
+   Ocupa todo: sin el formulario detrás compitiendo por la atención, y
+   con botones grandes para el dedo. La cantidad usa teclado propio
+   porque el del sistema tapa media pantalla justo cuando hay que ver lo
+   que se está cargando. */
+#picker {
+  display:none; position:fixed; inset:0; z-index:400; background:var(--lgray);
+  flex-direction:column;
+}
+#picker.open { display:flex; }
+.pk-head {
+  display:flex; align-items:center; gap:6px; background:var(--navy); color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px; flex-shrink:0;
+}
+.pk-x {
+  width:40px; height:40px; border:none; border-radius:50%; flex-shrink:0;
+  background:rgba(255,255,255,.15); color:#fff; font-size:19px; cursor:pointer;
+}
+.pk-titulo {
+  font-size:16px; font-weight:700; flex:1; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.pk-cuerpo { flex:1; display:flex; flex-direction:column; min-height:0; padding:12px; gap:10px; }
+.pk-buscar {
+  flex-shrink:0; width:100%; padding:14px; border:1.5px solid var(--border);
+  border-radius:12px; font-size:16px; outline:none; background:#fff;
+}
+.pk-buscar:focus { border-color:var(--blue); }
+.pk-lista { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.pk-item {
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  background:#fff; border:1.5px solid var(--border); border-radius:12px;
+  padding:15px 14px; margin-bottom:8px; font-size:15.5px; font-weight:600;
+  color:var(--text); cursor:pointer;
+}
+.pk-item:active { background:var(--lblue); border-color:var(--blue); }
+.pk-item .pk-n { flex:1; min-width:0; }
+.pk-item .pk-u {
+  font-size:11px; font-weight:700; color:var(--gray); background:var(--lgray);
+  border-radius:8px; padding:3px 8px; white-space:nowrap;
+}
+.pk-item .pk-top { font-size:15px; }
+.pk-vacio { text-align:center; color:var(--gray); font-size:14px; padding:26px 10px; }
+
+/* Pantalla de cantidad */
+.pk-cant {
+  display:flex; align-items:baseline; justify-content:center; gap:10px;
+  background:#fff; border-radius:14px; padding:20px; flex-shrink:0;
+}
+.pk-num { font-size:46px; font-weight:800; color:var(--navy); line-height:1; }
+.pk-uni { font-size:19px; font-weight:700; color:var(--gray); }
+.pk-extras { flex-shrink:0; }
+.pk-extras label {
+  display:flex; align-items:center; gap:10px; background:#fff; border-radius:12px;
+  padding:13px 14px; margin-bottom:8px; font-size:14.5px; font-weight:700;
+  color:var(--navy); cursor:pointer; -webkit-user-select:none; user-select:none;
+}
+.pk-extras input { width:21px; height:21px; accent-color:var(--navy); margin:0; }
+.pk-teclado {
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; flex-shrink:0;
+}
+.pk-teclado button {
+  padding:16px 0; border:none; border-radius:12px; background:#fff;
+  font-size:23px; font-weight:700; color:var(--text); cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.10);
+}
+.pk-teclado button:active { background:var(--lblue); }
+#pkConfirmar { flex-shrink:0; margin-top:2px; }
+
+/* ── Lista compacta de productos del pedido (celular) ──
+   Con el selector, las filas con inputs ya no se tocan a mano: se
+   muestran como renglones legibles y se tocan para corregir. */
+.item-resumen { display:none; }
+body.modo-nuevo .ped-item-row,
+body.modo-nuevo .box-hint,
+body.modo-nuevo .fetear-check,
+body.modo-nuevo .cuero-check { display:none !important; }
+body.modo-nuevo .item-resumen {
+  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
+  background:#fff; border:1.5px solid var(--border); border-radius:12px;
+  padding:13px 12px; font-size:15px; cursor:pointer;
+}
+body.modo-nuevo .item-resumen .ir-q { font-weight:800; color:var(--navy); white-space:nowrap; }
+body.modo-nuevo .item-resumen .ir-n { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body.modo-nuevo .item-resumen .ir-x {
+  width:32px; height:32px; border-radius:8px; border:1.5px solid var(--red);
+  background:#fff; color:var(--red); font-size:15px; line-height:1; cursor:pointer;
+}
+body.modo-nuevo .add-item-btn { padding:15px; font-size:15px; font-weight:700; }
+
+/* ── Modo B: asistente de dos pasos ── */
+.pasos { display:none; gap:8px; margin-bottom:12px; }
+body.modo-b .pasos { display:flex; }
+.paso-chip {
+  flex:1; text-align:center; font-size:12px; font-weight:700; color:var(--gray);
+  background:#fff; border:1.5px solid var(--border); border-radius:10px; padding:9px 4px;
+}
+.paso-chip.on { background:var(--navy); border-color:var(--navy); color:#fff; }
+body.modo-b.paso-2 #grupoCliente { display:none; }
+body.modo-b.paso-1 #grupoProductos,
+body.modo-b.paso-1 #cargarSubmitBtn { display:none; }
+body.modo-b.paso-2 #btnPaso1 { display:block; }
+#btnPaso1, #btnPaso2 { display:none; }
+body.modo-b.paso-1 #btnPaso2 { display:block; }
+
+/* Barra para volver al modo normal mientras se prueban las variantes */
+#modoBar {
+  display:none; font-size:12px; color:var(--gray); text-align:center;
+  padding:10px 12px 0;
+}
+body.modo-nuevo #modoBar { display:block; }
+#modoBar button {
+  background:none; border:none; color:var(--blue); font-weight:700;
+  font-size:12px; cursor:pointer; text-decoration:underline; padding:2px 4px;
+}
+
 /* ── Cola de envío ── */
 #colaAviso {
   display:none; position:fixed; left:12px; right:12px; z-index:240;
@@ -636,22 +752,33 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   <main>
     <!-- CARGAR PEDIDO (página principal) -->
     <div id="tab-cargar" class="tab-panel active">
+      <!-- Solo visible mientras se prueban las variantes de celular -->
+      <div id="modoBar"></div>
       <div class="form-card">
-        <div class="field">
-          <label>Cliente</label>
-          <div class="ac-wrap">
-            <input type="text" id="n_cliente" class="ac-input" placeholder="Nombre del cliente"
-              autocomplete="off" data-dir="n_direccion"
-              oninput="onClienteInput(this)"
-              onblur="closeClienteAcLater(this)">
-            <div class="ac-list"></div>
+        <!-- Indicador de pasos: solo en el modo B -->
+        <div class="pasos">
+          <div class="paso-chip" id="chipPaso1">1 · Cliente</div>
+          <div class="paso-chip" id="chipPaso2">2 · Productos</div>
+        </div>
+        <div id="grupoCliente">
+          <div class="field">
+            <label>Cliente</label>
+            <div class="ac-wrap">
+              <input type="text" id="n_cliente" class="ac-input" placeholder="Nombre del cliente"
+                autocomplete="off" data-dir="n_direccion"
+                oninput="onClienteInput(this)"
+                onblur="closeClienteAcLater(this)">
+              <div class="ac-list"></div>
+            </div>
           </div>
         </div>
-        <div class="items-section">
+        <div class="items-section" id="grupoProductos">
           <h4>Productos del pedido</h4>
           <div id="cargarItemRows"></div>
-          <button class="add-item-btn" onclick="addItemRow('cargar')">＋ Agregar producto</button>
+          <button class="add-item-btn" onclick="agregarProducto('cargar')">＋ Agregar producto</button>
         </div>
+        <button class="btn btn-primary" id="btnPaso2" onclick="irAPaso(2)">Siguiente → Productos</button>
+        <button class="btn btn-secondary" id="btnPaso1" onclick="irAPaso(1)">← Volver al cliente</button>
         <div class="form-extras-row">
           <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')">📅 Entrega, dirección y observación ▾</button>
           <label class="retiro-mini"><input type="checkbox" id="n_retiro"> 🛻 RETIRO</label>
@@ -801,6 +928,47 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   </div>
 </div>
 
+<!-- ── SELECTOR DE PRODUCTO A PANTALLA COMPLETA (solo celular) ──
+     Dos pantallas: elegir el producto y poner la cantidad. La segunda usa
+     teclado propio para que el del sistema no tape nada. -->
+<div id="picker">
+  <div class="pk-head">
+    <button class="pk-x" onclick="pickerAtras()"><span id="pkAtras">✕</span></button>
+    <div class="pk-titulo" id="pkTitulo">Agregar producto</div>
+  </div>
+
+  <!-- Pantalla 1: elegir producto -->
+  <div id="pkPaso1" class="pk-cuerpo">
+    <input type="text" id="pkBuscar" class="pk-buscar" placeholder="🔍 Buscar producto…"
+      autocomplete="off" oninput="pickerFiltrar()">
+    <div id="pkLista" class="pk-lista"></div>
+  </div>
+
+  <!-- Pantalla 2: cantidad -->
+  <div id="pkPaso2" class="pk-cuerpo" style="display:none">
+    <div class="pk-cant">
+      <div class="pk-num" id="pkNum">1</div>
+      <div class="pk-uni" id="pkUni">kg</div>
+    </div>
+    <div id="pkExtras" class="pk-extras"></div>
+    <div class="pk-teclado">
+      <button onclick="pickerTecla('1')">1</button>
+      <button onclick="pickerTecla('2')">2</button>
+      <button onclick="pickerTecla('3')">3</button>
+      <button onclick="pickerTecla('4')">4</button>
+      <button onclick="pickerTecla('5')">5</button>
+      <button onclick="pickerTecla('6')">6</button>
+      <button onclick="pickerTecla('7')">7</button>
+      <button onclick="pickerTecla('8')">8</button>
+      <button onclick="pickerTecla('9')">9</button>
+      <button onclick="pickerTecla(',')">,</button>
+      <button onclick="pickerTecla('0')">0</button>
+      <button onclick="pickerTecla('borrar')">⌫</button>
+    </div>
+    <button class="btn btn-primary" id="pkConfirmar" onclick="pickerConfirmar()">Agregar al pedido</button>
+  </div>
+</div>
+
 <!-- Aviso de pedidos todavía sin confirmar en el servidor -->
 <div id="colaAviso"></div>
 
@@ -925,6 +1093,10 @@ function marcarRefrescando(on) {
 }
 
 window.addEventListener('load', () => {
+  // Modo de carga: por URL (?modo=a) o el que quedó guardado.
+  const porUrl = new URLSearchParams(location.search).get('modo');
+  aplicarModo(porUrl || localStorage.getItem('dm_modo') || 'clasico');
+
   const savedWho = localStorage.getItem('dm_ped_who');
   const savedPin = localStorage.getItem('dm_ped_pin');
   // Solo entra derecho si guardó las dos cosas: el PIN se guarda recién
@@ -1135,7 +1307,10 @@ function resetCargarForm() {
   document.getElementById('n_retiro').checked = false;
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
-  addItemRow('cargar');
+  // En los modos nuevos no se arranca con una fila vacía: los productos se
+  // agregan desde el selector, y una fila sin nada sería ruido.
+  if (modoCarga === 'clasico') addItemRow('cargar');
+  if (modoCarga === 'b') irAPaso(1);
 }
 
 // Fecha de entrega, dirección y observación viven plegadas para no
@@ -1178,6 +1353,239 @@ function submitCargarPedido() {
   if (inp) inp.focus();
   window.scrollTo(0, 0);
   toast('✓ Pedido guardado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODOS DE CARGA EN CELULAR (prueba)
+//
+//  Tres formas de cargar los productos, para comparar con el celular en
+//  la mano. Se elige con ?modo=a / ?modo=b / ?modo=clasico y queda
+//  guardada. Cambia SOLO cómo se juntan los productos: el pedido que se
+//  arma y el camino de guardado son los mismos en los tres, así que
+//  probar no pone en riesgo ningún pedido.
+//
+//    clasico → como está hoy: filas con campos de texto
+//    a       → una pantalla, y agregar producto abre el selector grande
+//    b       → asistente de 2 pasos (cliente → productos), mismo selector
+// ═══════════════════════════════════════════════════════════════
+let modoCarga = 'clasico';
+
+function aplicarModo(m) {
+  modoCarga = (m === 'a' || m === 'b') ? m : 'clasico';
+  localStorage.setItem('dm_modo', modoCarga);
+  document.body.classList.toggle('modo-nuevo', modoCarga !== 'clasico');
+  document.body.classList.toggle('modo-a', modoCarga === 'a');
+  document.body.classList.toggle('modo-b', modoCarga === 'b');
+  if (modoCarga === 'b') irAPaso(1); else document.body.classList.remove('paso-1', 'paso-2');
+  const bar = document.getElementById('modoBar');
+  if (bar) {
+    bar.innerHTML = 'Probando el modo <b>' + modoCarga.toUpperCase() + '</b> · ' +
+      (modoCarga === 'a'
+        ? '<button onclick="aplicarModo(\'b\')">probar el B</button>'
+        : '<button onclick="aplicarModo(\'a\')">probar el A</button>') +
+      '<button onclick="aplicarModo(\'clasico\')">volver al normal</button>';
+  }
+}
+
+function irAPaso(n) {
+  document.body.classList.toggle('paso-1', n === 1);
+  document.body.classList.toggle('paso-2', n === 2);
+  document.getElementById('chipPaso1').classList.toggle('on', n === 1);
+  document.getElementById('chipPaso2').classList.toggle('on', n === 2);
+  if (n === 2 && !document.getElementById('n_cliente').value.trim()) {
+    // Sin cliente no tiene sentido pasar: se vuelve y se avisa.
+    document.body.classList.add('paso-1'); document.body.classList.remove('paso-2');
+    document.getElementById('chipPaso1').classList.add('on');
+    document.getElementById('chipPaso2').classList.remove('on');
+    alert('Escribí el nombre del cliente');
+    return;
+  }
+  window.scrollTo(0, 0);
+}
+
+// Punto de entrada del botón "Agregar producto": según el modo abre el
+// selector grande o crea la fila de siempre.
+function agregarProducto(destino) {
+  if (modoCarga === 'clasico') { addItemRow(destino); return; }
+  abrirPicker(destino, null);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SELECTOR DE PRODUCTO A PANTALLA COMPLETA
+// ═══════════════════════════════════════════════════════════════
+let pkDestino = 'cargar';   // en qué lista de ítems se agrega
+let pkFila = null;          // fila que se está editando (null = nueva)
+let pkProd = '';            // producto elegido
+let pkTexto = '';           // cantidad que se va tecleando
+let pkFetear = false, pkSinCuero = false, pkUnidades = false;
+
+function abrirPicker(destino, fila) {
+  pkDestino = destino || 'cargar';
+  pkFila = fila || null;
+  pkProd = ''; pkTexto = ''; pkFetear = false; pkSinCuero = false; pkUnidades = false;
+
+  // Si viene a editar una fila existente, se arranca directo en la
+  // cantidad con lo que ya tenía cargado.
+  if (pkFila) {
+    pkProd = pkFila.querySelector('.ac-input').value;
+    pkTexto = String(pkFila.querySelector('.qty-input').value || '');
+    pkFetear = pkFila.querySelector('.fetear-input').checked;
+    pkSinCuero = pkFila.querySelector('.sincuero-input').checked;
+    pkUnidades = pkFila.dataset.unidades === '1';
+    pickerPaso(2);
+  } else {
+    document.getElementById('pkBuscar').value = '';
+    pickerFiltrar();
+    pickerPaso(1);
+  }
+  document.getElementById('picker').classList.add('open');
+  if (!pkFila) setTimeout(() => document.getElementById('pkBuscar').focus(), 120);
+}
+
+function cerrarPicker() {
+  document.getElementById('picker').classList.remove('open');
+}
+
+function pickerPaso(n) {
+  document.getElementById('pkPaso1').style.display = n === 1 ? 'flex' : 'none';
+  document.getElementById('pkPaso2').style.display = n === 2 ? 'flex' : 'none';
+  document.getElementById('pkTitulo').textContent = n === 1 ? 'Agregar producto' : pkProd;
+  document.getElementById('pkAtras').textContent = n === 1 ? '✕' : '←';
+  if (n === 2) pickerPintarCantidad();
+}
+
+// La ✕/← de arriba: desde la cantidad vuelve a la lista (salvo que se
+// esté editando una fila, donde no hay lista atrás), y desde la lista cierra.
+function pickerAtras() {
+  const enPaso2 = document.getElementById('pkPaso2').style.display !== 'none';
+  if (enPaso2 && !pkFila) pickerPaso(1);
+  else cerrarPicker();
+}
+
+// Lista de productos: los más pedidos primero (columna "Veces pedido 30
+// días" de la hoja Productos), que es lo que hace que en la práctica el
+// que se busca esté casi siempre arriba.
+function pickerFiltrar() {
+  const q = document.getElementById('pkBuscar').value.trim().toLowerCase();
+  let lista = (state.products || []).slice();
+  if (q) lista = lista.filter(p => p.n.toLowerCase().includes(q));
+  lista.sort((a, b) => (b.pop || 0) - (a.pop || 0)
+    || a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
+  lista = lista.slice(0, 60);
+
+  const cont = document.getElementById('pkLista');
+  if (!lista.length) {
+    // El producto es texto libre: si no está en el catálogo igual se puede
+    // cargar tal cual se escribió.
+    cont.innerHTML = q
+      ? `<button class="pk-item" onclick="pickerElegir('${escAttr(document.getElementById('pkBuscar').value.trim())}')">
+           <span class="pk-n">Usar “${esc(document.getElementById('pkBuscar').value.trim())}”</span>
+           <span class="pk-u">nuevo</span></button>`
+      : '<p class="pk-vacio">No hay productos en el catálogo.</p>';
+    return;
+  }
+  cont.innerHTML = lista.map(p => `
+    <button class="pk-item" onclick="pickerElegir('${escAttr(p.n)}')">
+      <span class="pk-n">${esc(p.n)}</span>
+      ${p.u ? `<span class="pk-u">${esc(p.u)}</span>` : ''}
+    </button>`).join('');
+}
+
+function pickerElegir(nombre) {
+  pkProd = nombre;
+  pkTexto = '';
+  const info = prodInfo(nombre);
+  pkFetear = false; pkSinCuero = false;
+  pkUnidades = false;
+  pickerPaso(2);
+}
+
+function pickerTecla(t) {
+  if (t === 'borrar') pkTexto = pkTexto.slice(0, -1);
+  else if (t === ',') { if (!pkTexto.includes(',')) pkTexto = (pkTexto || '0') + ','; }
+  else if (pkTexto.replace(',', '').length < 6) pkTexto += t;
+  pickerPintarCantidad();
+}
+
+function pickerCantidad() {
+  const n = parseFloat((pkTexto || '').replace(',', '.'));
+  return n > 0 ? n : 1;
+}
+
+function pickerPintarCantidad() {
+  document.getElementById('pkNum').textContent = pkTexto || '1';
+  const info = prodInfo(pkProd);
+  // Lo feteado se anota siempre en kg, se anote en lo que se anote.
+  let uni = 'un.';
+  if (pkFetear) uni = 'kg';
+  else if (info && info.u === 'caja') uni = pkUnidades ? 'un.' : (pickerCantidad() === 1 ? 'caja' : 'cajas');
+  else if (info && info.u === 'kg') uni = 'kg';
+  else if (!info || !info.u) uni = '';
+  document.getElementById('pkUni').textContent = uni;
+
+  // Opciones que dependen del producto: fetear, sin cuero y cajas/unidades.
+  const ex = [];
+  if (info && info.fetea) {
+    ex.push(`<label><input type="checkbox" ${pkFetear ? 'checked' : ''}
+      onchange="pkFetear=this.checked;pickerPintarCantidad()"> 🔪 Para fetear (se anota en kg)</label>`);
+    if (pkFetear && isPanceta(pkProd)) {
+      ex.push(`<label><input type="checkbox" ${pkSinCuero ? 'checked' : ''}
+        onchange="pkSinCuero=this.checked"> 🚫 Sin cuero</label>`);
+    }
+  }
+  if (!pkFetear && info && info.u === 'caja' && info.box > 0) {
+    ex.push(`<label><input type="checkbox" ${pkUnidades ? 'checked' : ''}
+      onchange="pkUnidades=this.checked;pickerPintarCantidad()"> Cargar en unidades sueltas
+      (1 caja = ${info.box})</label>`);
+  }
+  document.getElementById('pkExtras').innerHTML = ex.join('');
+}
+
+function pickerConfirmar() {
+  if (!pkProd) { cerrarPicker(); return; }
+  const it = { prod: pkProd, qty: pickerCantidad() };
+  const info = prodInfo(pkProd);
+  if (info && info.fetea && pkFetear) it.fetear = true;
+  if (it.fetear && isPanceta(pkProd) && pkSinCuero) it.sinCuero = true;
+  if (!it.fetear && info && info.u === 'caja' && info.box > 0 && pkUnidades) it.unidades = true;
+
+  if (pkFila) {
+    // Editando: se pisan los valores de la fila que ya existía.
+    pkFila.querySelector('.ac-input').value = it.prod;
+    pkFila.querySelector('.qty-input').value = it.qty;
+    pkFila.querySelector('.fetear-input').checked = !!it.fetear;
+    pkFila.querySelector('.sincuero-input').checked = !!it.sinCuero;
+    pkFila.dataset.unidades = it.unidades ? '1' : '';
+    updateBoxHint(pkFila);
+    actualizarResumenFila(pkFila);
+  } else {
+    addItemRowWith(pkDestino, it);
+  }
+  cerrarPicker();
+}
+
+// Renglón legible de una fila de producto (el que se ve en los modos
+// nuevos, donde los campos de texto quedan ocultos).
+function actualizarResumenFila(row) {
+  if (!row) return;
+  let res = row.querySelector('.item-resumen');
+  if (!res) {
+    res = document.createElement('div');
+    res.className = 'item-resumen';
+    row.appendChild(res);
+  }
+  const prod = row.querySelector('.ac-input').value.trim();
+  const it = {
+    prod,
+    qty: parseFloat(row.querySelector('.qty-input').value) || 1,
+    fetear: row.querySelector('.fetear-input').checked,
+    sinCuero: row.querySelector('.sincuero-input').checked,
+    unidades: row.dataset.unidades === '1'
+  };
+  res.innerHTML = `<span class="ir-q">${itemLabelCorto(it)}</span>
+    <span class="ir-n">${esc(prod || 'Sin producto')}${itemTags(it)}</span>
+    <button class="ir-x" onclick="event.stopPropagation();removeRow('${row.id}')">✕</button>`;
+  res.onclick = () => abrirPicker(pkDestino, row);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1865,6 +2273,7 @@ function addItemRowWith(type, it) {
   row.querySelector('.sincuero-input').checked = !!it.sinCuero;
   row.dataset.unidades = it.unidades ? '1' : '';
   updateBoxHint(row);
+  actualizarResumenFila(row);
 }
 
 function removeRow(id) {
