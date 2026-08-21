@@ -458,6 +458,34 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 #pinInput:focus { border-color:var(--blue); }
 #pinError { color:var(--red); font-size:13px; text-align:center; min-height:18px; margin-top:8px; }
 
+/* ── Cola de envío ── */
+#colaAviso {
+  display:none; position:fixed; left:12px; right:12px; z-index:240;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  background:var(--navy); color:#fff; border-radius:12px; padding:11px 14px;
+  box-shadow:0 4px 16px rgba(0,0,0,.28);
+  align-items:center; gap:10px; font-size:13px; font-weight:600;
+}
+#colaAviso.show { display:flex; }
+.cola-btn {
+  margin-left:auto; background:#fff; color:var(--navy); border:none;
+  border-radius:8px; padding:7px 12px; font-size:13px; font-weight:700; cursor:pointer;
+}
+.spinner-mini {
+  width:15px; height:15px; border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite;
+  flex-shrink:0;
+}
+@media(max-width:767.98px) { #colaAviso { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+
+/* Tarjeta de un pedido que todavía no confirmó el servidor */
+.order-card.en-cola { opacity:.72; border-left-color:var(--blue); }
+.cola-tag {
+  font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px;
+  background:var(--lblue); color:var(--blue); white-space:nowrap;
+}
+.cola-tag.err { background:var(--lred); color:var(--red); }
+
 /* Rueditita en el header mientras se refrescan los datos de fondo */
 #refreshDot {
   width:14px; height:14px; border:2px solid rgba(255,255,255,.3);
@@ -713,6 +741,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   </div>
 </div>
 
+<!-- Aviso de pedidos todavía sin confirmar en el servidor -->
+<div id="colaAviso"></div>
+
 <!-- Cartel para instalar la app en el celular -->
 <div id="installBar">
   <div id="installText"></div>
@@ -848,6 +879,7 @@ window.addEventListener('load', () => {
     const cache = leerCache();
     if (cache) {
       state = { ...state, ...cache };
+      restaurarCola();
       mostrarApp();
       resetCargarForm();
       loadData(true);
@@ -915,6 +947,10 @@ function loadData(silencioso) {
       btn.disabled = false; btn.textContent = 'Entrar';
       state = { ...state, ...data };
       marcarRefrescando(false);
+      // Los pedidos de la cola no están en la respuesta del servidor
+      // todavía: se vuelven a poner arriba para que no desaparezcan de la
+      // pantalla justo después de cargarlos.
+      restaurarCola();
       if (silencioso) { renderPedidos(); return; }
       mostrarApp();
       resetCargarForm();
@@ -953,6 +989,7 @@ function reload() {
       guardarCache(data);
       state = { ...state, ...data };
       marcarRefrescando(false);
+      restaurarCola();
       renderPedidos();
     })
     .withFailureHandler(e => { marcarRefrescando(false); toast('Error al actualizar: ' + e.message); })
@@ -1028,21 +1065,139 @@ function submitCargarPedido() {
   const items = getItemRows('cargar');
   if (!items.length) { alert('Agregá al menos un producto'); return; }
 
-  const btn = document.getElementById('cargarSubmitBtn');
-  btn.disabled = true; btn.textContent = 'Guardando…';
+  // No se espera al servidor: el pedido entra en la cola, aparece en la
+  // lista al toque y el formulario queda limpio para el siguiente. El
+  // envío corre solo, de fondo.
+  encolarPedido({ cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who });
+
+  resetCargarForm();
+  // El cliente del próximo pedido queda listo para tipear: en el celular
+  // esto ahorra un toque por pedido.
+  const inp = document.getElementById('n_cliente');
+  if (inp) inp.focus();
+  window.scrollTo(0, 0);
+  toast('✓ Pedido guardado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COLA DE ENVÍO
+//
+//  Guardar un pedido contra Apps Script tarda unos segundos, y antes
+//  había que esperarlos parado antes de poder cargar el siguiente. Ahora
+//  el pedido se apila en una cola que vive en el celular y se manda de
+//  fondo, de a uno. El vendedor no espera nunca.
+//
+//  Como la cola está en localStorage, un pedido cargado sin señal no se
+//  pierde: queda ahí y sale solo cuando vuelve internet o cuando se
+//  reabre la app.
+// ═══════════════════════════════════════════════════════════════
+const COLA_KEY = 'dm_ped_cola';
+
+function colaLeer() {
+  try { return JSON.parse(localStorage.getItem(COLA_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function colaGuardar(q) {
+  try { localStorage.setItem(COLA_KEY, JSON.stringify(q)); } catch (e) {}
+}
+
+function encolarPedido(data) {
+  const tmpId = 'tmp_' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const q = colaLeer();
+  q.push({ tmpId, data, fecha: state.today });
+  colaGuardar(q);
+
+  // Se muestra ya en la lista, marcado como "enviando".
+  state.pedidos.unshift({
+    id: tmpId, fecha: state.today, quien: data.quien || '', cliente: data.cliente,
+    fechaEntrega: data.fechaEntrega || '', direccion: data.direccion || '',
+    items: data.items, notas: data.notas || '', estado: 'Pendiente',
+    fechaDespacho: '', retiro: !!data.retiro, enCola: true
+  });
+  // El cliente nuevo entra al autocompletado sin esperar al servidor.
+  if (data.cliente && !(state.clientes || []).some(c => c.n.toLowerCase() === data.cliente.toLowerCase())) {
+    state.clientes.push({ n: data.cliente, d: data.direccion || '' });
+    state.clientes.sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
+  }
+  renderPedidos();
+  procesarCola();
+}
+
+let colaOcupada = false;
+
+function procesarCola() {
+  if (colaOcupada) return;
+  const q = colaLeer();
+  if (!q.length) { actualizarAvisoCola(); return; }
+  colaOcupada = true;
+  actualizarAvisoCola();
+
+  const item = q[0];
   google.script.run
-    .withSuccessHandler(() => {
-      btn.disabled = false; btn.textContent = 'Guardar Pedido';
-      toast('✓ Pedido guardado');
-      resetCargarForm();
-      window.scrollTo(0, 0);
-      reload();
+    .withSuccessHandler(res => {
+      colaOcupada = false;
+      colaGuardar(colaLeer().filter(x => x.tmpId !== item.tmpId));
+      const p = state.pedidos.find(x => x.id === item.tmpId);
+      if (p) {
+        if (res && res.id) p.id = res.id;
+        delete p.enCola;
+        delete p.errorCola;
+      }
+      renderPedidos();
+      procesarCola();   // sigue con el que viene
     })
     .withFailureHandler(e => {
-      btn.disabled = false; btn.textContent = 'Guardar Pedido';
-      toast('Error: ' + e.message);
+      colaOcupada = false;
+      const p = state.pedidos.find(x => x.id === item.tmpId);
+      if (p) { p.errorCola = e.message; delete p.enCola; }
+      renderPedidos();
+      actualizarAvisoCola();
     })
-    .savePedido({ cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who });
+    .savePedido(item.data);
+}
+
+// Cartel fijo mientras haya pedidos sin confirmar. Es la única señal de
+// que algo quedó a medio camino, así que no se puede cerrar.
+function actualizarAvisoCola() {
+  const n = colaLeer().length;
+  const el = document.getElementById('colaAviso');
+  if (!el) return;
+  if (!n) { el.classList.remove('show'); return; }
+  el.innerHTML = colaOcupada
+    ? `<div class="spinner-mini"></div><span>Enviando ${n} pedido${n !== 1 ? 's' : ''}…</span>`
+    : `<span>⚠ ${n} pedido${n !== 1 ? 's' : ''} sin enviar</span>
+       <button class="cola-btn" onclick="procesarCola()">Reintentar</button>`;
+  el.classList.add('show');
+}
+
+// Saca de la cola un pedido que no se pudo enviar. Se pide confirmación
+// porque es lo único que sí se pierde para siempre.
+function descartarDeCola(tmpId) {
+  const p = state.pedidos.find(x => x.id === tmpId);
+  if (!p) return;
+  if (!confirm(`¿Descartar el pedido de "${p.cliente}"?\nNunca llegó al servidor y no se va a poder recuperar.`)) return;
+  colaGuardar(colaLeer().filter(x => x.tmpId !== tmpId));
+  state.pedidos = state.pedidos.filter(x => x.id !== tmpId);
+  closeModal('detailModal');
+  renderPedidos();
+  actualizarAvisoCola();
+  toast('Pedido descartado');
+}
+
+// Al abrir la app, lo que haya quedado en la cola se vuelve a mostrar y
+// se intenta mandar de nuevo.
+function restaurarCola() {
+  colaLeer().forEach(item => {
+    if (state.pedidos.some(p => p.id === item.tmpId)) return;
+    state.pedidos.unshift({
+      id: item.tmpId, fecha: item.fecha || state.today,
+      quien: item.data.quien || '', cliente: item.data.cliente,
+      fechaEntrega: item.data.fechaEntrega || '', direccion: item.data.direccion || '',
+      items: item.data.items, notas: item.data.notas || '', estado: 'Pendiente',
+      fechaDespacho: '', retiro: !!item.data.retiro, enCola: true
+    });
+  });
+  procesarCola();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1053,8 +1208,9 @@ function pedidoCardHtml(p, extra) {
   if (p.fechaEntrega) fechas.push(`Entrega ${fmtDate(p.fechaEntrega)}`);
   if (p.estado === 'Despachado' && p.fechaDespacho) fechas.push(`Despachado ${fmtDate(p.fechaDespacho)}`);
   if (p.estado === 'Cancelado' && p.fechaDespacho) fechas.push(`Cancelado ${fmtDate(p.fechaDespacho)}`);
+  const sinConfirmar = p.enCola || p.errorCola;
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}" onclick="openPedidoDetail('${p.id}')">
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}" onclick="openPedidoDetail('${p.id}')">
       <div class="oc-top">
         <div>
           <div class="oc-main">${esc(p.cliente)}${p.direccion ? ` <span style="font-weight:400;font-size:13px">· ${esc(p.direccion)}</span>` : ''}</div>
@@ -1063,6 +1219,8 @@ function pedidoCardHtml(p, extra) {
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
           ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+          ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
+          ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
         </div>
       </div>
       ${p.items.slice(0,3).map(it => `<div class="oc-items">• <b>${itemLineLabel(it)}</b> — ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
@@ -1305,13 +1463,28 @@ function openPedidoDetail(id) {
   if (!p) return;
   document.getElementById('detailTitle').textContent = '🛒 ' + (p.cliente || id);
 
+  // Un pedido que todavía está en la cola no tiene ID del servidor: no se
+  // puede editar, despachar ni borrar hasta que confirme, porque el
+  // servidor no sabría de cuál se le habla.
+  const sinConfirmar = p.enCola || p.errorCola;
+
   let stBtns = '';
-  if (p.estado === 'Pendiente') stBtns = `
+  if (!sinConfirmar && p.estado === 'Pendiente') stBtns = `
     <button class="st-btn act-Despachado" onclick="changePedidoStatus('${p.id}','Despachado')">✓ Marcar Despachado</button>
     <button class="st-btn act-Cancelado"  onclick="changePedidoStatus('${p.id}','Cancelado')">✕ Cancelar</button>`;
-  if (p.estado === 'Despachado') stBtns = `<button class="st-btn act-Pendiente" onclick="changePedidoStatus('${p.id}','Pendiente')">↩ Volver a Pendiente</button>`;
+  if (!sinConfirmar && p.estado === 'Despachado') stBtns = `<button class="st-btn act-Pendiente" onclick="changePedidoStatus('${p.id}','Pendiente')">↩ Volver a Pendiente</button>`;
 
-  const acciones =
+  const acciones = sinConfirmar
+    ? (p.errorCola
+        ? `<div class="detail-section">
+             <p style="font-size:13px;color:var(--red);margin-bottom:10px">⚠ Este pedido todavía no se pudo enviar al servidor. Está guardado en el celular y no se pierde.</p>
+             <button class="btn btn-outline" onclick="closeModal('detailModal');procesarCola()">↻ Reintentar envío</button>
+             <button class="btn btn-danger" onclick="descartarDeCola('${p.id}')">🗑 Descartar este pedido</button>
+           </div>`
+        : `<div class="detail-section">
+             <p style="font-size:13px;color:var(--gray)">↑ Enviándose al servidor… en cuanto confirme vas a poder editarlo o despacharlo.</p>
+           </div>`)
+    :
     `${stBtns ? `<div class="detail-section"><h4>Cambiar estado</h4><div class="status-btns">${stBtns}</div></div>` : ''}` +
     (p.estado === 'Pendiente' ? `
     <button class="btn btn-outline" onclick="openPedidoEdit('${p.id}')">✏️ Editar pedido</button>` : '') +
@@ -1727,6 +1900,9 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+// Cuando vuelve la señal, lo que haya quedado sin enviar sale solo.
+window.addEventListener('online', () => procesarCola());
 
 function isStandalone() {
   return window.navigator.standalone === true ||
