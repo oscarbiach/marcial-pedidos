@@ -478,6 +478,25 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 @media(max-width:767.98px) { #colaAviso { bottom:calc(78px + env(safe-area-inset-bottom)); } }
 
+/* ── Botón Actualizar (pestaña Pedidos) ──
+   En PC comparte la fila con el buscador. En celular el buscador está
+   oculto, así que el botón queda solo y ocupa todo el ancho: es el
+   objetivo táctil más cómodo y no compite con nada. */
+.pedidos-top { display:flex; align-items:center; gap:10px; }
+.refresh-btn {
+  flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:7px;
+  border:1.5px solid var(--navy); background:#fff; color:var(--navy);
+  border-radius:10px; padding:10px 15px; font-size:14px; font-weight:700;
+  cursor:pointer; white-space:nowrap; transition:.15s;
+}
+.refresh-btn:hover:not(:disabled) { background:var(--lblue); }
+.refresh-btn:disabled { opacity:.55; cursor:default; }
+.refresh-btn .rb-ico { font-size:16px; line-height:1; }
+.refresh-btn.girando .rb-ico { animation:spin .8s linear infinite; }
+@media(max-width:767.98px) {
+  .refresh-btn { width:100%; padding:13px; font-size:15px; }
+}
+
 /* Cierre del día: confirma que nada quedó sin enviar */
 .dia-check {
   display:flex; flex-direction:column; gap:2px;
@@ -636,14 +655,19 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     <!-- PEDIDOS -->
     <div id="tab-pedidos" class="tab-panel">
       <div id="pedidosMain">
-        <div class="form-card pc-only" style="padding:12px">
-          <div class="ac-wrap">
+        <!-- En PC el botón va al lado del buscador; en celular el buscador
+             no existe, así que queda solo y a lo ancho. -->
+        <div class="form-card pedidos-top" style="padding:12px">
+          <div class="ac-wrap pc-only" style="flex:1;min-width:0">
             <input type="text" id="searchInput" placeholder="🔍 Buscar por cliente o producto…"
               autocomplete="off" oninput="onSearchInput(this)"
               onblur="setTimeout(()=>document.getElementById('searchAcList').classList.remove('open'),200)">
             <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
             <div class="ac-list" id="searchAcList"></div>
           </div>
+          <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
+            <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
+          </button>
         </div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
@@ -957,6 +981,7 @@ function loadData(silencioso) {
       const btn = document.getElementById('pinBtn');
       btn.disabled = false; btn.textContent = 'Entrar';
       state = { ...state, ...data };
+      ultimoRefresh = Date.now();
       marcarRefrescando(false);
       // Los pedidos de la cola no están en la respuesta del servidor
       // todavía: se vuelven a poner arriba para que no desaparezcan de la
@@ -993,17 +1018,51 @@ function loadData(silencioso) {
     .getAppData();
 }
 
-function reload() {
+// Momento del último refresco, para no pedir datos de gusto.
+let ultimoRefresh = 0;
+
+// manual = lo pidió el usuario con el botón Actualizar. En ese caso el
+// botón se bloquea, gira y avisa al terminar; los refrescos automáticos
+// pasan callados.
+function reload(manual) {
+  const btn = document.getElementById('refreshBtn');
+  if (manual && btn) {
+    btn.disabled = true;
+    btn.classList.add('girando');
+    btn.querySelector('.rb-txt').textContent = 'Actualizando…';
+  }
+  const soltarBoton = () => {
+    if (!manual || !btn) return;
+    btn.disabled = false;
+    btn.classList.remove('girando');
+    btn.querySelector('.rb-txt').textContent = 'Actualizar';
+  };
+
   marcarRefrescando(true);
   google.script.run
     .withSuccessHandler(data => {
+      const antes = (state.pedidos || []).length;
       guardarCache(data);
       state = { ...state, ...data };
+      ultimoRefresh = Date.now();
       marcarRefrescando(false);
       restaurarCola();
       renderPedidos();
+      soltarBoton();
+      if (manual) {
+        // Si aparecieron pedidos de otro, se dice cuántos: es el dato que
+        // se está buscando al tocar Actualizar.
+        const nuevos = (state.pedidos || []).length - antes;
+        toast(nuevos > 0
+          ? `✓ ${nuevos} pedido${nuevos !== 1 ? 's' : ''} nuevo${nuevos !== 1 ? 's' : ''}`
+          : '✓ Ya estaba al día');
+      }
     })
-    .withFailureHandler(e => { marcarRefrescando(false); toast('Error al actualizar: ' + e.message); })
+    .withFailureHandler(e => {
+      marcarRefrescando(false);
+      soltarBoton();
+      toast('Error al actualizar: ' + e.message);
+    })
     .getAppData();
 }
 
@@ -1019,6 +1078,12 @@ function setTab(tab) {
   document.getElementById('appTitle').textContent = TAB_TITLES[tab] || 'Distribuidora Marcial';
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
     .forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  // Al entrar a Pedidos, si lo que hay en pantalla ya tiene más de medio
+  // minuto se busca lo último sin que haya que tocar nada: es justo el
+  // momento en que puede haber cargado algo otro vendedor.
+  if (tab === 'pedidos' && state.pin && Date.now() - ultimoRefresh > 45000) {
+    reload();
+  }
   window.scrollTo(0, 0);
 }
 
