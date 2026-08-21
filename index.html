@@ -1097,12 +1097,27 @@ function colaLeer() {
   try { return JSON.parse(localStorage.getItem(COLA_KEY) || '[]'); }
   catch (e) { return []; }
 }
+// Devuelve false si no se pudo guardar (celular sin espacio). Eso NO se
+// puede tragar en silencio: si la cola no queda en disco y el envío
+// falla, el pedido desaparece sin que nadie se entere.
 function colaGuardar(q) {
-  try { localStorage.setItem(COLA_KEY, JSON.stringify(q)); } catch (e) {}
+  try {
+    localStorage.setItem(COLA_KEY, JSON.stringify(q));
+    return true;
+  } catch (e) {
+    alert('⚠ No se pudo guardar el pedido en el celular (memoria llena).\n\n' +
+          'NO cierres la app hasta que el pedido aparezca sin la marca "Enviando".\n' +
+          'Si se cierra ahora, ese pedido se pierde.');
+    return false;
+  }
 }
 
 function encolarPedido(data) {
-  const tmpId = 'tmp_' + Date.now() + Math.random().toString(36).slice(2, 6);
+  // El id lo genera el celular y viaja al servidor. Es lo que permite
+  // reintentar sin crear duplicados: el servidor reconoce el id y, si el
+  // pedido ya había entrado, no lo escribe de nuevo.
+  const tmpId = 'ped_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  data.id = tmpId;
   const q = colaLeer();
   q.push({ tmpId, data, fecha: state.today });
   colaGuardar(q);
@@ -1137,12 +1152,10 @@ function procesarCola() {
     .withSuccessHandler(res => {
       colaOcupada = false;
       colaGuardar(colaLeer().filter(x => x.tmpId !== item.tmpId));
+      // El id ya es el definitivo (lo puso el celular y el servidor lo
+      // respetó), así que no hay que cambiarlo: solo sacarle la marca.
       const p = state.pedidos.find(x => x.id === item.tmpId);
-      if (p) {
-        if (res && res.id) p.id = res.id;
-        delete p.enCola;
-        delete p.errorCola;
-      }
+      if (p) { delete p.enCola; delete p.errorCola; }
       renderPedidos();
       procesarCola();   // sigue con el que viene
     })
