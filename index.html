@@ -118,7 +118,18 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .section-header h3 { font-size:15px; color:var(--gray); }
 .badge { background:var(--navy); color:#fff; border-radius:12px; padding:2px 8px; font-size:12px; }
 
-.order-list { display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:16px; }
+/* minmax(0,1fr) y no 1fr: "1fr" equivale a minmax(auto,1fr), y ese auto
+   no deja que la columna baje del ancho mínimo de su contenido. Con
+   nombres de cliente o producto largos (que llevan nowrap), la columna se
+   estiraba más que la pantalla y el celular quedaba corrido, mostrando
+   los bordes al costado. */
+.order-list { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:16px; }
+.order-card { min-width:0; }
+
+/* La tarjeta de carga se centra por flex: si conserva el margen de abajo,
+   el centrado lo cuenta como parte de la caja y la deja más arriba de lo
+   que corresponde. Vale para celular y PC. */
+#tab-cargar .form-card { margin-bottom:0; }
 .day-divider {
   display:flex; align-items:center; gap:10px; grid-column:1/-1;
   color:var(--gray); font-size:12px; font-weight:600; margin-top:4px;
@@ -491,17 +502,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
      pedido crece y no entra, deja de centrarse y scrollea normal. */
   #tab-cargar.active {
     display:flex; align-items:center; justify-content:center;
-    /* 55px es el alto del header. Los márgenes negativos anulan el padding
-       de main (24 arriba, 60 abajo): sin eso el formulario queda 60px más
-       arriba del centro real de la pantalla. */
-    min-height:calc(100vh - 55px);
+    /* Mismo criterio que en celular: el alto libre se mide (acá la barra
+       inferior no existe, así que es todo lo que hay debajo del header) y
+       los márgenes negativos anulan el padding de main (24 y 60). */
+    min-height:var(--alto-util, calc(100vh - 55px));
     margin:-24px 0 -60px;
   }
   #tab-cargar .form-card {
     width:100%; max-width:660px; padding:32px 34px; border-radius:16px;
-    /* Sin esto el centrado flex cuenta el margen de abajo como parte de la
-       tarjeta y la deja 6px más arriba de lo que corresponde. */
-    margin-bottom:0;
   }
   #tab-cargar .field { margin-bottom:20px; }
   #tab-cargar .field label { font-size:12.5px; margin-bottom:8px; }
@@ -516,7 +524,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   #tab-cargar #cargarSubmitBtn { padding:17px; font-size:17px; border-radius:13px; margin-top:4px; }
 
   /* Pedidos: tarjetas con más aire, que era lo apretado. */
-  .order-list { grid-template-columns:1fr 1fr; gap:12px; }
+  .order-list { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
   .order-card { padding:15px 17px; }
   .oc-main { font-size:16.5px; }
   .oc-sub { font-size:12.5px; }
@@ -536,8 +544,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    ══════════════════════════════════════════════════════════════ */
 @media(max-width:767.98px) {
   /* La tarjeta ocupa el alto disponible y el contenido queda centrado:
-     con pedidos cortos no queda todo apretado arriba. */
-  #tab-cargar { min-height:calc(100vh - 190px); display:flex; flex-direction:column; justify-content:center; }
+     con pedidos cortos no queda todo apretado arriba.
+     OJO con el .active: sin él, este display:flex le gana por
+     especificidad al display:none de .tab-panel y el formulario de carga
+     queda visible SIEMPRE, también encima de la lista de Pedidos. */
+  #tab-cargar.active {
+    /* --alto-util lo mide medirAltoUtil() con el header y la barra reales.
+       Los márgenes negativos anulan el padding de main (12 arriba, 90
+       abajo), para que el panel arranque justo debajo del header y termine
+       justo arriba de la barra: recién ahí el centrado es el de la
+       pantalla y no el de una caja corrida. */
+    min-height:var(--alto-util, calc(100vh - 157px));
+    margin:-12px 0 -90px;
+    display:flex; flex-direction:column; justify-content:center;
+  }
   #tab-cargar .form-card { padding:18px 16px; }
 
   /* Cliente: el campo más importante de la pantalla. */
@@ -926,7 +946,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
       <div class="items-section">
         <h4>Productos del pedido</h4>
         <div id="pedItemRows"></div>
-        <button class="add-item-btn" onclick="addItemRow('ped')">＋ Agregar producto</button>
+        <button class="add-item-btn" onclick="agregarProducto('ped')">＋ Agregar producto</button>
       </div>
       <div class="form-extras-row">
         <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')">📅 Entrega, dirección y observación ▾</button>
@@ -1135,6 +1155,8 @@ function leerCache() {
 function mostrarApp() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
+  // Recién con la app visible se pueden medir el header y la barra.
+  medirAltoUtil();
   renderPedidos();
   setTab(activeTab);
 }
@@ -1437,6 +1459,23 @@ function submitCargarPedido() {
 // en PC, escribiendo en las filas de siempre, que con teclado real es más
 // rápido que abrir una pantalla aparte.
 function esMobile() { return window.innerWidth < 768; }
+
+// Alto realmente libre entre el header y la barra de abajo. Se mide en vez
+// de calcularlo con números fijos: el header crece con la isla del iPhone
+// y la barra inferior con la franja de gestos, así que cualquier constante
+// que ponga acá va a estar mal en algún teléfono. Lo usa el formulario de
+// carga para centrarse de verdad en la pantalla.
+function medirAltoUtil() {
+  const h = document.querySelector('header');
+  const nav = document.getElementById('bottomNav');
+  const altoH = h ? h.getBoundingClientRect().height : 0;
+  const altoN = (nav && getComputedStyle(nav).display !== 'none')
+    ? nav.getBoundingClientRect().height : 0;
+  document.documentElement.style.setProperty(
+    '--alto-util', Math.max(280, window.innerHeight - altoH - altoN) + 'px');
+}
+window.addEventListener('resize', medirAltoUtil);
+window.addEventListener('orientationchange', () => setTimeout(medirAltoUtil, 150));
 
 function agregarProducto(destino) {
   if (esMobile()) abrirPicker(destino, null);
@@ -2176,7 +2215,9 @@ function openPedidoEdit(id) {
   const cont = document.getElementById('pedItemRows');
   cont.innerHTML = '';
   (p.items || []).forEach(it => addItemRowWith('ped', it));
-  if (!cont.children.length) addItemRow('ped');
+  // En celular no se deja una fila vacía: los inputs están ocultos y
+  // quedaría un renglón "Sin producto" que no se entiende.
+  if (!cont.children.length && !esMobile()) addItemRow('ped');
   document.getElementById('pedidoModal').classList.add('open');
 }
 
