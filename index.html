@@ -914,8 +914,10 @@ input[type="time"]::-webkit-calendar-picker-indicator {
         <h2 style="font-size:18px;margin-bottom:4px;">Hola, <span id="whoPinName"></span></h2>
         <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Escribí tu PIN para entrar</p>
       </div>
-      <input type="password" id="pinInput" inputmode="numeric" autocomplete="off"
-        maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter')submitPin()">
+      <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*"
+        autocomplete="off" maxlength="4" placeholder="••••"
+        oninput="soloNumerosPin(this)"
+        onkeydown="if(event.key==='Enter')submitPin()">
       <div id="pinError"></div>
       <button class="btn btn-primary" id="pinBtn" style="margin-top:12px" onclick="submitPin()">Entrar</button>
       <button class="btn btn-secondary" onclick="backToWhoPick()">← No soy yo</button>
@@ -1391,9 +1393,25 @@ function pickWho(name) {
 
 // Paso 2: el PIN no se valida acá — se manda al servidor y se ve si la
 // llamada pasa. Se guarda solo si funcionó (ver loadData).
+// El PIN son 4 números. Se limpia mientras se escribe en vez de avisar
+// después: el maxlength y el teclado numérico no alcanzan solos — se
+// puede pegar texto, y en la computadora se escribe con teclado común.
+function soloNumerosPin(inp) {
+  const limpio = inp.value.replace(/\D/g, '').slice(0, 4);
+  if (inp.value !== limpio) inp.value = limpio;
+  document.getElementById('pinError').textContent = '';
+}
+
 function submitPin() {
   const pin = document.getElementById('pinInput').value.trim();
   if (!pin) { document.getElementById('pinError').textContent = 'Escribí tu PIN'; return; }
+  // Se corta acá y no en el servidor: con menos de 4 no puede ser válido,
+  // así que no tiene sentido esperar el viaje de ida y vuelta para
+  // enterarse.
+  if (pin.length !== 4) {
+    document.getElementById('pinError').textContent = 'El PIN son 4 números';
+    return;
+  }
   const btn = document.getElementById('pinBtn');
   btn.disabled = true; btn.textContent = 'Verificando…';
   state.who = pendingWho;
