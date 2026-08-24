@@ -902,6 +902,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
       <button class="menu-btn" onclick="pickWho('Joaquin')">👤 Joaquin</button>
       <button class="menu-btn" onclick="pickWho('Oscar')">👤 Oscar</button>
       <button class="menu-btn" onclick="pickWho('Thiago')">👤 Thiago</button>
+      <button class="menu-btn" onclick="pickWho('Mateo')">👤 Mateo</button>
       <!-- Siempre disponible: sirve para instalársela a un compañero
            aunque el cartel de abajo ya no esté apareciendo. -->
       <button class="link-instalar" onclick="abrirInstalar()">📲 Cómo instalar la app</button>
@@ -1295,7 +1296,11 @@ let searchQuery = '';
 // ═══════════════════════════════════════════════════════════════
 //  Init
 // ═══════════════════════════════════════════════════════════════
-const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago'];
+// Para sumar a alguien: agregarlo acá, poner su botón en el modal de
+// arriba, y cargarle el PIN en la propiedad PINS del script (Apps Script →
+// Configuración del proyecto → Propiedades). Sin el PIN, el nombre
+// aparece pero no lo deja entrar.
+const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago', 'Mateo'];
 
 // Nombre elegido en el primer paso, todavía sin PIN confirmado.
 let pendingWho = '';
