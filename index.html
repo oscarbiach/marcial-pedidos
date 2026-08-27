@@ -840,6 +840,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 #refreshDot.on { display:block; }
 
+/* ── Dirección tocable: abre el mapa ──
+   Se ve como link para que se note que hace algo. En el celular lleva
+   algo de aire vertical: es un objetivo táctil dentro de una tarjeta que
+   también es tocable, así que conviene que sea claro dónde termina. */
+.dir-link {
+  color:var(--blue); text-decoration:none; font-weight:600;
+  border-bottom:1px solid rgba(41,128,185,.35);
+}
+.dir-link:active { opacity:.6; }
+.dir-link.fuerte { font-weight:700; font-size:14px; }
+@media(max-width:767.98px) {
+  .blk-dir .dir-link { display:inline-block; padding:3px 0; }
+}
+
 /* ── Instrucciones de instalación ── */
 .link-instalar {
   display:block; width:100%; margin-top:6px; padding:12px;
@@ -2008,6 +2022,52 @@ function restaurarCola() {
 // ═══════════════════════════════════════════════════════════════
 //  PEDIDOS (visualización + editar/eliminar pendientes)
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  ABRIR LA DIRECCIÓN EN EL MAPA
+//
+//  No hace falta API key ni cuenta de Google Cloud: es un link con un
+//  formato que el teléfono reconoce y manda a la app de mapas.
+//
+//  En iPhone se usa Apple Maps porque abre la app nativa siempre, sin
+//  depender de que tengan Google Maps instalado. En lo demás, Google.
+//  Para forzar uno, cambiar MAPA_PREFERIDO a 'google' o 'apple'.
+// ═══════════════════════════════════════════════════════════════
+const MAPA_PREFERIDO = 'auto';
+
+// Localidad que se agrega a la búsqueda. Las direcciones se escriben sin
+// ciudad ("Av. San Martín 1234") y esa calle existe en decenas de pueblos:
+// sin esto, Maps elige por cercanía a donde estás parado, que funciona
+// bien repartiendo en la zona pero no es exacto. Poniendo acá la ciudad
+// —por ejemplo 'Bragado, Buenos Aires'— pasa a ser exacto siempre.
+const LOCALIDAD = '';
+
+function urlMapa(direccion) {
+  const d = String(direccion || '').trim();
+  if (!d) return '';
+  // Si la dirección ya trae la localidad escrita, no se repite.
+  const yaTiene = LOCALIDAD &&
+    d.toLowerCase().indexOf(LOCALIDAD.split(',')[0].trim().toLowerCase()) !== -1;
+  const consulta = encodeURIComponent(LOCALIDAD && !yaTiene ? d + ', ' + LOCALIDAD : d);
+  const apple = MAPA_PREFERIDO === 'apple' || (MAPA_PREFERIDO === 'auto' && isIOS());
+  // daddr / destination = "cómo llegar" desde donde estás, que es lo que
+  // se necesita yendo a entregar. Solo ver el punto sería un paso menos
+  // útil: igual habría que pedir la ruta después.
+  return apple
+    ? 'https://maps.apple.com/?daddr=' + consulta + '&dirflg=d'
+    : 'https://www.google.com/maps/dir/?api=1&destination=' + consulta;
+}
+
+// La dirección como link. stopPropagation es imprescindible: la tarjeta
+// entera abre el detalle del pedido, así que sin eso un toque en la
+// dirección dispararía las dos cosas a la vez.
+function dirLinkHtml(direccion, clase) {
+  const d = String(direccion || '').trim();
+  if (!d) return '';
+  return `<a class="${clase || 'dir-link'}" href="${urlMapa(d)}"
+    target="_blank" rel="noopener" onclick="event.stopPropagation()"
+    title="Cómo llegar">📍 ${esc(d)}</a>`;
+}
+
 // dd/MM, para las fechas dentro de una tarjeta (el año casi nunca aporta).
 function fmtDiaMes(d) {
   const s = fmtDate(d);
@@ -2041,7 +2101,7 @@ function pedidoBloqueHtml(p) {
         ${fecha ? `<span class="blk-fecha">${fecha}</span>` : ''}
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
-      ${p.direccion ? `<div class="blk-dir">${esc(p.direccion)}</div>` : ''}
+      ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
       <div class="blk-prods">
         ${muestra.map(it => `
           <span class="blk-q">${itemLabelCorto(it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
@@ -2065,7 +2125,7 @@ function pedidoCardHtml(p) {
   // encabeza cada grupo de la lista. Antes iba en todas las tarjetas y era
   // la mitad del ruido de la línea gris.
   const meta = [];
-  if (p.direccion) meta.push(esc(p.direccion));
+  if (p.direccion) meta.push(dirLinkHtml(p.direccion, 'dir-link'));
   meta.push(p.items.length + ' producto' + (p.items.length !== 1 ? 's' : ''));
   if (p.quien) meta.push(esc(p.quien));
 
@@ -2232,7 +2292,7 @@ function papeleraCardHtml(p) {
   const rest = 3 - daysSince(p.fechaElim);
   const cuando = rest <= 0 ? 'hoy' : (rest === 1 ? 'mañana' : 'en ' + rest + ' días');
   const sub = [];
-  if (p.direccion) sub.push(esc(p.direccion));
+  if (p.direccion) sub.push(dirLinkHtml(p.direccion, 'dir-link'));
   sub.push('Eliminado ' + fmtDate(p.fechaElim));
   if (p.elimPor) sub.push(esc(p.elimPor));
   sub.push('se borra ' + cuando);
@@ -2398,7 +2458,7 @@ function openPedidoDetail(id) {
     <div class="detail-section">
       <h4>Info</h4>
       <div class="detail-item"><span>Cliente</span><b>${esc(p.cliente)}</b></div>
-      ${p.direccion ? `<div class="detail-item"><span>Dirección</span><b>${esc(p.direccion)}</b></div>` : ''}
+      ${p.direccion ? `<div class="detail-item"><span>Dirección</span>${dirLinkHtml(p.direccion, 'dir-link fuerte')}</div>` : ''}
       <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(p.fecha)}</b></div>
       ${p.fechaEntrega ? `<div class="detail-item"><span>Entrega estipulada</span><b>${fmtDate(p.fechaEntrega)}</b></div>` : ''}
       <div class="detail-item"><span>Entrega</span><b>${p.retiro ? '🛻 RETIRO — pasa a buscar' : '🚚 Reparto'}</b></div>
