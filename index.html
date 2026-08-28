@@ -862,10 +862,12 @@ body.modo-ruta .pedidos-top .ac-wrap { display:none; }
 .pedido-blk.elegido, .order-card.elegido {
   box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10);
 }
+/* El círculo lleva el número de parada, así que tiene que entrar el 10
+   sin apretarse: por eso 26px y no el tamaño de un tilde. */
 .blk-check, .oc-check {
-  width:24px; height:24px; border-radius:50%; flex-shrink:0;
+  width:26px; height:26px; border-radius:50%; flex-shrink:0;
   border:2px solid #117A65; background:#fff; color:#117A65;
-  font-size:14px; font-weight:900; line-height:20px; text-align:center;
+  font-size:13px; font-weight:900; line-height:22px; text-align:center;
 }
 .pedido-blk.elegido .blk-check, .order-card.elegido .oc-check {
   background:#117A65; color:#fff;
@@ -2171,7 +2173,12 @@ function origenRuta() {
 const MAX_PARADAS = 10;
 
 let rutaActiva = false;
-let rutaSel = {};
+// Los ids EN EL ORDEN EN QUE SE TOCARON. Es una lista y no un objeto
+// justamente por eso: el orden de las paradas lo decide el que reparte,
+// que conoce el barrio mejor que cualquier orden automático.
+let rutaSel = [];
+
+function estaElegido(id) { return rutaSel.indexOf(id) !== -1; }
 
 // Una entrega sirve para el recorrido si está pendiente, tiene dirección
 // y no es un retiro (esos los pasa a buscar el cliente).
@@ -2184,7 +2191,7 @@ function esParadaPosible(p) {
 // Antes venían todas pretildadas y no se leía como una lista para elegir.
 function entrarModoRuta() {
   rutaActiva = true;
-  rutaSel = {};
+  rutaSel = [];
   document.body.classList.add('modo-ruta');
   renderPedidos();
   window.scrollTo(0, 0);
@@ -2192,25 +2199,35 @@ function entrarModoRuta() {
 
 function salirModoRuta() {
   rutaActiva = false;
-  rutaSel = {};
+  rutaSel = [];
   document.body.classList.remove('modo-ruta');
   renderPedidos();
 }
 
 function toggleParada(id) {
-  if (rutaSel[id]) delete rutaSel[id]; else rutaSel[id] = true;
-  const el = document.querySelector('[data-pid="' + id + '"]');
-  if (el) {
-    el.classList.toggle('elegido', !!rutaSel[id]);
-    const chk = el.querySelector('.blk-check, .oc-check');
-    if (chk) chk.textContent = rutaSel[id] ? '✓' : '';
-  }
+  const i = rutaSel.indexOf(id);
+  if (i === -1) rutaSel.push(id); else rutaSel.splice(i, 1);
+  pintarNumerosParadas();
   actualizarBarraRuta();
 }
 
-// Las paradas en el orden en que se ven en la lista.
+// Al sacar una parada del medio, todas las de atrás cambian de número.
+// Por eso se repintan todas y no solo la que se tocó.
+function pintarNumerosParadas() {
+  document.querySelectorAll('[data-pid]').forEach(el => {
+    const n = rutaSel.indexOf(el.dataset.pid);
+    el.classList.toggle('elegido', n !== -1);
+    const chk = el.querySelector('.blk-check, .oc-check');
+    if (chk) chk.textContent = n === -1 ? '' : String(n + 1);
+  });
+}
+
+// Las paradas en el orden en que se tocaron, no en el que aparecen en la
+// lista: eso es lo que define el recorrido.
 function paradasElegidas() {
-  return (state.pedidos || []).filter(p => esParadaPosible(p) && rutaSel[p.id]);
+  return rutaSel
+    .map(id => (state.pedidos || []).find(p => p.id === id))
+    .filter(p => p && esParadaPosible(p));
 }
 
 function actualizarBarraRuta() {
@@ -2292,14 +2309,14 @@ function pedidoBloqueHtml(p) {
   // Armando el recorrido, tocar el bloque elige la parada en vez de abrir
   // el detalle: el dedo cae en cualquier lado del bloque, que es grande.
   const enRuta = rutaActiva && esParadaPosible(p);
-  const elegido = enRuta && rutaSel[p.id];
+  const nParada = enRuta ? rutaSel.indexOf(p.id) : -1;
 
   return `
-    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${enRuta ? ' seleccionable' : ''}${elegido ? ' elegido' : ''}"
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${enRuta ? ' seleccionable' : ''}${nParada !== -1 ? ' elegido' : ''}"
          data-pid="${p.id}"
          onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
       <div class="blk-top">
-        ${enRuta ? `<span class="blk-check">${elegido ? '✓' : ''}</span>` : ''}
+        ${enRuta ? `<span class="blk-check">${nParada === -1 ? '' : nParada + 1}</span>` : ''}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
@@ -2346,14 +2363,14 @@ function pedidoCardHtml(p) {
   // igual que el bloque del celular. Esto faltaba: la selección estaba
   // hecha solo para celular y en PC la tarjeta seguía abriendo el detalle.
   const enRuta = rutaActiva && esParadaPosible(p);
-  const elegido = enRuta && rutaSel[p.id];
+  const nParada = enRuta ? rutaSel.indexOf(p.id) : -1;
 
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${enRuta ? ' seleccionable' : ''}${elegido ? ' elegido' : ''}"
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${enRuta ? ' seleccionable' : ''}${nParada !== -1 ? ' elegido' : ''}"
          data-pid="${p.id}"
          onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
       <div class="oc-top">
-        ${enRuta ? `<span class="oc-check">${elegido ? '✓' : ''}</span>` : ''}
+        ${enRuta ? `<span class="oc-check">${nParada === -1 ? '' : nParada + 1}</span>` : ''}
         <div style="min-width:0">
           <div class="oc-main">${esc(p.cliente)}</div>
           <div class="oc-sub">${meta.join(' · ')}</div>
