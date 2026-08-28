@@ -858,14 +858,18 @@ body.modo-ruta .pedidos-top .ac-wrap { display:none; }
 
 /* Sin tildar no se atenúan: como ahora arrancan todos en cero, atenuarlos
    dejaría la pantalla entera apagada y parecería que no hay nada. */
-.pedido-blk.seleccionable { cursor:pointer; }
-.pedido-blk.elegido { box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10); }
-.blk-check {
+.pedido-blk.seleccionable, .order-card.seleccionable { cursor:pointer; }
+.pedido-blk.elegido, .order-card.elegido {
+  box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10);
+}
+.blk-check, .oc-check {
   width:24px; height:24px; border-radius:50%; flex-shrink:0;
   border:2px solid #117A65; background:#fff; color:#117A65;
   font-size:14px; font-weight:900; line-height:20px; text-align:center;
 }
-.pedido-blk.elegido .blk-check { background:#117A65; color:#fff; }
+.pedido-blk.elegido .blk-check, .order-card.elegido .oc-check {
+  background:#117A65; color:#fff;
+}
 
 #rutaBar {
   display:none; position:fixed; left:12px; right:12px; z-index:260;
@@ -2149,11 +2153,17 @@ function dirLinkHtml(direccion, clase) {
 //  versión web, que anda pero es más incómoda para navegar.
 // ═══════════════════════════════════════════════════════════════
 
-// Punto de partida. Vacío = Google arranca desde donde está el teléfono,
-// que es lo mismo si sale desde el depósito. Poniendo acá la dirección de
-// la distribuidora, la ruta sale siempre de ahí aunque la arme en la casa
-// la noche anterior.
-const ORIGEN_DISTRIBUIDORA = '';
+// Punto de partida de la ruta.
+//
+// En la COMPUTADORA sale siempre de la distribuidora: la ruta se arma
+// desde el escritorio, donde "mi ubicación" no sirve de nada.
+// En el CELULAR se deja vacío a propósito, así Google arranca desde donde
+// está parado el que reparte — que puede haber salido ya.
+const DIRECCION_DISTRIBUIDORA = 'Marcial Candioti 2957, Santa Fe, Santa Fe';
+
+function origenRuta() {
+  return esMobile() ? '' : DIRECCION_DISTRIBUIDORA;
+}
 
 // Google Maps admite 9 paradas intermedias más el destino: 10 entregas
 // por ruta. Si se piden más, el link no falla — se comería las de más sin
@@ -2223,7 +2233,7 @@ function actualizarBarraRuta() {
     btn.style.display = 'block';
     btn.disabled = true;
   } else {
-    info.innerHTML = `<b>${n} parada${n !== 1 ? 's' : ''}</b><span>${ORIGEN_DISTRIBUIDORA ? 'Sale de la distribuidora.' : 'Sale desde donde estés.'}</span>`;
+    info.innerHTML = `<b>${n} parada${n !== 1 ? 's' : ''}</b><span>${origenRuta() ? 'Sale de la distribuidora.' : 'Sale desde donde estés.'}</span>`;
     btn.style.display = 'block';
     btn.disabled = false;
   }
@@ -2249,7 +2259,8 @@ function abrirRuta() {
 
   let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
     '&destination=' + encodeURIComponent(destino);
-  if (ORIGEN_DISTRIBUIDORA) url += '&origin=' + encodeURIComponent(ORIGEN_DISTRIBUIDORA);
+  const origen = origenRuta();
+  if (origen) url += '&origin=' + encodeURIComponent(origen);
   if (intermedias.length) {
     url += '&waypoints=' + intermedias.map(encodeURIComponent).join('%7C');
   }
@@ -2331,9 +2342,18 @@ function pedidoCardHtml(p) {
   else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ ${fmtDiaMes(p.fechaDespacho)}</span>`;
   else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
+  // Armando el recorrido la tarjeta se elige en vez de abrir el detalle,
+  // igual que el bloque del celular. Esto faltaba: la selección estaba
+  // hecha solo para celular y en PC la tarjeta seguía abriendo el detalle.
+  const enRuta = rutaActiva && esParadaPosible(p);
+  const elegido = enRuta && rutaSel[p.id];
+
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}" onclick="openPedidoDetail('${p.id}')">
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${enRuta ? ' seleccionable' : ''}${elegido ? ' elegido' : ''}"
+         data-pid="${p.id}"
+         onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
       <div class="oc-top">
+        ${enRuta ? `<span class="oc-check">${elegido ? '✓' : ''}</span>` : ''}
         <div style="min-width:0">
           <div class="oc-main">${esc(p.cliente)}</div>
           <div class="oc-sub">${meta.join(' · ')}</div>
