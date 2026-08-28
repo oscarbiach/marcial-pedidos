@@ -856,8 +856,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 body.modo-ruta #refreshBtn, body.modo-ruta #rutaBtn,
 body.modo-ruta .pedidos-top .ac-wrap { display:none; }
 
+/* Sin tildar no se atenúan: como ahora arrancan todos en cero, atenuarlos
+   dejaría la pantalla entera apagada y parecería que no hay nada. */
 .pedido-blk.seleccionable { cursor:pointer; }
-.pedido-blk.seleccionable:not(.elegido) { opacity:.55; }
 .pedido-blk.elegido { box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10); }
 .blk-check {
   width:24px; height:24px; border-radius:50%; flex-shrink:0;
@@ -2169,10 +2170,11 @@ function esParadaPosible(p) {
          !!String(p.direccion || '').trim() && !p.enCola && !p.errorCola;
 }
 
+// Arranca sin nada tildado: el que reparte va marcando lo que se lleva.
+// Antes venían todas pretildadas y no se leía como una lista para elegir.
 function entrarModoRuta() {
   rutaActiva = true;
   rutaSel = {};
-  (state.pedidos || []).filter(esParadaPosible).forEach(p => { rutaSel[p.id] = true; });
   document.body.classList.add('modo-ruta');
   renderPedidos();
   window.scrollTo(0, 0);
@@ -2211,14 +2213,18 @@ function actualizarBarraRuta() {
   const info = document.getElementById('rutaInfo');
   const btn = document.getElementById('rutaAbrir');
 
+  // El botón no está mientras no haya nada elegido: aparece recién cuando
+  // hay algo para abrir, así se entiende que primero hay que tildar.
   if (n === 0) {
-    info.innerHTML = '<b>Ninguna parada elegida</b><span>Tocá los pedidos que vas a entregar.</span>';
-    btn.disabled = true;
+    info.innerHTML = '<b>Elegí las entregas</b><span>Tocá los pedidos que vas a salir a hacer.</span>';
+    btn.style.display = 'none';
   } else if (sobran > 0) {
     info.innerHTML = `<b>${n} paradas — son muchas</b><span>Google Maps acepta ${MAX_PARADAS}. Sacá ${sobran} para poder abrirla.</span>`;
+    btn.style.display = 'block';
     btn.disabled = true;
   } else {
     info.innerHTML = `<b>${n} parada${n !== 1 ? 's' : ''}</b><span>${ORIGEN_DISTRIBUIDORA ? 'Sale de la distribuidora.' : 'Sale desde donde estés.'}</span>`;
+    btn.style.display = 'block';
     btn.disabled = false;
   }
   bar.classList.toggle('lleno', sobran > 0);
