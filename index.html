@@ -840,6 +840,55 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 #refreshDot.on { display:block; }
 
+/* ══ RECORRIDO DE REPARTO ══ */
+.ruta-btn {
+  flex-shrink:0; border:1.5px solid #117A65; background:#E8F8F5; color:#0E6655;
+  border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700;
+  cursor:pointer; white-space:nowrap;
+}
+.ruta-btn:hover { background:#D1F2EB; }
+@media(max-width:767.98px) {
+  .pedidos-top { flex-wrap:wrap; }
+  .ruta-btn { width:100%; padding:13px; font-size:15px; }
+}
+/* Armando el recorrido no se puede recargar ni buscar: la lista tiene que
+   quedarse quieta mientras se eligen las paradas. */
+body.modo-ruta #refreshBtn, body.modo-ruta #rutaBtn,
+body.modo-ruta .pedidos-top .ac-wrap { display:none; }
+
+.pedido-blk.seleccionable { cursor:pointer; }
+.pedido-blk.seleccionable:not(.elegido) { opacity:.55; }
+.pedido-blk.elegido { box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10); }
+.blk-check {
+  width:24px; height:24px; border-radius:50%; flex-shrink:0;
+  border:2px solid #117A65; background:#fff; color:#117A65;
+  font-size:14px; font-weight:900; line-height:20px; text-align:center;
+}
+.pedido-blk.elegido .blk-check { background:#117A65; color:#fff; }
+
+#rutaBar {
+  display:none; position:fixed; left:12px; right:12px; z-index:260;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  background:#0E6655; color:#fff; border-radius:14px; padding:12px 14px;
+  box-shadow:0 4px 18px rgba(0,0,0,.3);
+  align-items:center; gap:11px;
+}
+#rutaBar.show { display:flex; }
+#rutaBar.lleno { background:var(--red); }
+#rutaInfo { flex:1; min-width:0; font-size:13px; line-height:1.4; }
+#rutaInfo b { display:block; font-size:14.5px; }
+#rutaInfo span { opacity:.8; font-size:12px; }
+.ruta-abrir {
+  flex-shrink:0; background:#fff; color:#0E6655; border:none; border-radius:10px;
+  padding:9px 13px; font-size:13px; font-weight:800; cursor:pointer; line-height:1.2;
+}
+.ruta-abrir:disabled { opacity:.4; cursor:default; }
+.ruta-x {
+  flex-shrink:0; width:32px; height:32px; border-radius:50%; border:none;
+  background:rgba(255,255,255,.2); color:#fff; font-size:14px; cursor:pointer;
+}
+@media(max-width:767.98px) { #rutaBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+
 /* ── Dirección tocable: abre el mapa ──
    Se ve como link para que se note que hace algo. En el celular lleva
    algo de aire vertical: es un objetivo táctil dentro de una tarjeta que
@@ -1031,6 +1080,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
           </button>
+          <button class="ruta-btn" id="rutaBtn" onclick="entrarModoRuta()">🚚 Armar recorrido</button>
         </div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
@@ -1190,6 +1240,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     </div>
     <button class="btn btn-primary" id="pkConfirmar" onclick="pickerConfirmar()">Agregar al pedido</button>
   </div>
+</div>
+
+<!-- Barra del recorrido: cuántas paradas van elegidas y el botón que
+     abre la ruta entera en Google Maps -->
+<div id="rutaBar">
+  <div id="rutaInfo"></div>
+  <button class="ruta-abrir" id="rutaAbrir" onclick="abrirRuta()">Abrir<br>en Maps</button>
+  <button class="ruta-x" onclick="salirModoRuta()" title="Salir del recorrido">✕</button>
 </div>
 
 <!-- Aviso de pedidos todavía sin confirmar en el servidor -->
@@ -2078,6 +2136,120 @@ function dirLinkHtml(direccion, clase) {
     title="Cómo llegar">📍<span class="dl-txt">${esc(d)}</span></a>`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RECORRIDO DE REPARTO
+//
+//  Junta varias entregas y las abre como una sola ruta en Google Maps,
+//  saliendo de la distribuidora.
+//
+//  Va a Google sí o sí, aunque estemos en iPhone: Apple Maps no acepta
+//  paradas intermedias desde un link, solo un destino. Conviene que el
+//  que reparte tenga la app de Google Maps instalada; si no, se abre la
+//  versión web, que anda pero es más incómoda para navegar.
+// ═══════════════════════════════════════════════════════════════
+
+// Punto de partida. Vacío = Google arranca desde donde está el teléfono,
+// que es lo mismo si sale desde el depósito. Poniendo acá la dirección de
+// la distribuidora, la ruta sale siempre de ahí aunque la arme en la casa
+// la noche anterior.
+const ORIGEN_DISTRIBUIDORA = '';
+
+// Google Maps admite 9 paradas intermedias más el destino: 10 entregas
+// por ruta. Si se piden más, el link no falla — se comería las de más sin
+// avisar, que es peor.
+const MAX_PARADAS = 10;
+
+let rutaActiva = false;
+let rutaSel = {};
+
+// Una entrega sirve para el recorrido si está pendiente, tiene dirección
+// y no es un retiro (esos los pasa a buscar el cliente).
+function esParadaPosible(p) {
+  return p.estado === 'Pendiente' && !p.retiro &&
+         !!String(p.direccion || '').trim() && !p.enCola && !p.errorCola;
+}
+
+function entrarModoRuta() {
+  rutaActiva = true;
+  rutaSel = {};
+  (state.pedidos || []).filter(esParadaPosible).forEach(p => { rutaSel[p.id] = true; });
+  document.body.classList.add('modo-ruta');
+  renderPedidos();
+  window.scrollTo(0, 0);
+}
+
+function salirModoRuta() {
+  rutaActiva = false;
+  rutaSel = {};
+  document.body.classList.remove('modo-ruta');
+  renderPedidos();
+}
+
+function toggleParada(id) {
+  if (rutaSel[id]) delete rutaSel[id]; else rutaSel[id] = true;
+  const el = document.querySelector('[data-pid="' + id + '"]');
+  if (el) {
+    el.classList.toggle('elegido', !!rutaSel[id]);
+    const chk = el.querySelector('.blk-check, .oc-check');
+    if (chk) chk.textContent = rutaSel[id] ? '✓' : '';
+  }
+  actualizarBarraRuta();
+}
+
+// Las paradas en el orden en que se ven en la lista.
+function paradasElegidas() {
+  return (state.pedidos || []).filter(p => esParadaPosible(p) && rutaSel[p.id]);
+}
+
+function actualizarBarraRuta() {
+  const bar = document.getElementById('rutaBar');
+  if (!bar) return;
+  if (!rutaActiva) { bar.classList.remove('show'); return; }
+
+  const n = paradasElegidas().length;
+  const sobran = n - MAX_PARADAS;
+  const info = document.getElementById('rutaInfo');
+  const btn = document.getElementById('rutaAbrir');
+
+  if (n === 0) {
+    info.innerHTML = '<b>Ninguna parada elegida</b><span>Tocá los pedidos que vas a entregar.</span>';
+    btn.disabled = true;
+  } else if (sobran > 0) {
+    info.innerHTML = `<b>${n} paradas — son muchas</b><span>Google Maps acepta ${MAX_PARADAS}. Sacá ${sobran} para poder abrirla.</span>`;
+    btn.disabled = true;
+  } else {
+    info.innerHTML = `<b>${n} parada${n !== 1 ? 's' : ''}</b><span>${ORIGEN_DISTRIBUIDORA ? 'Sale de la distribuidora.' : 'Sale desde donde estés.'}</span>`;
+    btn.disabled = false;
+  }
+  bar.classList.toggle('lleno', sobran > 0);
+  bar.classList.add('show');
+}
+
+function abrirRuta() {
+  const paradas = paradasElegidas();
+  if (!paradas.length || paradas.length > MAX_PARADAS) return;
+
+  const dir = p => {
+    const d = String(p.direccion).trim();
+    const yaTiene = LOCALIDAD &&
+      d.toLowerCase().indexOf(LOCALIDAD.split(',')[0].trim().toLowerCase()) !== -1;
+    return LOCALIDAD && !yaTiene ? d + ', ' + LOCALIDAD : d;
+  };
+
+  // La última parada es el "destino" y las anteriores van como waypoints:
+  // así lo pide el formato de Google.
+  const destino = dir(paradas[paradas.length - 1]);
+  const intermedias = paradas.slice(0, -1).map(dir);
+
+  let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+    '&destination=' + encodeURIComponent(destino);
+  if (ORIGEN_DISTRIBUIDORA) url += '&origin=' + encodeURIComponent(ORIGEN_DISTRIBUIDORA);
+  if (intermedias.length) {
+    url += '&waypoints=' + intermedias.map(encodeURIComponent).join('%7C');
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
 // dd/MM, para las fechas dentro de una tarjeta (el año casi nunca aporta).
 function fmtDiaMes(d) {
   const s = fmtDate(d);
@@ -2100,10 +2272,17 @@ function pedidoBloqueHtml(p) {
   const muestra = p.items.slice(0, 4);
   const resto = p.items.length - muestra.length;
 
+  // Armando el recorrido, tocar el bloque elige la parada en vez de abrir
+  // el detalle: el dedo cae en cualquier lado del bloque, que es grande.
+  const enRuta = rutaActiva && esParadaPosible(p);
+  const elegido = enRuta && rutaSel[p.id];
+
   return `
-    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}"
-         onclick="openPedidoDetail('${p.id}')">
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${enRuta ? ' seleccionable' : ''}${elegido ? ' elegido' : ''}"
+         data-pid="${p.id}"
+         onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
       <div class="blk-top">
+        ${enRuta ? `<span class="blk-check">${elegido ? '✓' : ''}</span>` : ''}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
@@ -2264,6 +2443,7 @@ function renderPedidos() {
   document.getElementById('pedidosList').innerHTML = html;
   updatePapeleraFab();
   renderComprometido();
+  actualizarBarraRuta();
 }
 
 // ── Stock comprometido (panel violeta, solo PC): total por producto de
