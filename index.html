@@ -845,14 +845,24 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    algo de aire vertical: es un objetivo táctil dentro de una tarjeta que
    también es tocable, así que conviene que sea claro dónde termina. */
 .dir-link {
+  display:inline-flex; align-items:center; gap:5px;
   color:var(--blue); text-decoration:none; font-weight:600;
-  border-bottom:1px solid rgba(41,128,185,.35);
+  border:1.5px solid #AED6F1; border-radius:9px;
+  padding:5px 10px; background:var(--lblue);
+  max-width:100%; min-width:0;
 }
+/* El texto se corta adentro del botón: sin esto una dirección larga
+   estira el botón más que la tarjeta. */
+.dir-link .dl-txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dir-link:hover { border-color:var(--blue); }
 .dir-link:active { opacity:.6; }
-.dir-link.fuerte { font-weight:700; font-size:14px; }
+.dir-link.fuerte { font-weight:700; font-size:14px; padding:7px 12px; }
 @media(max-width:767.98px) {
-  .blk-dir .dir-link { display:inline-block; padding:3px 0; }
+  .blk-dir .dir-link { margin-top:3px; font-size:13.5px; padding:7px 11px; }
 }
+/* En la línea gris de la tarjeta de PC el botón convive con más texto,
+   así que va más chico para no romper el renglón. */
+.oc-sub .dir-link { font-size:11.5px; padding:2px 7px; border-radius:7px; }
 
 /* ── Instrucciones de instalación ── */
 .link-instalar {
@@ -2065,7 +2075,7 @@ function dirLinkHtml(direccion, clase) {
   if (!d) return '';
   return `<a class="${clase || 'dir-link'}" href="${urlMapa(d)}"
     target="_blank" rel="noopener" onclick="event.stopPropagation()"
-    title="Cómo llegar">📍 ${esc(d)}</a>`;
+    title="Cómo llegar">📍<span class="dl-txt">${esc(d)}</span></a>`;
 }
 
 // dd/MM, para las fechas dentro de una tarjeta (el año casi nunca aporta).
