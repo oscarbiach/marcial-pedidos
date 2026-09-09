@@ -161,6 +161,54 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   background:var(--lgray); color:var(--gray); white-space:nowrap;
 }
 .oc-chip.ok { background:var(--lgreen); color:var(--green); }
+
+/* ── FECHA DE ENTREGA, POR URGENCIA ──
+   El problema no era que la fecha no se viera: era que TODAS las fechas
+   se veian igual, asi que una entrega para dentro de una semana pesaba a
+   la vista lo mismo que una para hoy. Ahora el color dice cuando: rojo
+   se paso, verde es hoy, naranja manana, gris apagado mas adelante. */
+.oc-chip.ent-vencida, .blk-fecha.ent-vencida { background:var(--lred);  color:var(--red); }
+.oc-chip.ent-hoy,     .blk-fecha.ent-hoy     { background:var(--green); color:#fff; }
+.oc-chip.ent-maniana, .blk-fecha.ent-maniana { background:var(--lorng); color:var(--orange); }
+.oc-chip.ent-futura,  .blk-fecha.ent-futura  { background:var(--lgray); color:var(--gray); }
+/* En el bloque del celular la fecha era texto suelto; con color de fondo
+   necesita la caja del chip para que se lea. */
+.blk-fecha.ent-vencida, .blk-fecha.ent-hoy,
+.blk-fecha.ent-maniana, .blk-fecha.ent-futura { border-radius:8px; padding:2px 8px; font-size:11.5px; }
+
+/* ── PEDIDOS PROGRAMADOS PARA MAS ADELANTE ──
+   Mismo criterio que los archivados: siguen estando, pero plegados, para
+   que la lista de Pendientes muestre lo que hay que resolver hoy. */
+.prog-notice {
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  font-size:13px; font-weight:600; color:var(--gray); cursor:pointer;
+  padding:12px 14px; margin-top:8px; background:var(--lgray);
+  border:1px solid var(--border); border-radius:var(--radius);
+}
+.prog-notice:hover { background:#ECEFF1; }
+.prog-notice .pn-n { color:var(--navy); }
+.prog-list { margin-top:8px; }
+.prog-dia {
+  grid-column:1/-1; display:flex; align-items:center; gap:9px;
+  font-size:12.5px; font-weight:800; color:var(--navy); margin-top:6px;
+}
+.prog-dia::after { content:''; flex:1; border-top:1px dashed var(--border); }
+
+/* ── FILTRO EXACTO DEL BUSCADOR ──
+   Cuando el filtro sale de la lista desplegable es EXACTO, no por
+   coincidencia de letras. El cartel lo dice, porque si no la diferencia
+   entre "Eber" y "jamon wEBER" queda invisible. */
+.filtro-tag {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font-size:13px; font-weight:600; color:var(--navy);
+  background:var(--lblue); border:1px solid #BFD9EC; border-radius:var(--radius);
+  padding:9px 12px; margin-bottom:10px;
+}
+.filtro-tag b { font-weight:800; }
+.filtro-tag .ft-x {
+  margin-left:auto; border:none; background:transparent; cursor:pointer;
+  color:var(--navy); font-size:15px; line-height:1; padding:2px 4px;
+}
 /* Productos: cantidad en su propia columna, para que se lean en vertical
    de un tirón en vez de tener que buscarlas dentro de cada renglón.
    La grilla va en el CONTENEDOR, no en cada renglón: si cada ítem fuera
@@ -535,6 +583,58 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .modal { border-radius:20px; max-width:560px; max-height:86vh; animation:popIn .18s ease; }
   .modal-handle { display:none; }
 }
+
+/* ── HISTORIAL DEL CLIENTE (solo PC ancha) ──
+   Va posicionado absoluto y NO como columna flex a propósito: si fuera
+   una columna, el formulario se correria a la izquierda cada vez que el
+   panel aparece y desaparece. Asi el formulario no se mueve nunca y el
+   panel entra y sale al costado. */
+/* 1320px y no 1200: medido, a 1200 el panel terminaba 26px afuera de la
+   ventana y aparecia scroll horizontal. El formulario queda fijo en el
+   centro de un main de 1000px, asi que el ancho minimo real para que el
+   panel entre entero al costado es ~1272px. */
+@media(min-width:1320px) {
+  #tab-cargar.active { position:relative; }
+  #histCli {
+    position:absolute; top:50%; left:calc(50% + 348px);
+    transform:translateY(-50%);
+    width:288px; max-height:78vh; overflow-y:auto;
+    background:#fff; border-radius:14px; box-shadow:var(--shadow);
+    padding:15px 16px; font-size:13px;
+    animation:histIn .18s ease;
+  }
+}
+@keyframes histIn { from{opacity:0;transform:translate(-10px,-50%)} to{opacity:1;transform:translate(0,-50%)} }
+/* Debajo de 1200px no hay lugar al costado sin pisar el formulario. */
+@media(max-width:1319.98px) { #histCli { display:none !important; } }
+
+.hc-tit {
+  font-size:11px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--gray); margin-bottom:2px;
+}
+.hc-cli {
+  font-size:15px; font-weight:800; color:var(--navy); margin-bottom:12px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.hc-sub {
+  font-size:10.5px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--gray); margin:0 0 7px;
+}
+.hc-habs { display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+.hc-hab {
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:baseline;
+  background:var(--lblue); border-radius:9px; padding:6px 9px;
+}
+.hc-hab .hh-q { font-weight:800; color:var(--navy); white-space:nowrap; font-size:12.5px; }
+.hc-hab .hh-n { font-size:12.5px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hc-hab .hh-v { font-size:10px; color:var(--gray); font-weight:700; white-space:nowrap; }
+.hc-ped { border-top:1px solid var(--lgray); padding-top:9px; margin-top:9px; }
+.hc-ped:first-of-type { border-top:none; padding-top:0; margin-top:0; }
+.hc-fecha { font-size:11px; font-weight:800; color:var(--gray); margin-bottom:5px; }
+.hc-items { display:grid; grid-template-columns:auto minmax(0,1fr); column-gap:8px; row-gap:3px; align-items:baseline; }
+.hc-q { font-weight:800; color:var(--navy); text-align:right; white-space:nowrap; font-size:12px; }
+.hc-n { font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hc-vacio { font-size:12.5px; color:var(--gray); }
 @keyframes popIn { from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1} }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1069,6 +1169,9 @@ body.modo-ruta .pedidos-top .ac-wrap { display:none; }
         </div>
         <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
       </div>
+      <!-- Historial del cliente: solo PC ancha. Aparece al elegir el
+           cliente y se va solo al borrarlo. -->
+      <aside id="histCli" class="pc-only" hidden></aside>
     </div>
 
     <!-- PEDIDOS -->
@@ -1382,7 +1485,11 @@ Object.defineProperty(google.script, 'run', { get: makeRunner });
 let state = { products:[], pedidos:[], papelera:[], clientes:[], today:'', who:'—', pin:'' };
 let activeTab = 'cargar';
 let showArchived = false;
+let showProgramados = false;
 let searchQuery = '';
+// '' = texto escrito a mano (coincidencia parcial).
+// 'cliente' | 'producto' = salió de la lista desplegable (coincidencia exacta).
+let searchTipo = '';
 
 // ═══════════════════════════════════════════════════════════════
 //  Init
@@ -1675,6 +1782,7 @@ function resetCargarForm() {
   // el selector y una fila sin nada sería ruido. En PC sí, para poder
   // empezar a escribir directo.
   if (!esMobile()) addItemRow('cargar');
+  actualizarHistCliente();
 }
 
 // Fecha de entrega, dirección y observación viven plegadas para no
@@ -2290,15 +2398,41 @@ function fmtDiaMes(d) {
   return s ? s.slice(0, 5) : '';
 }
 
+// ── FECHA DE ENTREGA: QUÉ TAN URGENTE ES ──
+// El problema no era que la fecha no estuviera, era que todas se veían
+// iguales: una entrega para dentro de una semana pesaba a la vista lo
+// mismo que una para hoy. Devuelve null cuando no aplica (sin fecha
+// estipulada, o el pedido ya se cerró: ahí manda la fecha de despacho).
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function nombreDiaCorto(f) {
+  const dt = new Date(String(f || '') + 'T00:00:00');
+  return isNaN(dt) ? '' : DIAS_CORTOS[dt.getDay()];
+}
+
+function entregaInfo(p) {
+  if (!p.fechaEntrega || p.estado !== 'Pendiente') return null;
+  const d = -daysSince(p.fechaEntrega);   // >0 falta, 0 es hoy, <0 se pasó
+  if (d < 0)   return { d, cls:'ent-vencida', corto:'⚠ ' + fmtDiaMes(p.fechaEntrega),
+                        txt:'⚠ Se pasó — era ' + fmtDiaMes(p.fechaEntrega) };
+  if (d === 0) return { d, cls:'ent-hoy', corto:'📌 HOY', txt:'📌 ENTREGA HOY' };
+  if (d === 1) return { d, cls:'ent-maniana', corto:'📅 Mañana', txt:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega) };
+  return { d, cls:'ent-futura',
+           corto:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega),
+           txt:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) + ' · en ' + d + ' días' };
+}
+
 // Bloque de un pedido (celular). La diferencia con la tarjeta de PC no es
 // decorativa: acá el cliente tiene todo el ancho para él, en vez de
 // pelearlo con las etiquetas de estado y cortarse con puntitos.
 function pedidoBloqueHtml(p) {
   const sinConfirmar = p.enCola || p.errorCola;
 
-  let fecha = '';
+  const ent = entregaInfo(p);
+  let fecha = '', fechaCls = '';
   if (p.estado === 'Despachado' && p.fechaDespacho) fecha = '✓ ' + fmtDiaMes(p.fechaDespacho);
   else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = '✕ ' + fmtDiaMes(p.fechaDespacho);
+  else if (ent) { fecha = ent.corto; fechaCls = ' ' + ent.cls; }
   else if (p.fechaEntrega) fecha = '📅 ' + fmtDiaMes(p.fechaEntrega);
 
   // Se muestran hasta 4 productos: uno más que en la tarjeta, porque acá
@@ -2321,7 +2455,7 @@ function pedidoBloqueHtml(p) {
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
         ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
-        ${fecha ? `<span class="blk-fecha">${fecha}</span>` : ''}
+        ${fecha ? `<span class="blk-fecha${fechaCls}">${fecha}</span>` : ''}
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
       ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
@@ -2354,9 +2488,11 @@ function pedidoCardHtml(p) {
 
   // Las fechas que sí importan van como chip, no perdidas en una lista
   // separada por puntos.
+  const entCard = entregaInfo(p);
   let chip = '';
   if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">✓ ${fmtDiaMes(p.fechaDespacho)}</span>`;
   else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  else if (entCard) chip = `<span class="oc-chip ${entCard.cls}">${entCard.txt}</span>`;
   else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
   // Armando el recorrido la tarjeta se elige en vez de abrir el detalle,
@@ -2397,6 +2533,24 @@ function listWithDividers(list) {
   let html = '', last = null;
   list.forEach(p => {
     if (p.fecha !== last) { html += dayDividerHtml(p.fecha); last = p.fecha; }
+    html += pedidoCardHtml(p);
+  });
+  return html;
+}
+
+// Los programados se agrupan por la fecha de ENTREGA y de la más cercana
+// a la más lejana: acá la pregunta es "qué tengo que preparar para el
+// jueves", no "cuándo lo cargué".
+function listaPorEntrega(list) {
+  const ord = list.slice().sort((a, b) =>
+    String(a.fechaEntrega).localeCompare(String(b.fechaEntrega)));
+  let html = '', last = null;
+  ord.forEach(p => {
+    if (p.fechaEntrega !== last) {
+      last = p.fechaEntrega;
+      const d = -daysSince(p.fechaEntrega);
+      html += `<div class="prog-dia">${nombreDiaCorto(p.fechaEntrega)} ${fmtDate(p.fechaEntrega)} · en ${d} día${d !== 1 ? 's' : ''}</div>`;
+    }
     html += pedidoCardHtml(p);
   });
   return html;
@@ -2444,17 +2598,18 @@ function resumenDelDiaHtml() {
 }
 
 function renderPedidos() {
-  // Filtro del buscador (solo visible en PC): por cliente o producto.
-  let pedidos = state.pedidos;
+  const pedidos = pedidosFiltrados();
   const q = searchQuery.trim().toLowerCase();
-  if (q) {
-    pedidos = pedidos.filter(p =>
-      String(p.cliente || '').toLowerCase().includes(q) ||
-      (p.items || []).some(it => String(it.prod || '').toLowerCase().includes(q)));
-  }
-  const pend = [], desp = [], canc = [], arch = [];
+
+  const pend = [], prog = [], desp = [], canc = [], arch = [];
   pedidos.forEach(p => {
-    if (p.estado === 'Pendiente') pend.push(p);
+    if (p.estado === 'Pendiente') {
+      // Programado = para pasado mañana o más adelante. Lo de mañana NO se
+      // pliega: mañana ya hay que prepararlo. Con el buscador activo no se
+      // pliega nada, porque ahí se está buscando algo puntual.
+      const ent = entregaInfo(p);
+      ((ent && ent.d >= 2 && !q) ? prog : pend).push(p);
+    }
     else if (p.estado === 'Cancelado') {
       (daysSince(p.fechaDespacho || p.fecha) > 7 ? arch : canc).push(p);
     }
@@ -2463,30 +2618,48 @@ function renderPedidos() {
     }
   });
 
-  let html = resumenDelDiaHtml();
-  html += pedidoSectionHtml('Pendiente', pend);
-  html += pedidoSectionHtml('Despachado', desp);
-  html += pedidoSectionHtml('Cancelado', canc);
+  let cuerpo = resumenDelDiaHtml();
+  cuerpo += pedidoSectionHtml('Pendiente', pend);
+
+  if (prog.length) {
+    // Armando el recorrido se abre solo y no se puede plegar: un pedido
+    // pendiente escondido ahí adentro sería una parada que no se puede
+    // elegir y de la que nadie se entera.
+    const abierto = showProgramados || rutaActiva;
+    cuerpo += `<div class="prog-notice" onclick="toggleProgramados()">
+      <span>📆 <span class="pn-n">${prog.length}</span> pedido${prog.length !== 1 ? 's' : ''} programado${prog.length !== 1 ? 's' : ''} para más adelante</span>
+      <span>${abierto ? '▲' : '▼'}</span>
+    </div>`;
+    if (abierto) {
+      cuerpo += `<div class="order-list prog-list">${listaPorEntrega(prog)}</div>`;
+    }
+  }
+
+  cuerpo += pedidoSectionHtml('Despachado', desp);
+  cuerpo += pedidoSectionHtml('Cancelado', canc);
 
   if (arch.length) {
-    html += `<div class="archived-notice" onclick="toggleArchived()">
+    cuerpo += `<div class="archived-notice" onclick="toggleArchived()">
       <span>✓ ${arch.length} pedido${arch.length !== 1 ? 's' : ''} de hace más de 1 semana</span>
       <span>${showArchived ? '▲' : '▼'}</span>
     </div>`;
     if (showArchived) {
-      html += `<div class="order-list archived-list">${listWithDividers(arch)}</div>`;
+      cuerpo += `<div class="order-list archived-list">${listWithDividers(arch)}</div>`;
     }
   }
 
-  if (!html) {
-    html = q
+  if (!cuerpo) {
+    cuerpo = q
       ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
       : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde ➕ Cargar Pedido</p>';
   }
-  document.getElementById('pedidosList').innerHTML = html;
+  document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
   updatePapeleraFab();
   renderComprometido();
   actualizarBarraRuta();
+  // Los datos del historial salen de state.pedidos: si la lista cambio,
+  // el panel del costado tiene que cambiar con ella.
+  actualizarHistCliente();
 }
 
 // ── Stock comprometido (panel violeta, solo PC): total por producto de
@@ -2584,10 +2757,53 @@ function toggleArchived() {
   renderPedidos();
 }
 
+function toggleProgramados() {
+  showProgramados = !showProgramados;
+  renderPedidos();
+}
+
 // ── Buscador de pedidos (solo PC): cliente o producto, con lista
 // desplegable que aparece solo al escribir ──
+// El buscador tiene dos modos y la diferencia importa:
+//  - Texto escrito a mano: coincidencia PARCIAL, para ir tanteando.
+//  - Elegido de la lista desplegable: coincidencia EXACTA y sobre ESE
+//    campo solamente. Sin esto, elegir al cliente "Eber" seguía trayendo
+//    pedidos de cualquier otro cliente que hubiera pedido "jamón cocido
+//    wEBER", porque "eber" está adentro de "weber". Buscar un cliente y
+//    que aparezcan pedidos ajenos no es un detalle: es leer mal el pedido.
+function pedidosFiltrados() {
+  const q = searchQuery.trim().toLowerCase();
+  if (!q) return state.pedidos;
+  const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+  if (searchTipo === 'cliente') {
+    return state.pedidos.filter(p => norm(p.cliente) === q);
+  }
+  if (searchTipo === 'producto') {
+    return state.pedidos.filter(p => (p.items || []).some(it => norm(it.prod) === q));
+  }
+  return state.pedidos.filter(p =>
+    norm(p.cliente).includes(q) ||
+    (p.items || []).some(it => norm(it.prod).includes(q)));
+}
+
+// Cartel que deja claro que el filtro es exacto y sobre qué campo: si no,
+// la diferencia entre buscar al cliente Eber y buscar la palabra "eber"
+// queda invisible y parece un error de la app.
+function filtroTagHtml() {
+  if (!searchTipo || !searchQuery.trim()) return '';
+  const ico = searchTipo === 'cliente' ? '👤' : '📦';
+  const lbl = searchTipo === 'cliente' ? 'cliente' : 'producto';
+  return `<div class="filtro-tag">
+    <span>${ico} Solo ${lbl}: <b>${esc(searchQuery.trim())}</b></span>
+    <button class="ft-x" onclick="clearSearch()" title="Quitar el filtro">✕</button>
+  </div>`;
+}
+
 function onSearchInput(input) {
   searchQuery = input.value;
+  // Escribir a mano vuelve al modo parcial: el filtro exacto solo lo fija
+  // elegir de la lista.
+  searchTipo = '';
   document.getElementById('searchClear').style.display = input.value ? 'flex' : 'none';
   renderPedidos();
   const q = input.value.trim().toLowerCase();
@@ -2598,16 +2814,17 @@ function onSearchInput(input) {
   if (!cli.length && !prods.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
   const hl = s => esc(s).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>');
   list.innerHTML =
-    cli.map(c => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(c.n)}')">${hl(c.n)}<div class="ac-cat">👤 Cliente</div></div>`).join('') +
-    prods.map(p => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(p.n)}')">${hl(p.n)}<div class="ac-cat">📦 Producto</div></div>`).join('');
+    cli.map(c => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(c.n)}','cliente')">${hl(c.n)}<div class="ac-cat">👤 Cliente</div></div>`).join('') +
+    prods.map(p => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(p.n)}','producto')">${hl(p.n)}<div class="ac-cat">📦 Producto</div></div>`).join('');
   list.classList.add('open');
 }
 
-function selectSearch(e, name) {
+function selectSearch(e, name, tipo) {
   e.preventDefault();
   const input = document.getElementById('searchInput');
   input.value = name;
   searchQuery = name;
+  searchTipo = tipo || '';
   document.getElementById('searchAcList').classList.remove('open');
   document.getElementById('searchClear').style.display = 'flex';
   renderPedidos();
@@ -2617,6 +2834,7 @@ function clearSearch() {
   const input = document.getElementById('searchInput');
   input.value = '';
   searchQuery = '';
+  searchTipo = '';
   document.getElementById('searchAcList').classList.remove('open');
   document.getElementById('searchClear').style.display = 'none';
   renderPedidos();
@@ -2958,10 +3176,118 @@ function closeAc(input) {
   input.nextElementSibling.classList.remove('open');
 }
 
+// ════════════════════════════════════════════════════════════════
+//  HISTORIAL DEL CLIENTE (solo PC ancha)
+// ════════════════════════════════════════════════════════════════
+// Al elegir el cliente aparece al costado qué suele llevar y sus últimos
+// pedidos. La pregunta real al cargar no es "cuánto pidió el 12" sino
+// "qué marca lleva este". Dirección y observaciones se omiten a
+// propósito: la dirección ya se autocompleta sola en el formulario, y la
+// observación era de aquel pedido, no de este.
+const HIST_MAX_PEDIDOS = 3;
+const HIST_MAX_HABITUALES = 4;
+
+function pedidosDelCliente(nombre) {
+  const n = String(nombre || '').trim().toLowerCase();
+  if (!n) return [];
+  // Coincidencia EXACTA, igual que el buscador: "Eber" no puede traer los
+  // pedidos de otro cliente. state.pedidos ya viene del más nuevo al más
+  // viejo. Los cancelados quedan afuera: no dicen lo que el cliente lleva.
+  return (state.pedidos || []).filter(p =>
+    String(p.cliente || '').trim().toLowerCase() === n && p.estado !== 'Cancelado');
+}
+
+// Cuenta en cuántos pedidos DISTINTOS aparece cada producto, y con qué
+// cantidad más repetida. Contar apariciones y no unidades es a propósito:
+// un solo pedido grande y aislado no tiene que tapar lo que el cliente
+// lleva siempre.
+function habitualesDe(peds) {
+  const mapa = new Map();
+  peds.forEach(p => {
+    const vistos = new Set();
+    (p.items || []).forEach(it => {
+      const nom = String(it.prod || '').trim();
+      const k = nom.toLowerCase();
+      if (!nom || vistos.has(k)) return;
+      vistos.add(k);
+      const e = mapa.get(k) || { prod: nom, veces: 0, qtys: new Map() };
+      e.veces++;
+      const q = itemLabelCorto(it);
+      e.qtys.set(q, (e.qtys.get(q) || 0) + 1);
+      mapa.set(k, e);
+    });
+  });
+  return Array.from(mapa.values())
+    .sort((a, b) => b.veces - a.veces)
+    .slice(0, HIST_MAX_HABITUALES)
+    .map(e => ({
+      prod: e.prod,
+      veces: e.veces,
+      qty: Array.from(e.qtys.entries()).sort((a, b) => b[1] - a[1])[0][0]
+    }));
+}
+
+function haceCuantoTxt(f) {
+  const d = daysSince(f);
+  if (d <= 0) return ' · hoy';
+  if (d === 1) return ' · ayer';
+  return ' · hace ' + d + ' días';
+}
+
+function actualizarHistCliente() {
+  const box = document.getElementById('histCli');
+  if (!box) return;
+  const inp = document.getElementById('n_cliente');
+  const nombre = inp ? inp.value.trim() : '';
+  const peds = pedidosDelCliente(nombre);
+
+  // Sin cliente escrito, o cliente nuevo sin historial: el panel no
+  // aparece. Un cuadro vacío al costado sería ruido, no información.
+  if (!nombre || !peds.length) { box.hidden = true; box.innerHTML = ''; return; }
+
+  const habs = habitualesDe(peds);
+  const ultimos = peds.slice(0, HIST_MAX_PEDIDOS);
+  // El nombre del titulo sale del pedido, no de lo tipeado: si escribio
+  // "eBeR" a medio camino, el panel igual muestra "Eber" como esta guardado.
+  const titulo = String(peds[0].cliente || nombre).trim();
+
+  // Con un solo pedido, "suele llevar" sería mentira: es la lista del
+  // único pedido repetida abajo. En ese caso solo van los últimos pedidos.
+  const mostrarHabituales = peds.length >= 2 && habs.length > 0;
+
+  box.innerHTML =
+    '<div class="hc-tit">Historial · ' + peds.length + ' pedido' + (peds.length !== 1 ? 's' : '') + '</div>' +
+    '<div class="hc-cli">' + esc(titulo) + '</div>' +
+    (mostrarHabituales
+      ? '<div class="hc-sub">Suele llevar</div><div class="hc-habs">' +
+        habs.map(h =>
+          '<div class="hc-hab">' +
+            '<span class="hh-q">' + h.qty + '</span>' +
+            '<span class="hh-n">' + esc(h.prod) + '</span>' +
+            '<span class="hh-v">' + h.veces + '×</span>' +
+          '</div>').join('') +
+        '</div>'
+      : '') +
+    '<div class="hc-sub">Últimos pedidos</div>' +
+    ultimos.map(p =>
+      '<div class="hc-ped">' +
+        '<div class="hc-fecha">' + fmtDate(p.fecha) + haceCuantoTxt(p.fecha) + '</div>' +
+        '<div class="hc-items">' +
+          (p.items || []).map(it =>
+            '<span class="hc-q">' + itemLabelCorto(it) + '</span>' +
+            '<span class="hc-n">' + esc(it.prod) + '</span>').join('') +
+        '</div>' +
+      '</div>').join('');
+  box.hidden = false;
+}
+
 // Autocomplete de clientes (hoja "Clientes"; permite también nombres
 // nuevos). Al elegir o coincidir un cliente guardado, se autocompleta la
 // dirección, que queda editable.
 function onClienteInput(input) {
+  // El historial es solo del formulario de carga; el mismo autocomplete lo
+  // usa también el modal de editar, y ahí no corresponde.
+  if (input.id === 'n_cliente') actualizarHistCliente();
   const q = input.value.trim().toLowerCase();
   const list = input.nextElementSibling;
   // Si se borra el cliente, la dirección que se había rellenado sola
@@ -2995,6 +3321,7 @@ function selectCliente(e, name) {
   const c = (state.clientes || []).find(x => x.n.toLowerCase() === name.toLowerCase());
   const dirInput = document.getElementById(input.dataset.dir || '');
   if (c && c.d && dirInput) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
+  if (input.id === 'n_cliente') actualizarHistCliente();
 }
 
 function closeClienteAcLater(input) {
@@ -3006,6 +3333,7 @@ function closeClienteAcLater(input) {
     const c = (state.clientes || []).find(x => x.n.toLowerCase() === input.value.trim().toLowerCase());
     const dirInput = document.getElementById(input.dataset.dir || '');
     if (c && c.d && dirInput && !dirInput.value.trim()) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
+    if (input.id === 'n_cliente') actualizarHistCliente();
   }, 200);
 }
 
