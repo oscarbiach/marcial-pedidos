@@ -205,6 +205,33 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   padding:9px 12px; margin-bottom:10px;
 }
 .filtro-tag b { font-weight:800; }
+
+/* ── BARRA DE FRESCURA ──
+   Dice de cuándo son los datos que se están mirando. Existe porque el
+   modo de fallar más peligroso de esta app no es el ruidoso: es quedarse
+   callada mostrando la lista de ayer. Mientras está al día casi no se
+   ve; cuando se pone vieja, molesta a propósito. */
+.frescura {
+  display:none; align-items:center; gap:8px;
+  font-size:12px; font-weight:600; color:var(--gray);
+  padding:6px 12px; margin-bottom:8px; border-radius:10px;
+  background:transparent;
+}
+.frescura.ver { display:flex; }
+.frescura.vieja {
+  background:var(--lorng); color:var(--orange); font-weight:700;
+  border:1px solid #F5D9A0; padding:10px 12px; font-size:13px;
+}
+.frescura.rota {
+  background:var(--lred); color:var(--red); font-weight:800;
+  border:1px solid #F1B0A8; padding:10px 12px; font-size:13px;
+}
+.frescura .fr-btn {
+  margin-left:auto; border:1.5px solid currentColor; background:transparent;
+  color:inherit; font:inherit; font-weight:800; cursor:pointer;
+  border-radius:8px; padding:5px 12px; white-space:nowrap;
+}
+.frescura .fr-btn:hover { opacity:.75; }
 .filtro-tag .ft-x {
   margin-left:auto; border:none; background:transparent; cursor:pointer;
   color:var(--navy); font-size:15px; line-height:1; padding:2px 4px;
@@ -954,7 +981,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 /* Armando el recorrido no se puede recargar ni buscar: la lista tiene que
    quedarse quieta mientras se eligen las paradas. */
 body.modo-ruta #refreshBtn, body.modo-ruta #rutaBtn,
-body.modo-ruta .pedidos-top .ac-wrap { display:none; }
+body.modo-ruta .pedidos-top .ac-wrap,
+/* La barra de frescura tambien se va: trae su propio boton Actualizar y
+   dejarlo a mano ahi seria ofrecer justo lo unico que no hay que hacer
+   en el medio de elegir las paradas. */
+body.modo-ruta #frescura { display:none !important; }
 
 /* Sin tildar no se atenúan: como ahora arrancan todos en cero, atenuarlos
    dejaría la pantalla entera apagada y parecería que no hay nada. */
@@ -1192,6 +1223,7 @@ body.modo-ruta .pedidos-top .ac-wrap { display:none; }
           </button>
           <button class="ruta-btn" id="rutaBtn" onclick="entrarModoRuta()">🚚 Armar recorrido</button>
         </div>
+        <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
           🗑<span class="pap-count" id="papeleraCount"></span>
@@ -1402,9 +1434,25 @@ const API_ACTIONS = [
 // Una llamada sola, sin reintentos. Distingue los tres modos de fallar,
 // porque tratarlos igual llevaba a mostrar "no se pudo conectar" cuando en
 // realidad el servidor había contestado (mal).
+// Tope de espera. SIN esto, una conexión que abre y nunca contesta (wifi
+// malo, portal cautivo, Apps Script saturado) dejaba la promesa colgada
+// para siempre: no se llamaba ni al handler de éxito ni al de error. Y
+// como el candado 'refrescando' solo se suelta adentro de esos handlers,
+// la app quedaba con el candado puesto y NO VOLVÍA A ACTUALIZARSE NUNCA
+// MÁS hasta recargar la página. En una PC que queda abierta todo el día
+// eso es quedarse clavado en los pedidos de ayer.
+// 30 s: tiene que ser MUY holgado respecto de lo que tarda una
+// respuesta normal (~2 s), porque cortar una lenta pero buena seria
+// cambiar un problema por otro. Acá solo se busca cazar la conexión
+// que quedo abierta y no va a contestar nunca.
+const TIMEOUT_MS = 30000;
+
 function apiIntento(action, args) {
+  const ctrl = new AbortController();
+  const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   return fetch(API_URL, {
     method: 'POST',
+    signal: ctrl.signal,
     // text/plain a propósito: con application/json el navegador manda
     // primero un preflight OPTIONS que Apps Script no sabe contestar y
     // la llamada falla entera. Así la trata como "simple request".
@@ -1412,6 +1460,7 @@ function apiIntento(action, args) {
     body: JSON.stringify({ pin: state.pin || '', action: action, args: args || [] })
   })
     .then(r => r.text().then(txt => {
+      clearTimeout(reloj);
       if (!r.ok) {
         const e = new Error('El servidor respondió ' + r.status);
         e.transitorio = r.status >= 500 || r.status === 429;
@@ -1430,11 +1479,14 @@ function apiIntento(action, args) {
       }
     }))
     .catch(err => {
+      clearTimeout(reloj);
       if (err && err.transitorio !== undefined) throw err;
-      // Acá cae la red: sin señal, DNS, timeout del sistema.
-      const e = new Error(navigator.onLine
-        ? 'No se pudo conectar con el servidor'
-        : 'Sin conexión a internet');
+      // Acá cae la red: sin señal, DNS, y ahora también nuestro propio
+      // tope de espera (AbortError), que antes no existía.
+      const corto = err && err.name === 'AbortError';
+      const e = new Error(corto
+        ? 'El servidor tardó demasiado en contestar'
+        : (navigator.onLine ? 'No se pudo conectar con el servidor' : 'Sin conexión a internet'));
       e.transitorio = true;
       throw e;
     });
@@ -1627,6 +1679,8 @@ function openWhoModal() {
 // solo un refresco de fondo: no se toca el formulario ni se tapa nada.
 function loadData(silencioso) {
   if (silencioso) marcarRefrescando(true);
+  refrescando = true;
+  refrescoDesde = Date.now();
   google.script.run
     .withSuccessHandler(data => {
       // El PIN sirvió: recién ahora se guarda para no volver a pedirlo.
@@ -1637,7 +1691,10 @@ function loadData(silencioso) {
       btn.disabled = false; btn.textContent = 'Entrar';
       state = { ...state, ...data };
       ultimoRefresh = Date.now();
+      fallosSeguidos = 0;
+      refrescando = false;
       marcarRefrescando(false);
+      pintarFrescura();
       // Los pedidos de la cola no están en la respuesta del servidor
       // todavía: se vuelven a poner arriba para que no desaparezcan de la
       // pantalla justo después de cargarlos.
@@ -1650,7 +1707,10 @@ function loadData(silencioso) {
       const msg = String((err && err.message) || err);
       const btn = document.getElementById('pinBtn');
       btn.disabled = false; btn.textContent = 'Entrar';
+      refrescando = false;
+      fallosSeguidos++;
       marcarRefrescando(false);
+      pintarFrescura();
       // Refresco de fondo fallido (sin señal): la app sigue con lo que ya
       // tenía en pantalla, no se le rompe nada al usuario.
       if (silencioso) { toast('Sin conexión: mostrando lo último guardado'); return; }
@@ -1673,21 +1733,34 @@ function loadData(silencioso) {
     .getAppData();
 }
 
-// Momento del último refresco, para no pedir datos de gusto.
+// Momento del último refresco CON ÉXITO, para no pedir datos de gusto y
+// para poder avisar cuando lo que se ve ya está viejo.
 let ultimoRefresh = 0;
 // Candado: volver a la app, enfocarla y entrar a Pedidos podían disparar
 // tres pedidos de datos encimados. Apps Script limita las ejecuciones
 // simultáneas, y de ahí salían las respuestas raras.
 let refrescando = false;
+// Cuándo se puso el candado. Es el seguro del seguro: si por lo que sea
+// una llamada no termina nunca, a los 45 segundos se considera perdida y
+// se deja pasar la siguiente. Antes el candado quedaba puesto para
+// siempre y la lista no se actualizaba más hasta recargar la página.
+let refrescoDesde = 0;
+// Fallos seguidos: uno solo no dice nada, varios seguidos sí.
+let fallosSeguidos = 0;
+
+function candadoTrabado() {
+  return refrescando && (Date.now() - refrescoDesde) < 45000;
+}
 
 // manual = lo pidió el usuario con el botón Actualizar. En ese caso el
 // botón se bloquea, gira y avisa al terminar; los refrescos automáticos
 // pasan callados.
 function reload(manual) {
-  // Si ya hay uno en curso se descarta, salvo que lo haya pedido la
-  // persona con el botón: ahí conviene esperar al que está andando.
-  if (refrescando) return;
+  // Si ya hay uno en curso se descarta. Pero solo si de verdad está en
+  // curso: pasados 45 segundos se da por perdido y se deja pasar otro.
+  if (candadoTrabado()) return;
   refrescando = true;
+  refrescoDesde = Date.now();
   const btn = document.getElementById('refreshBtn');
   if (manual && btn) {
     btn.disabled = true;
@@ -1708,9 +1781,11 @@ function reload(manual) {
       guardarCache(data);
       state = { ...state, ...data };
       ultimoRefresh = Date.now();
+      fallosSeguidos = 0;
       marcarRefrescando(false);
       restaurarCola();
       renderPedidos();
+      pintarFrescura();
       soltarBoton();
       refrescando = false;
       if (manual) {
@@ -1726,13 +1801,105 @@ function reload(manual) {
       marcarRefrescando(false);
       soltarBoton();
       refrescando = false;
+      fallosSeguidos++;
       // Un refresco fallido no le cambia el día a nadie: los pedidos que se
-      // ven siguen siendo los últimos que llegaron. Solo se avisa si lo
-      // pidió la persona; los automáticos se callan.
+      // ven siguen siendo los últimos que llegaron. Los automáticos no
+      // interrumpen con un cartel, pero SÍ quedan anotados en la barra de
+      // frescura: callarse del todo era lo que dejaba a alguien laburando
+      // sobre la lista de ayer sin enterarse.
+      pintarFrescura();
       if (manual) toast('Error al actualizar: ' + e.message);
     })
     .getAppData();
 }
+
+// ════════════════════════════════════════════════════════════
+//  FRESCURA DE LOS DATOS Y REFRESCO AUTOMÁTICO
+// ════════════════════════════════════════════════════════════
+// Antes de esto, lo único que refrescaba la lista era ENTRAR a la
+// pestaña Pedidos. Quien dejaba la computadora parada en Pedidos —que es
+// exactamente lo que se hace todo el día— no se enteraba nunca de los
+// pedidos que cargaban los demás, y no tenía forma de darse cuenta.
+
+// Cada cuánto se busca solo. 90 segundos y solo con la pestaña a la
+// vista: Apps Script tiene cuota compartida entre los cuatro, así que
+// preguntar cada 10 segundos desde cuatro máquinas la quemaría al pedo.
+const REFRESCO_MS = 90000;
+// A partir de acá lo que se ve ya no es confiable y se avisa fuerte.
+const VIEJO_MS = 5 * 60 * 1000;
+
+function minutosDesdeRefresh() {
+  if (!ultimoRefresh) return null;
+  return Math.floor((Date.now() - ultimoRefresh) / 60000);
+}
+
+function textoMinutos(m) {
+  if (m < 1) return 'menos de un minuto';
+  if (m === 1) return '1 minuto';
+  if (m < 60) return m + ' minutos';
+  const h = Math.floor(m / 60);
+  return h === 1 ? 'más de una hora' : 'más de ' + h + ' horas';
+}
+
+function pintarFrescura() {
+  const el = document.getElementById('frescura');
+  if (!el) return;
+  // Sin PIN todavía no hay datos de los que hablar.
+  if (!state.pin) { el.className = 'frescura'; el.innerHTML = ''; return; }
+
+  const min = minutosDesdeRefresh();
+  const boton = '<button class="fr-btn" onclick="reload(true)">Actualizar ahora</button>';
+
+  // Varios fallos seguidos: no es un tropezón, hay algo cortado.
+  if (fallosSeguidos >= 2) {
+    el.className = 'frescura ver rota';
+    el.innerHTML = '<span>⚠ No se puede conectar con el servidor. Lo que ves ' +
+      (min === null ? 'puede estar viejo' : 'es de hace ' + textoMinutos(min)) +
+      '.</span>' + boton;
+    return;
+  }
+  if (min === null) { el.className = 'frescura'; el.innerHTML = ''; return; }
+
+  if (Date.now() - ultimoRefresh >= VIEJO_MS) {
+    el.className = 'frescura ver vieja';
+    el.innerHTML = '<span>⚠ Estos pedidos son de hace ' + textoMinutos(min) +
+      '. Puede haber cargado alguien más.</span>' + boton;
+    return;
+  }
+  el.className = 'frescura ver';
+  el.innerHTML = '<span>✓ Actualizado ' + (min < 1 ? 'recién' : 'hace ' + textoMinutos(min)) + '</span>';
+}
+
+// El cartel se repinta solo aunque no pase nada: si nadie toca nada, el
+// tiempo corre igual y "hace 2 minutos" tiene que volverse "hace 8".
+setInterval(pintarFrescura, 20000);
+
+// ¿Conviene pedir datos ahora? Solo con la app a la vista: refrescar una
+// pestaña que nadie mira es gastar cuota de todos al pedo.
+function refrescarSiCorresponde(minEdadMs) {
+  if (!state.pin) return;
+  if (document.hidden) return;
+  // Armando el recorrido la lista NO se toca: redibujarla en medio de la
+  // seleccion le mueve las tarjetas abajo del dedo a quien esta eligiendo
+  // las paradas, y una parada que ya no este deja un hueco en la ruta.
+  if (rutaActiva) return;
+  if (Date.now() - ultimoRefresh < (minEdadMs || REFRESCO_MS)) return;
+  reload();
+}
+
+// Timer de fondo, solo mirando la pestaña de Pedidos.
+setInterval(() => {
+  if (activeTab === 'pedidos') refrescarSiCorresponde(REFRESCO_MS);
+}, 30000);
+
+// Volver a la app después de un rato (otra pestaña, bloquear la pantalla,
+// volver del almuerzo) es el momento en que es más probable haberse
+// perdido algo. Acá alcanza con 20 segundos de antigüedad.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refrescarSiCorresponde(20000);
+});
+window.addEventListener('focus', () => refrescarSiCorresponde(20000));
+window.addEventListener('online', () => refrescarSiCorresponde(20000));
 
 // ═══════════════════════════════════════════════════════════════
 //  TABS
@@ -1749,8 +1916,9 @@ function setTab(tab) {
   // Al entrar a Pedidos, si lo que hay en pantalla ya tiene más de medio
   // minuto se busca lo último sin que haya que tocar nada: es justo el
   // momento en que puede haber cargado algo otro vendedor.
-  if (tab === 'pedidos' && state.pin && Date.now() - ultimoRefresh > 45000) {
-    reload();
+  if (tab === 'pedidos') {
+    pintarFrescura();
+    if (state.pin && Date.now() - ultimoRefresh > 45000) reload();
   }
   window.scrollTo(0, 0);
 }
