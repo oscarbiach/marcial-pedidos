@@ -1089,6 +1089,10 @@ body.modo-ruta #frescura { display:none !important; }
 }
 @media(max-width:767.98px) { #installBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
 </style>
+<!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
+     de un CDN: una dependencia menos al abrir, y la app arranca sin senal
+     (que es justo cuando se carga un pedido en el campo). Version fija. -->
+<script src="./vendor/supabase-2.45.4.min.js"></script>
 </head>
 <body>
 
@@ -1114,6 +1118,7 @@ body.modo-ruta #frescura { display:none !important; }
       <button class="menu-btn" onclick="pickWho('Oscar')">👤 Oscar</button>
       <button class="menu-btn" onclick="pickWho('Thiago')">👤 Thiago</button>
       <button class="menu-btn" onclick="pickWho('Mateo')">👤 Mateo</button>
+      <button class="menu-btn" onclick="pickWho('Charly')">👤 Charly</button>
       <!-- Siempre disponible: sirve para instalársela a un compañero
            aunque el cartel de abajo ya no esté apareciendo. -->
       <button class="link-instalar" onclick="abrirInstalar()">📲 Cómo instalar la app</button>
@@ -1407,111 +1412,259 @@ body.modo-ruta #frescura { display:none !important; }
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-//  API — habla con Apps Script por fetch
+//  API — habla con Supabase
 //
-//  Esta versión de la app NO vive dentro de Apps Script, así que no
-//  existe google.script.run. En su lugar se arma acá un objeto con la
-//  misma forma, que por dentro llama a la API con fetch. Gracias a eso
-//  el resto del código quedó igual que siempre:
-//
+//  Antes esta capa hablaba con Apps Script. Ahora habla con Supabase,
+//  pero SOLO cambió lo de adentro: el resto de la app sigue escribiendo
 //    google.script.run.withSuccessHandler(fn).savePedido(data)
-//
-//  sigue escribiéndose exactamente así en los ~30 lugares donde se usa.
+//  en los mismos ~7 lugares de siempre. Las seis funciones devuelven
+//  EXACTAMENTE la misma forma que devolvía el servidor viejo, así que
+//  ningún handler de arriba se tocó.
 // ═══════════════════════════════════════════════════════════════
-const API_URL = 'https://script.google.com/macros/s/AKfycbxMpb8ojlpRzeTf6NaABTrxmgtI4aGz5YaZ-K-nhy-JLTSb_QCUyxpsHW4Ftug1tHvd/exec';
+const SB_URL  = 'https://deavfpkpibvwccycszku.supabase.co';
+// Clave pública POR DISEÑO: no da acceso a nada sola, todo lo cuida el
+// RLS del lado del servidor (ver los .sql de la carpeta supabase/).
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlYXZmcGtwaWJ2d2NjeWNzemt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNDg4MzYsImV4cCI6MjEwNDYyNDgzNn0.P2gSD0lehOwY9t9fDwLb5BKPIGz89QyYwHWQiyfGjNI';
+const LOGIN_URL = SB_URL + '/functions/v1/login';
 
-// Las mismas funciones que la lista blanca de Code.js. Si alguna falta
-// acá, llamarla tira "no es una función" en vez de fallar en el servidor.
-const API_ACTIONS = [
-  'getAppData', 'savePedido', 'updatePedido', 'updatePedidoStatus',
-  'deletePedido', 'restorePedido', 'setPedidoTurno',
-  'saveMuestra', 'updateMuestra', 'setMuestraEstado', 'deleteMuestra',
-  'saveVisita', 'updateVisita', 'setVisitaEstado', 'deleteVisita',
-  'savePedidoFijo', 'updatePedidoFijo', 'setPedidoFijoEstado', 'deletePedidoFijo',
-  'setFeteoHecho', 'setFeteoOrden'
-];
+const sb = window.supabase.createClient(SB_URL, SB_ANON, {
+  auth: {
+    persistSession: true,      // la sesión sobrevive a cerrar la app
+    autoRefreshToken: true,    // y se renueva sola: SIN esto, al cabo de
+                               // una hora el token vencía y todo empezaba
+                               // a dar "no se puede conectar" de la nada.
+    storageKey: 'dm_sb_sesion'
+  }
+});
 
-// Una llamada sola, sin reintentos. Distingue los tres modos de fallar,
-// porque tratarlos igual llevaba a mostrar "no se pudo conectar" cuando en
-// realidad el servidor había contestado (mal).
-// Tope de espera. SIN esto, una conexión que abre y nunca contesta (wifi
-// malo, portal cautivo, Apps Script saturado) dejaba la promesa colgada
-// para siempre: no se llamaba ni al handler de éxito ni al de error. Y
-// como el candado 'refrescando' solo se suelta adentro de esos handlers,
-// la app quedaba con el candado puesto y NO VOLVÍA A ACTUALIZARSE NUNCA
-// MÁS hasta recargar la página. En una PC que queda abierta todo el día
-// eso es quedarse clavado en los pedidos de ayer.
-// 30 s: tiene que ser MUY holgado respecto de lo que tarda una
-// respuesta normal (~2 s), porque cortar una lenta pero buena seria
-// cambiar un problema por otro. Acá solo se busca cazar la conexión
-// que quedo abierta y no va a contestar nunca.
-const TIMEOUT_MS = 30000;
-
-function apiIntento(action, args) {
-  const ctrl = new AbortController();
-  const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  return fetch(API_URL, {
-    method: 'POST',
-    signal: ctrl.signal,
-    // text/plain a propósito: con application/json el navegador manda
-    // primero un preflight OPTIONS que Apps Script no sabe contestar y
-    // la llamada falla entera. Así la trata como "simple request".
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ pin: state.pin || '', action: action, args: args || [] })
-  })
-    .then(r => r.text().then(txt => {
-      clearTimeout(reloj);
-      if (!r.ok) {
-        const e = new Error('El servidor respondió ' + r.status);
-        e.transitorio = r.status >= 500 || r.status === 429;
-        throw e;
-      }
-      try {
-        return JSON.parse(txt);
-      } catch (x) {
-        // Apps Script devuelve una página HTML cuando se pasa de cuota,
-        // cuando hay demasiadas llamadas juntas o mientras se está
-        // desplegando. Antes esto se reportaba como falta de conexión.
-        const e = new Error('El servidor devolvió una respuesta inesperada');
-        e.transitorio = true;
-        e.detalle = txt.slice(0, 120);
-        throw e;
-      }
-    }))
-    .catch(err => {
-      clearTimeout(reloj);
-      if (err && err.transitorio !== undefined) throw err;
-      // Acá cae la red: sin señal, DNS, y ahora también nuestro propio
-      // tope de espera (AbortError), que antes no existía.
-      const corto = err && err.name === 'AbortError';
-      const e = new Error(corto
-        ? 'El servidor tardó demasiado en contestar'
-        : (navigator.onLine ? 'No se pudo conectar con el servidor' : 'Sin conexión a internet'));
-      e.transitorio = true;
-      throw e;
-    });
+// today lo daba el servidor con la hora de Argentina. Acá se calcula en
+// el aparato, pero clavado a esa zona: si alguien tiene el teléfono en
+// otra hora, la fecha del pedido igual es la de acá.
+function hoyArg() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    .format(new Date());   // en-CA da 'YYYY-MM-DD'
 }
 
-// Con reintentos: un tropiezo pasajero no tiene por qué llegarle al
-// usuario. Reintentar es seguro incluso al guardar, porque el id lo pone
-// el celular y el servidor no escribe dos veces el mismo pedido.
+// Un pedido de la base → la forma que ya usa toda la app.
+function mapPedido_(row) {
+  const items = (row.pedido_items || [])
+    .slice().sort((a, b) => (a.orden || 0) - (b.orden || 0))
+    .map(it => {
+      const o = { prod: it.producto, qty: Number(it.cantidad) };
+      if (it.fetear) o.fetear = true;
+      if (it.sin_cuero) o.sinCuero = true;
+      if (it.en_unidades) o.unidades = true;
+      return o;
+    });
+  return {
+    id: row.id, fecha: row.fecha, quien: row.quien || '', cliente: row.cliente,
+    fechaEntrega: row.fecha_entrega || '', direccion: row.direccion || '',
+    items: items, notas: row.notas || '',
+    estado: row.estado || 'Pendiente', fechaDespacho: row.fecha_despacho || '',
+    retiro: !!row.retiro
+  };
+}
+
+// Clasifica un error de Supabase. Tres tipos que se tratan distinto:
+//  - auth: la sesión venció → hay que volver a entrar con el PIN.
+//  - transitorio: red, timeout, 5xx, saturación → reintentar solo.
+//  - definitivo: lo demás (validación, etc.) → mostrarlo y parar.
+function sbError_(error) {
+  const msg  = String((error && (error.message || error.error_description || error.msg)) || 'Error');
+  const code = (error && (error.code || error.status)) || '';
+  const e = new Error(msg);
+  e.auth = /jwt|token|unauthor|not authenticated|PGRST301|PGRST302/i.test(msg)
+        || code === 401 || code === '401';
+  e.transitorio = !e.auth && (
+        /fetch|network|timeout|failed to fetch|load failed|networkerror/i.test(msg)
+        || code === 429 || code === '429'
+        || (typeof code === 'number' && code >= 500));
+  return e;
+}
+
+// ── Las seis funciones ────────────────────────────────────────────
+async function sbGetAppData() {
+  const [prod, cli, ped] = await Promise.all([
+    sb.from('productos').select('nombre,unidad,unidades_por_caja,se_fetea').eq('activo', true),
+    sb.from('clientes').select('nombre,direccion'),
+    sb.from('pedidos')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(producto,cantidad,fetear,sin_cuero,en_unidades,orden)')
+      .order('fecha', { ascending: false })
+  ]);
+  if (prod.error) throw sbError_(prod.error);
+  if (cli.error)  throw sbError_(cli.error);
+  if (ped.error)  throw sbError_(ped.error);
+
+  const products = (prod.data || []).map(p => ({
+    n: p.nombre, u: (p.unidad || '').toLowerCase(),
+    box: Number(p.unidades_por_caja) > 0 ? Number(p.unidades_por_caja) : 0,
+    fetea: !!p.se_fetea, pop: 0
+  })).sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
+
+  const clientes = (cli.data || []).map(c => ({ n: c.nombre, d: c.direccion || '' }))
+    .sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
+
+  const pedidos = [], papelera = [];
+  (ped.data || []).forEach(row => {
+    const p = mapPedido_(row);
+    if (row.eliminado_en) {
+      p.fechaElim = String(row.eliminado_en).slice(0, 10);
+      p.elimPor = row.eliminado_por || '';
+      papelera.push(p);
+    } else {
+      pedidos.push(p);
+    }
+  });
+
+  // Popularidad para ordenar el picker: en cuántos pedidos aparece cada
+  // producto. Antes la calculaba el servidor; acá sale gratis de los
+  // pedidos que ya trajimos, sin un viaje más.
+  const pop = {};
+  pedidos.concat(papelera).forEach(p => {
+    const vistos = {};
+    p.items.forEach(it => {
+      const k = (it.prod || '').toLowerCase();
+      if (!k || vistos[k]) return;
+      vistos[k] = true;
+      pop[k] = (pop[k] || 0) + 1;
+    });
+  });
+  products.forEach(pr => { pr.pop = pop[pr.n.toLowerCase()] || 0; });
+
+  return { products, clientes, pedidos, papelera, today: hoyArg() };
+}
+
+async function sbSavePedido(data) {
+  const id = String((data && data.id) || '').trim()
+    || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  const p = {
+    id: id, fecha: hoyArg(), quien: data.quien || '', cliente: data.cliente,
+    fecha_entrega: data.fechaEntrega || '', direccion: data.direccion || '',
+    notas: data.notas || '', retiro: !!data.retiro
+  };
+  const its = (data.items || []).map((it, i) => ({
+    producto: it.prod, cantidad: Number(it.qty) || 1,
+    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, orden: i
+  }));
+  const { data: res, error } = await sb.rpc('guardar_pedido', { p: p, its: its });
+  if (error) throw sbError_(error);
+  return res;   // {ok:true, id} o {ok:true, id, yaEstaba:true}
+}
+
+async function sbUpdatePedido(data) {
+  const p = {
+    id: data.id, cliente: data.cliente, fecha_entrega: data.fechaEntrega || '',
+    direccion: data.direccion || '', notas: data.notas || '', retiro: !!data.retiro
+  };
+  const its = (data.items || []).map((it, i) => ({
+    producto: it.prod, cantidad: Number(it.qty) || 1,
+    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, orden: i
+  }));
+  const { data: res, error } = await sb.rpc('editar_pedido', { p: p, its: its });
+  if (error) throw sbError_(error);
+  return res;   // {ok:true} o {ok:false, error}
+}
+
+async function sbUpdateEstado(id, estado) {
+  const patch = {
+    estado: estado,
+    fecha_despacho: (estado === 'Despachado' || estado === 'Cancelado') ? hoyArg() : null
+  };
+  const { data, error } = await sb.from('pedidos').update(patch).eq('id', id).select('id');
+  if (error) throw sbError_(error);
+  if (!data || !data.length) return { ok: false, error: 'Pedido no encontrado' };
+  return { ok: true };
+}
+
+async function sbDeletePedido(id, quien) {
+  const patch = { eliminado_en: new Date().toISOString(), eliminado_por: quien || null };
+  const { data, error } = await sb.from('pedidos').update(patch)
+    .eq('id', id).is('eliminado_en', null).select('id');
+  if (error) throw sbError_(error);
+  if (!data || !data.length) return { ok: false, error: 'Pedido no encontrado' };
+  return { ok: true };
+}
+
+async function sbRestorePedido(id) {
+  const patch = { eliminado_en: null, eliminado_por: null };
+  const { data, error } = await sb.from('pedidos').update(patch).eq('id', id).select('id');
+  if (error) throw sbError_(error);
+  if (!data || !data.length) return { ok: false, error: 'Pedido no encontrado' };
+  return { ok: true };
+}
+
+function sbAccion(action, args) {
+  switch (action) {
+    case 'getAppData':         return sbGetAppData();
+    case 'savePedido':         return sbSavePedido(args[0]);
+    case 'updatePedido':       return sbUpdatePedido(args[0]);
+    case 'updatePedidoStatus': return sbUpdateEstado(args[0], args[1]);
+    case 'deletePedido':       return sbDeletePedido(args[0], args[1]);
+    case 'restorePedido':      return sbRestorePedido(args[0]);
+    default: {
+      const e = new Error('Acción desconocida: ' + action);
+      e.transitorio = false;
+      return Promise.reject(e);
+    }
+  }
+}
+
+// ── Login: cambia el PIN por una sesión ───────────────────────────
+async function entrarConPin(pin) {
+  let resp;
+  try {
+    resp = await fetch(LOGIN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SB_ANON,
+        'Authorization': 'Bearer ' + SB_ANON
+      },
+      body: JSON.stringify({ pin: pin })
+    });
+  } catch (e) {
+    const err = new Error('No se pudo conectar'); err.transitorio = true; throw err;
+  }
+  let cuerpo = {};
+  try { cuerpo = await resp.json(); } catch (e) { /* respuesta rara */ }
+
+  if (resp.status === 200 && cuerpo.access_token) {
+    await sb.auth.setSession({
+      access_token: cuerpo.access_token,
+      refresh_token: cuerpo.refresh_token
+    });
+    return { ok: true, quien: cuerpo.quien };
+  }
+  if (resp.status === 429) return { ok: false, error: cuerpo.error || 'Demasiados intentos. Esperá unos minutos.' };
+  if (resp.status === 401) return { ok: false, error: 'PIN incorrecto' };
+  return { ok: false, error: cuerpo.error || ('Error del servidor (' + resp.status + ')') };
+}
+
+async function volverALogin_(mensaje) {
+  try { await sb.auth.signOut(); } catch (e) { /* da igual */ }
+  state.pin = '';
+  document.getElementById('loading').style.display = 'none';
+  showWhoPick();
+  document.getElementById('whoModal').classList.add('open');
+  if (mensaje) toast(mensaje);
+}
+
+// ── Reintentos ────────────────────────────────────────────────────
+// Un tropiezo pasajero no tiene por qué llegarle al usuario. Reintentar
+// es seguro incluso al guardar: el id lo pone el celular y guardar_pedido
+// no escribe dos veces el mismo pedido.
 function apiCall(action, args, onOk, onErr, intento) {
   const n = intento || 0;
-  apiIntento(action, args)
-    .then(res => {
-      if (res && res.ok) { if (onOk) onOk(res.data); }
-      else if (onErr) onErr(new Error((res && res.error) || 'Error desconocido'));
-    })
+  sbAccion(action, args || [])
+    .then(data => { if (onOk) onOk(data); })
     .catch(err => {
-      if (err.transitorio && n < 2) {
+      if (err && err.transitorio && n < 2) {
         setTimeout(() => apiCall(action, args, onOk, onErr, n + 1), n === 0 ? 1200 : 4000);
         return;
       }
-      if (err.detalle) console.warn('Respuesta del servidor:', err.detalle);
       if (onErr) onErr(err);
     });
 }
-
 // Cada vez que se lee google.script.run se devuelve un objeto nuevo, para
 // que los handlers de una llamada no se mezclen con los de otra.
 function makeRunner() {
@@ -1520,12 +1673,15 @@ function makeRunner() {
     withSuccessHandler: function (fn) { h.ok = fn; return runner; },
     withFailureHandler: function (fn) { h.err = fn; return runner; }
   };
-  API_ACTIONS.forEach(action => {
-    runner[action] = function () {
-      apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
-      return runner;
-    };
-  });
+  // Las seis funciones que existen del lado de Supabase. Cualquier otra
+  // llamada cae en sbAccion y devuelve "Acción desconocida".
+  ['getAppData','savePedido','updatePedido','updatePedidoStatus','deletePedido','restorePedido']
+    .forEach(action => {
+      runner[action] = function () {
+        apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
+        return runner;
+      };
+    });
   return runner;
 }
 const google = { script: {} };
@@ -1550,7 +1706,7 @@ let searchTipo = '';
 // arriba, y cargarle el PIN en la propiedad PINS del script (Apps Script →
 // Configuración del proyecto → Propiedades). Sin el PIN, el nombre
 // aparece pero no lo deja entrar.
-const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago', 'Mateo'];
+const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago', 'Mateo', 'Charly'];
 
 // Nombre elegido en el primer paso, todavía sin PIN confirmado.
 let pendingWho = '';
@@ -1584,20 +1740,22 @@ function marcarRefrescando(on) {
   document.getElementById('refreshDot').classList.toggle('on', on);
 }
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   // La prueba de variantes de carga terminó: quedó el selector a pantalla
   // completa en celular. Se limpia lo que hubiera quedado guardado.
   localStorage.removeItem('dm_modo');
   // Las pruebas de vista terminaron: en celular quedaron los bloques.
   localStorage.removeItem('dm_vista');
 
+  // Ahora manda la sesión de Supabase, no un PIN guardado: si hay sesión
+  // válida (la guarda supabase-js y se renueva sola), se entra derecho.
+  let sesion = null;
+  try { const r = await sb.auth.getSession(); sesion = r.data.session; } catch (e) { /* sin sesión */ }
   const savedWho = localStorage.getItem('dm_ped_who');
-  const savedPin = localStorage.getItem('dm_ped_pin');
-  // Solo entra derecho si guardó las dos cosas: el PIN se guarda recién
-  // cuando el servidor lo aceptó, así que si está, sirve.
-  if (savedWho && VENDEDORES.includes(savedWho) && savedPin) {
+
+  if (sesion && savedWho && VENDEDORES.includes(savedWho)) {
     state.who = savedWho;
-    state.pin = savedPin;
+    state.pin = 'ok';   // sentinela de "sesión iniciada" (el PIN real no se guarda)
     pendingWho = savedWho;
     document.getElementById('whoBtn').textContent = '👤 ' + savedWho;
     // Si hay copia guardada, la app abre YA con los últimos datos y se
@@ -1650,21 +1808,36 @@ function soloNumerosPin(inp) {
   document.getElementById('pinError').textContent = '';
 }
 
-function submitPin() {
+async function submitPin() {
   const pin = document.getElementById('pinInput').value.trim();
   if (!pin) { document.getElementById('pinError').textContent = 'Escribí tu PIN'; return; }
   // Se corta acá y no en el servidor: con menos de 4 no puede ser válido,
-  // así que no tiene sentido esperar el viaje de ida y vuelta para
-  // enterarse.
+  // así que no tiene sentido esperar el viaje de ida y vuelta para enterarse.
   if (pin.length !== 4) {
     document.getElementById('pinError').textContent = 'El PIN son 4 números';
     return;
   }
   const btn = document.getElementById('pinBtn');
   btn.disabled = true; btn.textContent = 'Verificando…';
-  state.who = pendingWho;
-  state.pin = pin;
-  document.getElementById('whoBtn').textContent = '👤 ' + pendingWho;
+  document.getElementById('pinError').textContent = '';
+
+  // El PIN se cambia por una sesión en el servidor. Quién es lo dice la
+  // respuesta (por el PIN), no el nombre que se tocó: si Thiago elige
+  // "Oscar" y pone SU PIN, entra como Thiago y el pedido queda a su nombre.
+  let r;
+  try { r = await entrarConPin(pin); }
+  catch (e) { r = { ok: false, error: 'No se pudo conectar. Probá de nuevo.' }; }
+
+  if (!r.ok) {
+    btn.disabled = false; btn.textContent = 'Entrar';
+    document.getElementById('pinError').textContent = r.error;
+    return;
+  }
+
+  state.who = r.quien || pendingWho;
+  state.pin = 'ok';   // sentinela de "sesión iniciada"
+  localStorage.setItem('dm_ped_who', state.who);
+  document.getElementById('whoBtn').textContent = '👤 ' + state.who;
   document.getElementById('whoModal').classList.remove('open');
   document.getElementById('loading').style.display = 'flex';
   loadData();
@@ -1683,12 +1856,9 @@ function loadData(silencioso) {
   refrescoDesde = Date.now();
   google.script.run
     .withSuccessHandler(data => {
-      // El PIN sirvió: recién ahora se guarda para no volver a pedirlo.
-      localStorage.setItem('dm_ped_who', state.who);
-      localStorage.setItem('dm_ped_pin', state.pin);
       guardarCache(data);
       const btn = document.getElementById('pinBtn');
-      btn.disabled = false; btn.textContent = 'Entrar';
+      if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
       state = { ...state, ...data };
       ultimoRefresh = Date.now();
       fallosSeguidos = 0;
@@ -1706,7 +1876,7 @@ function loadData(silencioso) {
     .withFailureHandler(err => {
       const msg = String((err && err.message) || err);
       const btn = document.getElementById('pinBtn');
-      btn.disabled = false; btn.textContent = 'Entrar';
+      if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
       refrescando = false;
       fallosSeguidos++;
       marcarRefrescando(false);
@@ -1714,17 +1884,9 @@ function loadData(silencioso) {
       // Refresco de fondo fallido (sin señal): la app sigue con lo que ya
       // tenía en pantalla, no se le rompe nada al usuario.
       if (silencioso) { toast('Sin conexión: mostrando lo último guardado'); return; }
-      // PIN rechazado: se descarta el guardado y se vuelve a pedir, en vez
-      // de dejar la pantalla de error sin salida.
-      if (/PIN/i.test(msg)) {
-        state.pin = '';
-        localStorage.removeItem('dm_ped_pin');
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('whoModal').classList.add('open');
-        pickWho(pendingWho || state.who || 'Joaquin');
-        document.getElementById('pinError').textContent = 'PIN incorrecto. Probá de nuevo.';
-        return;
-      }
+      // Sesión vencida (pasó muchísimo sin entrar): de vuelta a elegir
+      // usuario y poner el PIN. No se pierde nada de lo que había.
+      if (err && err.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
       document.getElementById('loading').style.display = 'flex';
       document.getElementById('loading').innerHTML =
         `<p style="color:#fff;text-align:center;padding:0 20px">Error al cargar: ${esc(msg)}</p>

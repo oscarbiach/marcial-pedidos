@@ -2,16 +2,18 @@
 //
 // Guarda en el celular el "esqueleto" de la app (el HTML y los iconos)
 // para que abra al instante y siga abriendo sin señal. Los datos NO se
-// cachean acá: los pedidos viajan por POST a Apps Script y esas llamadas
-// pasan de largo, así nadie ve una lista vieja creyendo que es la de hoy.
+// cachean acá: los pedidos viajan a Supabase (POST, y GET a otro dominio)
+// y esas llamadas pasan de largo, así nadie ve una lista vieja creyendo
+// que es la de hoy.
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v24';
+const CACHE = 'dm-pedidos-v25';
 
 const SHELL = [
   './',
   './index.html',
+  './vendor/supabase-2.45.4.min.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
