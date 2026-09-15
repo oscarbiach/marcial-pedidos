@@ -1584,7 +1584,11 @@ function sbError_(error) {
 // ── Las seis funciones ────────────────────────────────────────────
 async function sbGetAppData() {
   const [prod, cli, ped, hoj] = await Promise.all([
-    sb.from('productos').select('nombre,unidad,unidades_por_caja,se_fetea').eq('activo', true),
+    // Vienen TODOS, prendidos y apagados. Un producto apagado no se puede
+    // cargar más (se filtra en el buscador de carga), pero los pedidos
+    // viejos que lo tienen necesitan su ficha para seguir mostrando
+    // "2 cajas (= 96 un.)" en vez de un "× 2" pelado.
+    sb.from('productos').select('nombre,unidad,unidades_por_caja,se_fetea,activo'),
     sb.from('clientes').select('nombre,direccion'),
     sb.from('pedidos')
       .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(producto,cantidad,fetear,sin_cuero,en_unidades,orden)')
@@ -1610,7 +1614,7 @@ async function sbGetAppData() {
   const products = (prod.data || []).map(p => ({
     n: p.nombre, u: (p.unidad || '').toLowerCase(),
     box: Number(p.unidades_por_caja) > 0 ? Number(p.unidades_por_caja) : 0,
-    fetea: !!p.se_fetea, pop: 0
+    fetea: !!p.se_fetea, act: p.activo !== false, pop: 0
   })).sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
 
   const clientes = (cli.data || []).map(c => ({ n: c.nombre, d: c.direccion || '' }))
@@ -2402,7 +2406,9 @@ function pickerAtras() {
 // que se busca esté casi siempre arriba.
 function pickerFiltrar() {
   const q = document.getElementById('pkBuscar').value.trim().toLowerCase();
-  let lista = (state.products || []).slice();
+  // Solo los que se siguen vendiendo: un producto que se dio de baja no
+  // tiene que poder entrar en un pedido nuevo.
+  let lista = (state.products || []).filter(p => p.act !== false);
   if (q) lista = lista.filter(p => p.n.toLowerCase().includes(q));
   lista.sort((a, b) => (b.pop || 0) - (a.pop || 0)
     || a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
@@ -3552,6 +3558,9 @@ function onSearchInput(input) {
   const list = document.getElementById('searchAcList');
   if (!q) { list.classList.remove('open'); list.innerHTML = ''; return; }
   const cli = (state.clientes || []).filter(c => c.n.toLowerCase().includes(q)).slice(0, 15);
+  // Acá SÍ entran los productos dados de baja, a propósito: esto busca
+  // dentro de los pedidos que ya existen, y buscar "papas butler" para ver
+  // quién las pedía es justamente para lo que sirve.
   const prods = (state.products || []).filter(p => p.n.toLowerCase().includes(q)).slice(0, 15);
   if (!cli.length && !prods.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
   const hl = s => esc(s).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>');
@@ -3888,6 +3897,7 @@ function onAcInput(input) {
   // Los más pedidos (columna "Veces pedido (30 días)" de la hoja
   // Productos) salen primero en la lista.
   const filtered = (state.products || [])
+    .filter(p => p.act !== false)
     .filter(p => p.n.toLowerCase().includes(q) || (p.c||'').toLowerCase().includes(q))
     .sort((a, b) => (b.pop || 0) - (a.pop || 0)
       || a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }))
