@@ -967,65 +967,134 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 #refreshDot.on { display:block; }
 
-/* ══ RECORRIDO DE REPARTO ══ */
-.ruta-btn {
-  flex-shrink:0; border:1.5px solid #117A65; background:#E8F8F5; color:#0E6655;
-  border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700;
+/* ══ HOJA DE REPARTO ══
+   Verde petróleo en toda la sección: es el color que ya tenía el
+   recorrido, y lo distingue de un vistazo del navy de Cargar y del
+   violeta del comprometido. */
+.rep-head h4 { font-size:15px; margin-bottom:6px; color:var(--text); }
+.rep-head p { font-size:13px; color:var(--gray); line-height:1.5; }
+.rep-nota { font-size:12px !important; color:#0E6655 !important; margin-top:10px;
+  background:#E8F8F5; border-radius:9px; padding:8px 10px; }
+.rep-acciones { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.rep-mini {
+  border:1.5px solid #117A65; background:#fff; color:#0E6655;
+  border-radius:9px; padding:8px 12px; font-size:13px; font-weight:700;
   cursor:pointer; white-space:nowrap;
 }
-.ruta-btn:hover { background:#D1F2EB; }
-@media(max-width:767.98px) {
-  .pedidos-top { flex-wrap:wrap; }
-  .ruta-btn { width:100%; padding:13px; font-size:15px; }
-}
-/* Armando el recorrido no se puede recargar ni buscar: la lista tiene que
-   quedarse quieta mientras se eligen las paradas. */
-body.modo-ruta #refreshBtn, body.modo-ruta #rutaBtn,
-body.modo-ruta .pedidos-top .ac-wrap,
-/* La barra de frescura tambien se va: trae su propio boton Actualizar y
-   dejarlo a mano ahi seria ofrecer justo lo unico que no hay que hacer
-   en el medio de elegir las paradas. */
-body.modo-ruta #frescura { display:none !important; }
+.rep-mini:hover { background:#E8F8F5; }
 
-/* Sin tildar no se atenúan: como ahora arrancan todos en cero, atenuarlos
-   dejaría la pantalla entera apagada y parecería que no hay nada. */
-.pedido-blk.seleccionable, .order-card.seleccionable { cursor:pointer; }
-.pedido-blk.elegido, .order-card.elegido {
-  box-shadow:0 0 0 2.5px #117A65, 0 2px 10px rgba(0,0,0,.10);
+/* Separador de grupo: "Atrasados", "Hoy", "Jue 18/09"… La lista se ordena
+   por cuándo hay que entregar, que es el orden en que se decide qué sube
+   a la camioneta. */
+.rep-grupo {
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-size:12.5px; font-weight:800; color:var(--gray);
+  padding:14px 4px 7px; text-transform:uppercase; letter-spacing:.4px;
 }
-/* El círculo lleva el número de parada, así que tiene que entrar el 10
-   sin apretarse: por eso 26px y no el tamaño de un tilde. */
-.blk-check, .oc-check {
-  width:26px; height:26px; border-radius:50%; flex-shrink:0;
+.rep-grupo.urgente { color:var(--red); }
+.rep-grupo.hoy     { color:var(--green); }
+.rep-grupo .rg-n { font-weight:700; opacity:.7; text-transform:none; letter-spacing:0; }
+
+/* Un pedido en la lista de la hoja. Es más chato que la tarjeta de
+   Pedidos a propósito: acá no se abre el detalle, se tilda y se sigue. */
+.rep-item {
+  display:flex; gap:11px; align-items:flex-start;
+  background:#fff; border-radius:11px; padding:11px 13px; margin-bottom:8px;
+  box-shadow:var(--shadow); cursor:pointer; border-left:4px solid transparent;
+}
+.rep-item:hover { background:#FAFDFC; }
+.rep-item.elegido {
+  border-left-color:#117A65;
+  box-shadow:0 0 0 2px #117A65, 0 2px 10px rgba(0,0,0,.10);
+}
+/* El círculo lleva el NÚMERO de parada, no un tilde: ese número es el
+   orden del recorrido. Tiene que entrar el 10 sin apretarse. */
+.rep-check {
+  width:27px; height:27px; border-radius:50%; flex-shrink:0; margin-top:1px;
   border:2px solid #117A65; background:#fff; color:#117A65;
-  font-size:13px; font-weight:900; line-height:22px; text-align:center;
+  font-size:13px; font-weight:900; line-height:23px; text-align:center;
 }
-.pedido-blk.elegido .blk-check, .order-card.elegido .oc-check {
-  background:#117A65; color:#fff;
-}
+.rep-item.elegido .rep-check { background:#117A65; color:#fff; }
+.rep-cuerpo { flex:1; min-width:0; }
+.rep-top { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-bottom:3px; }
+.rep-cli { font-size:15px; font-weight:800; line-height:1.25; }
+.rep-quien { font-size:11px; font-weight:700; color:var(--gray);
+  background:var(--lgray); border-radius:9px; padding:2px 8px; white-space:nowrap; }
+.rep-dir { font-size:12.5px; color:var(--blue); margin-top:3px; }
+.rep-dir.falta { color:var(--orange); font-weight:600; }
+.rep-prods { font-size:12.5px; color:var(--gray); line-height:1.55; margin-top:5px; }
+.rep-prods b { color:var(--text); font-weight:700; }
+.rep-obs { font-size:12px; color:var(--orange); margin-top:4px; }
 
-#rutaBar {
+/* Total a cargar: el resumen que se sube a la camioneta. */
+.rep-total { background:#0E6655; color:#fff; border-radius:var(--radius);
+  padding:16px; margin-top:16px; box-shadow:var(--shadow); }
+.rep-total h4 { font-size:15px; margin-bottom:3px; }
+.rep-total .rt-sub { font-size:12px; opacity:.75; margin-bottom:12px; }
+.rt-fila {
+  display:flex; gap:10px; align-items:baseline;
+  padding:7px 0; border-top:1px solid rgba(255,255,255,.15);
+}
+.rt-fila:first-of-type { border-top:none; }
+.rt-q { flex-shrink:0; font-weight:800; font-size:14px; min-width:88px; }
+.rt-n { flex:1; min-width:0; font-size:13.5px; opacity:.95; }
+.rt-tag { font-size:10.5px; font-weight:800; background:rgba(255,255,255,.22);
+  border-radius:8px; padding:2px 7px; margin-left:5px; white-space:nowrap; }
+
+/* Hojas ya guardadas: el registro de lo que se cargó otros días. */
+.rep-hist { margin-top:18px; }
+.rep-hist h4 { font-size:13px; color:var(--gray); margin-bottom:8px; }
+.rep-hoja {
+  display:flex; gap:10px; align-items:center;
+  background:#fff; border-radius:11px; padding:11px 13px; margin-bottom:7px;
+  box-shadow:var(--shadow);
+}
+.rep-hoja .rh-txt { flex:1; min-width:0; }
+.rep-hoja b { font-size:13.5px; display:block; }
+.rep-hoja span { font-size:12px; color:var(--gray); display:block;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rep-hoja button {
+  flex-shrink:0; border:1.5px solid var(--border); background:#fff;
+  border-radius:9px; padding:7px 11px; font-size:12.5px; font-weight:700; cursor:pointer;
+}
+.rep-hoja button:hover { border-color:#117A65; color:#0E6655; }
+
+/* Barra fija de abajo */
+#repBar {
   display:none; position:fixed; left:12px; right:12px; z-index:260;
   bottom:calc(12px + env(safe-area-inset-bottom));
-  background:#0E6655; color:#fff; border-radius:14px; padding:12px 14px;
+  background:#0E6655; color:#fff; border-radius:14px; padding:11px 13px;
   box-shadow:0 4px 18px rgba(0,0,0,.3);
-  align-items:center; gap:11px;
+  align-items:center; gap:10px; flex-wrap:wrap;
 }
-#rutaBar.show { display:flex; }
-#rutaBar.lleno { background:var(--red); }
-#rutaInfo { flex:1; min-width:0; font-size:13px; line-height:1.4; }
-#rutaInfo b { display:block; font-size:14.5px; }
-#rutaInfo span { opacity:.8; font-size:12px; }
-.ruta-abrir {
-  flex-shrink:0; background:#fff; color:#0E6655; border:none; border-radius:10px;
-  padding:9px 13px; font-size:13px; font-weight:800; cursor:pointer; line-height:1.2;
+#repBar.show { display:flex; }
+#repInfo { flex:1; min-width:120px; font-size:13px; line-height:1.4; }
+#repInfo b { display:block; font-size:14.5px; }
+#repInfo span { opacity:.8; font-size:12px; }
+.rep-bar-btns { display:flex; gap:7px; flex-shrink:0; }
+.rep-copiar, .rep-maps {
+  border:none; border-radius:10px; padding:10px 13px;
+  font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap; line-height:1.2;
 }
-.ruta-abrir:disabled { opacity:.4; cursor:default; }
-.ruta-x {
+.rep-copiar { background:#fff; color:#0E6655; }
+.rep-maps { background:rgba(255,255,255,.2); color:#fff; }
+.rep-maps:disabled, .rep-copiar:disabled { opacity:.4; cursor:default; }
+.rep-x {
   flex-shrink:0; width:32px; height:32px; border-radius:50%; border:none;
   background:rgba(255,255,255,.2); color:#fff; font-size:14px; cursor:pointer;
 }
-@media(max-width:767.98px) { #rutaBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+/* En el celular la barra va en dos renglones: el resumen arriba a todo lo
+   ancho y los botones abajo, grandes. Dejándolos en la misma fila el ✕ se
+   caía solo a un tercer renglón y quedaba medio dedo de barra vacía. */
+@media(max-width:767.98px) {
+  /* No puede quedar arriba de la navegación de abajo. */
+  #repBar { bottom:calc(78px + env(safe-area-inset-bottom)); }
+  #repInfo { flex-basis:100%; }
+  .rep-bar-btns { flex:1; }
+  .rep-copiar, .rep-maps { flex:1; padding:12px 10px; font-size:14px; }
+}
+/* Y la lista necesita aire al final, o la barra tapa el último pedido. */
+#tab-reparto.active { padding-bottom:86px; }
 
 /* ── Dirección tocable: abre el mapa ──
    Se ve como link para que se note que hace algo. En el celular lleva
@@ -1150,10 +1219,10 @@ body.modo-ruta #frescura { display:none !important; }
     <nav id="pcNav" class="pc-only">
       <button data-tab="cargar" class="on" onclick="goTab('cargar')">➕ Cargar</button>
       <button data-tab="pedidos" onclick="goTab('pedidos')">🛒 Pedidos</button>
-      <!-- Reparto, Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
+      <button data-tab="reparto" onclick="goTab('reparto')">🚚 Reparto</button>
+      <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
-      <button data-tab="reparto" onclick="goTab('reparto')">🚚 Reparto</button>
       <button data-tab="feteo" onclick="goTab('feteo')">🔪 Feteo</button>
       <button data-tab="fijos" onclick="goTab('fijos')">📌 Fijos</button>
       <button data-tab="muestras" onclick="goTab('muestras')">🎁 Muestras</button>
@@ -1213,8 +1282,10 @@ body.modo-ruta #frescura { display:none !important; }
     <!-- PEDIDOS -->
     <div id="tab-pedidos" class="tab-panel">
       <div id="pedidosMain">
-        <!-- En PC el botón va al lado del buscador; en celular el buscador
-             no existe, así que queda solo y a lo ancho. -->
+        <!-- El botón "Armar recorrido" vivía acá. Se mudó a la pestaña
+             🚚 Reparto: el recorrido es el último paso de armar la hoja de
+             carga, no algo aparte — se elegían los pedidos dos veces, una
+             para saber qué subir a la camioneta y otra para la ruta. -->
         <div class="form-card pedidos-top" style="padding:12px">
           <div class="ac-wrap pc-only" style="flex:1;min-width:0">
             <input type="text" id="searchInput" placeholder="🔍 Buscar por cliente o producto…"
@@ -1226,7 +1297,6 @@ body.modo-ruta #frescura { display:none !important; }
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
           </button>
-          <button class="ruta-btn" id="rutaBtn" onclick="entrarModoRuta()">🚚 Armar recorrido</button>
         </div>
         <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
@@ -1244,14 +1314,38 @@ body.modo-ruta #frescura { display:none !important; }
       <button id="compFab" class="pc-only" title="Stock comprometido" onclick="toggleCompPanel()">🟣</button>
     </div>
 
+    <!-- HOJA DE REPARTO -->
+    <div id="tab-reparto" class="tab-panel">
+      <div class="form-card rep-head">
+        <h4>🚚 Hoja de reparto</h4>
+        <p>Elegí los pedidos que vas a cargar en la camioneta. Abajo se arma
+           solo el total de cada producto para subir, y lo podés copiar y
+           mandar por WhatsApp.</p>
+        <div class="rep-acciones">
+          <button class="rep-mini" onclick="repElegirHoy()">📌 Los de hoy</button>
+          <button class="rep-mini" onclick="repElegirTodos()">✓ Todos</button>
+          <button class="rep-mini" onclick="repLimpiar()">✕ Limpiar</button>
+        </div>
+        <p class="rep-nota">🛻 Los pedidos marcados como RETIRO no aparecen: los pasa a buscar el cliente.</p>
+      </div>
+
+      <div id="repAviso"></div>
+      <div id="repLista"></div>
+
+      <!-- El total de carga y las hojas ya guardadas. Se dibujan juntos
+           para que el resumen quede pegado a la lista de la que sale. -->
+      <div id="repResumen"></div>
+      <div id="repHistorial"></div>
+    </div>
+
   </main>
 
   <!-- Navegación inferior (solo mobile) -->
   <nav id="bottomNav" class="mobile-only">
     <button data-tab="cargar" class="bn-item on" onclick="goTab('cargar')"><span>➕</span>Cargar</button>
     <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span>🛒</span>Pedidos</button>
-    <!-- Reparto, Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span>🚚</span>Reparto</button>
+    <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
     <button data-tab="muestras" class="bn-item" onclick="goTab('muestras')"><span>🎁</span>Muestras</button>
@@ -1389,12 +1483,17 @@ body.modo-ruta #frescura { display:none !important; }
   </div>
 </div>
 
-<!-- Barra del recorrido: cuántas paradas van elegidas y el botón que
-     abre la ruta entera en Google Maps -->
-<div id="rutaBar">
-  <div id="rutaInfo"></div>
-  <button class="ruta-abrir" id="rutaAbrir" onclick="abrirRuta()">Abrir<br>en Maps</button>
-  <button class="ruta-x" onclick="salirModoRuta()" title="Salir del recorrido">✕</button>
+<!-- Barra de la hoja de reparto: cuántos pedidos van elegidos, el botón
+     que copia (y deja el registro) y el que abre la ruta en Google Maps.
+     Es fija abajo porque la lista de pedidos es larga: el resumen de lo
+     que llevás elegido tiene que verse sin tener que volver arriba. -->
+<div id="repBar">
+  <div id="repInfo"></div>
+  <div class="rep-bar-btns">
+    <button class="rep-maps" id="repMapsBtn" onclick="repAbrirRuta()" title="Abrir el recorrido en Google Maps">🚚 Maps</button>
+    <button class="rep-copiar" id="repCopiarBtn" onclick="repCopiarYGuardar()">📋 Copiar</button>
+  </div>
+  <button class="rep-x" onclick="repLimpiar()" title="Limpiar la selección">✕</button>
 </div>
 
 <!-- Aviso de pedidos todavía sin confirmar en el servidor -->
@@ -1484,16 +1583,29 @@ function sbError_(error) {
 
 // ── Las seis funciones ────────────────────────────────────────────
 async function sbGetAppData() {
-  const [prod, cli, ped] = await Promise.all([
+  const [prod, cli, ped, hoj] = await Promise.all([
     sb.from('productos').select('nombre,unidad,unidades_por_caja,se_fetea').eq('activo', true),
     sb.from('clientes').select('nombre,direccion'),
     sb.from('pedidos')
       .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(producto,cantidad,fetear,sin_cuero,en_unidades,orden)')
-      .order('fecha', { ascending: false })
+      .order('fecha', { ascending: false }),
+    // Las últimas hojas de reparto. Va en el MISMO viaje que todo lo
+    // demás (Promise.all), así que no agrega espera.
+    sb.from('hojas_reparto')
+      .select('id,fecha,quien,cantidad_pedidos,clientes,texto')
+      .order('creado_en', { ascending: false }).limit(20)
   ]);
   if (prod.error) throw sbError_(prod.error);
   if (cli.error)  throw sbError_(cli.error);
   if (ped.error)  throw sbError_(ped.error);
+  // Las hojas NO frenan la carga: si la tabla todavía no existe en la base
+  // (no se corrió el 06-hojas-reparto.sql), la app tiene que abrir igual y
+  // seguir cargando pedidos como siempre.
+  const hojas = (hoj && !hoj.error ? (hoj.data || []) : []).map(h => ({
+    id: h.id, fecha: h.fecha, quien: h.quien || '',
+    cantidad: Number(h.cantidad_pedidos) || 0,
+    clientes: h.clientes || '', texto: h.texto || ''
+  }));
 
   const products = (prod.data || []).map(p => ({
     n: p.nombre, u: (p.unidad || '').toLowerCase(),
@@ -1531,7 +1643,16 @@ async function sbGetAppData() {
   });
   products.forEach(pr => { pr.pop = pop[pr.n.toLowerCase()] || 0; });
 
-  return { products, clientes, pedidos, papelera, today: hoyArg() };
+  return { products, clientes, pedidos, papelera, hojas, today: hoyArg() };
+}
+
+// Guardar una hoja de reparto: la hoja y sus pedidos, todo junto o nada
+// (ver guardar_hoja_reparto en supabase/06-hojas-reparto.sql).
+async function sbGuardarHoja(hoja, items) {
+  const { data, error } = await sb.rpc('guardar_hoja_reparto',
+    { h: hoja, peds: items || [] });
+  if (error) throw sbError_(error);
+  return data;   // {ok:true, id} o {ok:true, id, yaEstaba:true}
 }
 
 async function sbSavePedido(data) {
@@ -1601,6 +1722,7 @@ function sbAccion(action, args) {
     case 'updatePedidoStatus': return sbUpdateEstado(args[0], args[1]);
     case 'deletePedido':       return sbDeletePedido(args[0], args[1]);
     case 'restorePedido':      return sbRestorePedido(args[0]);
+    case 'guardarHoja':        return sbGuardarHoja(args[0], args[1]);
     default: {
       const e = new Error('Acción desconocida: ' + action);
       e.transitorio = false;
@@ -1673,9 +1795,10 @@ function makeRunner() {
     withSuccessHandler: function (fn) { h.ok = fn; return runner; },
     withFailureHandler: function (fn) { h.err = fn; return runner; }
   };
-  // Las seis funciones que existen del lado de Supabase. Cualquier otra
+  // Las funciones que existen del lado de Supabase. Cualquier otra
   // llamada cae en sbAccion y devuelve "Acción desconocida".
-  ['getAppData','savePedido','updatePedido','updatePedidoStatus','deletePedido','restorePedido']
+  ['getAppData','savePedido','updatePedido','updatePedidoStatus','deletePedido',
+   'restorePedido','guardarHoja']
     .forEach(action => {
       runner[action] = function () {
         apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
@@ -1690,7 +1813,7 @@ Object.defineProperty(google.script, 'run', { get: makeRunner });
 // ═══════════════════════════════════════════════════════════════
 //  App State
 // ═══════════════════════════════════════════════════════════════
-let state = { products:[], pedidos:[], papelera:[], clientes:[], today:'', who:'—', pin:'' };
+let state = { products:[], pedidos:[], papelera:[], clientes:[], hojas:[], today:'', who:'—', pin:'' };
 let activeTab = 'cargar';
 let showArchived = false;
 let showProgramados = false;
@@ -2041,10 +2164,11 @@ setInterval(pintarFrescura, 20000);
 function refrescarSiCorresponde(minEdadMs) {
   if (!state.pin) return;
   if (document.hidden) return;
-  // Armando el recorrido la lista NO se toca: redibujarla en medio de la
-  // seleccion le mueve las tarjetas abajo del dedo a quien esta eligiendo
-  // las paradas, y una parada que ya no este deja un hueco en la ruta.
-  if (rutaActiva) return;
+  // Armando la hoja de reparto la lista NO se toca: redibujarla en medio
+  // de la seleccion le mueve los pedidos abajo del dedo a quien esta
+  // eligiendo que sube a la camioneta. Al terminar (o al limpiar) se
+  // vuelve a refrescar solo.
+  if (activeTab === 'reparto' && repSel.length) return;
   if (Date.now() - ultimoRefresh < (minEdadMs || REFRESCO_MS)) return;
   reload();
 }
@@ -2066,7 +2190,7 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto' };
 
 function setTab(tab) {
   activeTab = tab;
@@ -2082,6 +2206,16 @@ function setTab(tab) {
     pintarFrescura();
     if (state.pin && Date.now() - ultimoRefresh > 45000) reload();
   }
+  // Al entrar a Reparto se busca lo último igual que en Pedidos: cargar la
+  // camioneta con una lista vieja es cargarla mal. Si ya hay una selección
+  // armada no se pide nada, para no moverle la lista abajo del dedo.
+  if (tab === 'reparto') {
+    if (state.pin && !repSel.length && Date.now() - ultimoRefresh > 45000) reload();
+    renderReparto();
+  }
+  // La barra verde flotante es de la hoja de reparto: en las otras
+  // pestañas no pinta nada.
+  actualizarBarraRep();
   window.scrollTo(0, 0);
 }
 
@@ -2582,15 +2716,21 @@ function dirLinkHtml(direccion, clase) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RECORRIDO DE REPARTO
+//  HOJA DE REPARTO
 //
-//  Junta varias entregas y las abre como una sola ruta en Google Maps,
-//  saliendo de la distribuidora.
+//  Lo que antes se hacía de memoria o en un papel: antes de salir,
+//  alguien elige qué pedidos se cargan en la camioneta y suma cuánto hay
+//  que subir de cada producto.
 //
-//  Va a Google sí o sí, aunque estemos en iPhone: Apple Maps no acepta
-//  paradas intermedias desde un link, solo un destino. Conviene que el
-//  que reparte tenga la app de Google Maps instalada; si no, se abre la
-//  versión web, que anda pero es más incómoda para navegar.
+//  Acá se elige UNA sola vez y de esa selección salen las tres cosas:
+//    · el TOTAL por producto (qué subir a la camioneta),
+//    · el texto para copiar y mandar (negocio - dirección - pedido),
+//    · el RECORRIDO en Google Maps.
+//  Antes el recorrido vivía en la pestaña Pedidos y había que elegir los
+//  mismos pedidos dos veces, en dos pantallas distintas.
+//
+//  Y cada hoja copiada queda GUARDADA en Supabase: es el registro de qué
+//  se cargó ese día, aunque después los pedidos se editen.
 // ═══════════════════════════════════════════════════════════════
 
 // Punto de partida de la ruta.
@@ -2607,97 +2747,382 @@ function origenRuta() {
 
 // Google Maps admite 9 paradas intermedias más el destino: 10 entregas
 // por ruta. Si se piden más, el link no falla — se comería las de más sin
-// avisar, que es peor.
+// avisar, que es peor. La HOJA sí puede tener más de 10 pedidos: el tope
+// es solo del mapa, no de lo que se sube a la camioneta.
 const MAX_PARADAS = 10;
 
-let rutaActiva = false;
 // Los ids EN EL ORDEN EN QUE SE TOCARON. Es una lista y no un objeto
-// justamente por eso: el orden de las paradas lo decide el que reparte,
-// que conoce el barrio mejor que cualquier orden automático.
-let rutaSel = [];
+// justamente por eso: el orden lo decide el que reparte, que conoce el
+// barrio mejor que cualquier orden automático.
+let repSel = [];
+// Id de la hoja ya guardada para ESTA selección. Si no se tocó nada desde
+// que se guardó, copiar de nuevo no crea otra hoja repetida.
+let repHojaId = '';
 
-function estaElegido(id) { return rutaSel.indexOf(id) !== -1; }
-
-// Una entrega sirve para el recorrido si está pendiente, tiene dirección
-// y no es un retiro (esos los pasa a buscar el cliente).
-function esParadaPosible(p) {
-  return p.estado === 'Pendiente' && !p.retiro &&
-         !!String(p.direccion || '').trim() && !p.enCola && !p.errorCola;
+// Un pedido entra en la hoja si está pendiente y NO es retiro (esos los
+// pasa a buscar el cliente, no se cargan). Los que todavía están en la
+// cola del celular quedan afuera: no tienen id en el servidor todavía, así
+// que no se los puede dejar anotados en la hoja.
+function repElegible(p) {
+  return p.estado === 'Pendiente' && !p.retiro && !p.enCola && !p.errorCola;
 }
 
-// Arranca sin nada tildado: el que reparte va marcando lo que se lleva.
-// Antes venían todas pretildadas y no se leía como una lista para elegir.
-function entrarModoRuta() {
-  rutaActiva = true;
-  rutaSel = [];
-  document.body.classList.add('modo-ruta');
-  renderPedidos();
-  window.scrollTo(0, 0);
+function repPedidosElegibles() {
+  return (state.pedidos || []).filter(repElegible);
 }
 
-function salirModoRuta() {
-  rutaActiva = false;
-  rutaSel = [];
-  document.body.classList.remove('modo-ruta');
-  renderPedidos();
-}
-
-function toggleParada(id) {
-  const i = rutaSel.indexOf(id);
-  if (i === -1) rutaSel.push(id); else rutaSel.splice(i, 1);
-  pintarNumerosParadas();
-  actualizarBarraRuta();
-}
-
-// Al sacar una parada del medio, todas las de atrás cambian de número.
-// Por eso se repintan todas y no solo la que se tocó.
-function pintarNumerosParadas() {
-  document.querySelectorAll('[data-pid]').forEach(el => {
-    const n = rutaSel.indexOf(el.dataset.pid);
-    el.classList.toggle('elegido', n !== -1);
-    const chk = el.querySelector('.blk-check, .oc-check');
-    if (chk) chk.textContent = n === -1 ? '' : String(n + 1);
-  });
-}
-
-// Las paradas en el orden en que se tocaron, no en el que aparecen en la
-// lista: eso es lo que define el recorrido.
-function paradasElegidas() {
-  return rutaSel
+// Los elegidos EN EL ORDEN EN QUE SE TOCARON.
+function repElegidos() {
+  return repSel
     .map(id => (state.pedidos || []).find(p => p.id === id))
-    .filter(p => p && esParadaPosible(p));
+    .filter(p => p && repElegible(p));
 }
 
-function actualizarBarraRuta() {
-  const bar = document.getElementById('rutaBar');
-  if (!bar) return;
-  if (!rutaActiva) { bar.classList.remove('show'); return; }
+function repToggle(id) {
+  const i = repSel.indexOf(id);
+  if (i === -1) repSel.push(id); else repSel.splice(i, 1);
+  repHojaId = '';           // cambió la selección: es otra hoja
+  renderReparto();
+}
 
-  const n = paradasElegidas().length;
-  const sobran = n - MAX_PARADAS;
-  const info = document.getElementById('rutaInfo');
-  const btn = document.getElementById('rutaAbrir');
+function repLimpiar() {
+  repSel = [];
+  repHojaId = '';
+  renderReparto();
+}
 
-  // El botón no está mientras no haya nada elegido: aparece recién cuando
-  // hay algo para abrir, así se entiende que primero hay que tildar.
-  if (n === 0) {
-    info.innerHTML = '<b>Elegí las entregas</b><span>Tocá los pedidos que vas a salir a hacer.</span>';
-    btn.style.display = 'none';
-  } else if (sobran > 0) {
-    info.innerHTML = `<b>${n} paradas — son muchas</b><span>Google Maps acepta ${MAX_PARADAS}. Sacá ${sobran} para poder abrirla.</span>`;
-    btn.style.display = 'block';
-    btn.disabled = true;
-  } else {
-    info.innerHTML = `<b>${n} parada${n !== 1 ? 's' : ''}</b><span>${origenRuta() ? 'Sale de la distribuidora.' : 'Sale desde donde estés.'}</span>`;
-    btn.style.display = 'block';
-    btn.disabled = false;
+function repElegirHoy() {
+  // "Los de hoy" = lo que hay que entregar hoy o antes (lo atrasado
+  // también se carga: justamente es lo que no hay que volver a olvidarse).
+  repSel = repPedidosElegibles()
+    .filter(p => p.fechaEntrega && -daysSince(p.fechaEntrega) <= 0)
+    .map(p => p.id);
+  repHojaId = '';
+  renderReparto();
+  if (!repSel.length) toast('No hay pedidos con entrega para hoy');
+}
+
+function repElegirTodos() {
+  repSel = repPedidosElegibles().map(p => p.id);
+  repHojaId = '';
+  renderReparto();
+}
+
+// ── Cómo se agrupa la lista ──
+// Por cuándo hay que entregar, no por cuándo se cargó: la pregunta al
+// armar la camioneta es "qué sale hoy", y lo atrasado tiene que estar
+// arriba de todo.
+function repGrupoDe(p) {
+  if (!p.fechaEntrega) return { k:'9', lbl:'Sin fecha de entrega', cls:'' };
+  const d = -daysSince(p.fechaEntrega);
+  if (d < 0)   return { k:'0', lbl:'⚠ Atrasados', cls:'urgente' };
+  if (d === 0) return { k:'1', lbl:'📌 Entregar hoy', cls:'hoy' };
+  if (d === 1) return { k:'2', lbl:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega), cls:'' };
+  return { k:'3' + p.fechaEntrega,
+           lbl:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) +
+               ' · en ' + d + ' día' + (d !== 1 ? 's' : ''), cls:'' };
+}
+
+function repItemHtml(p) {
+  const n = repSel.indexOf(p.id);
+  const dir = String(p.direccion || '').trim();
+  // Se muestran hasta 3 productos: lo justo para reconocer el pedido sin
+  // que la lista se vuelva ilegible. El detalle completo sale en el texto.
+  const muestra = p.items.slice(0, 3);
+  const resto = p.items.length - muestra.length;
+
+  return `
+    <div class="rep-item${n !== -1 ? ' elegido' : ''}" onclick="repToggle('${p.id}')">
+      <span class="rep-check">${n === -1 ? '' : n + 1}</span>
+      <div class="rep-cuerpo">
+        <div class="rep-top">
+          <span class="rep-cli">${esc(p.cliente)}</span>
+          ${p.quien ? `<span class="rep-quien">👤 ${esc(p.quien)}</span>` : ''}
+        </div>
+        ${dir
+          ? `<div class="rep-dir">📍 ${esc(dir)}</div>`
+          : '<div class="rep-dir falta">📍 Sin dirección — no entra en el recorrido</div>'}
+        <div class="rep-prods">
+          ${muestra.map(it => `<div><b>${itemLabelCorto(it)}</b> ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
+          ${resto > 0 ? `<div>+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
+        </div>
+        ${p.notas ? `<div class="rep-obs">⚠ ${esc(p.notas)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderReparto() {
+  const lista = document.getElementById('repLista');
+  if (!lista) return;
+
+  // Un pedido elegido que mientras tanto despacharon, cancelaron o
+  // borraron desde otra máquina se cae solo de la hoja. Callarse eso sería
+  // dejar que se cargue algo que ya no va.
+  const antes = repSel.length;
+  repSel = repSel.filter(id => {
+    const p = (state.pedidos || []).find(x => x.id === id);
+    return p && repElegible(p);
+  });
+  const perdidos = antes - repSel.length;
+  const aviso = document.getElementById('repAviso');
+  if (aviso) {
+    aviso.innerHTML = perdidos > 0
+      ? `<div class="dia-check malo"><b>⚠ ${perdidos === 1 ? 'Se cayó 1 pedido' : 'Se cayeron ' + perdidos + ' pedidos'} de la hoja</b>
+         <span>${perdidos === 1 ? 'Lo despachó' : 'Los despachó'}, canceló o borró alguien mientras armabas la selección.</span></div>`
+      : '';
   }
-  bar.classList.toggle('lleno', sobran > 0);
+
+  const elegibles = repPedidosElegibles();
+  if (!elegibles.length) {
+    lista.innerHTML = `<p style="text-align:center;color:var(--gray);padding:40px">
+      No hay pedidos pendientes para repartir.<br>
+      (Los de 🛻 RETIRO no cuentan: los pasa a buscar el cliente.)</p>`;
+  } else {
+    // Dentro de cada día, primero los que ya están elegidos no: se deja el
+    // orden por cliente, que es estable. Si la lista se reordenara al
+    // tildar, el dedo caería sobre otro pedido en el toque siguiente.
+    const grupos = {};
+    elegibles.forEach(p => {
+      const g = repGrupoDe(p);
+      (grupos[g.k] = grupos[g.k] || { g, items: [] }).items.push(p);
+    });
+    lista.innerHTML = Object.keys(grupos).sort().map(k => {
+      const { g, items } = grupos[k];
+      items.sort((a, b) => String(a.cliente).localeCompare(String(b.cliente), 'es', { sensitivity:'base' }));
+      const elegidos = items.filter(p => repSel.indexOf(p.id) !== -1).length;
+      return `<div class="rep-grupo ${g.cls}"><span>${g.lbl}</span>
+                <span class="rg-n">${elegidos ? elegidos + ' de ' : ''}${items.length}</span></div>` +
+             items.map(repItemHtml).join('');
+    }).join('');
+  }
+
+  renderRepTotal();
+  renderRepHistorial();
+  actualizarBarraRep();
+}
+
+// El total por producto de lo que se eligió: esto es lo que se sube a la
+// camioneta. Sale de totalsOf, el mismo cálculo del panel violeta, así
+// que lo feteado y las unidades sueltas ya vienen separados como
+// corresponde.
+function renderRepTotal() {
+  const el = document.getElementById('repResumen');
+  if (!el) return;
+  const peds = repElegidos();
+  if (!peds.length) { el.innerHTML = ''; return; }
+
+  const totals = totalsOf(peds);
+  el.innerHTML = `
+    <div class="rep-total">
+      <h4>📦 Total a cargar en la camioneta</h4>
+      <div class="rt-sub">${peds.length} pedido${peds.length !== 1 ? 's' : ''} · ${totals.length} producto${totals.length !== 1 ? 's' : ''} distinto${totals.length !== 1 ? 's' : ''}</div>
+      ${totals.map(t => {
+        const tags = [];
+        if (t.fetear) tags.push('🔪 FETEAR');
+        if (t.fetear && isPanceta(t.prod)) tags.push(t.sinCuero ? 'SIN CUERO' : 'CON CUERO');
+        return `<div class="rt-fila">
+          <span class="rt-q">${itemLineLabel(t)}</span>
+          <span class="rt-n">${esc(t.prod)}${tags.length ? `<span class="rt-tag">${tags.join(' · ')}</span>` : ''}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderRepHistorial() {
+  const el = document.getElementById('repHistorial');
+  if (!el) return;
+  const hojas = state.hojas || [];
+  if (!hojas.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="rep-hist">
+      <h4>🗂 Hojas guardadas</h4>
+      ${hojas.slice(0, 8).map(h => `
+        <div class="rep-hoja">
+          <div class="rh-txt">
+            <b>${fmtDate(h.fecha)} · ${h.cantidad} pedido${h.cantidad !== 1 ? 's' : ''}${h.quien ? ' · ' + esc(h.quien) : ''}</b>
+            <span>${esc(h.clientes || '')}</span>
+          </div>
+          <button onclick="repCopiarHoja('${h.id}')">📋 Copiar</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+function actualizarBarraRep() {
+  const bar = document.getElementById('repBar');
+  if (!bar) return;
+  const peds = repElegidos();
+  // La barra solo existe dentro de la pestaña Reparto y con algo elegido:
+  // flotando sobre Pedidos sería una barra verde tapando tarjetas.
+  if (activeTab !== 'reparto' || !peds.length) { bar.classList.remove('show'); return; }
+
+  const conDir = peds.filter(p => String(p.direccion || '').trim()).length;
+  const bultos = totalsOf(peds).length;
+  const guardada = repHojaId ? ' · ✓ guardada' : '';
+
+  document.getElementById('repInfo').innerHTML =
+    `<b>${peds.length} pedido${peds.length !== 1 ? 's' : ''} · ${bultos} producto${bultos !== 1 ? 's' : ''}</b>` +
+    `<span>${conDir} con dirección${conDir > MAX_PARADAS ? ' — Maps acepta ' + MAX_PARADAS : ''}${guardada}</span>`;
+
+  const maps = document.getElementById('repMapsBtn');
+  // Sin direcciones no hay recorrido posible, y con más de 10 Google se
+  // comería las de más sin avisar: mejor que el botón no prometa nada.
+  maps.disabled = conDir === 0 || conDir > MAX_PARADAS;
   bar.classList.add('show');
 }
 
-function abrirRuta() {
-  const paradas = paradasElegidas();
+// ── El texto que se copia ──
+// Se arma en texto pelado a propósito: va a WhatsApp, donde no hay
+// formato. El orden es el de la selección, que es el del recorrido.
+function repTagsTexto(it) {
+  const t = [];
+  if (it.fetear) t.push('FETEAR');
+  if (it.fetear && isPanceta(it.prod)) t.push(it.sinCuero ? 'SIN CUERO' : 'CON CUERO');
+  return t.length ? ' [' + t.join(' - ') + ']' : '';
+}
+
+function textoHojaReparto() {
+  const peds = repElegidos();
+  if (!peds.length) return '';
+  const totals = totalsOf(peds);
+  const L = [];
+
+  L.push('HOJA DE REPARTO - ' + fmtDate(state.today || hoyArg()));
+  L.push('Armó: ' + (state.who || '—') + ' | ' + peds.length +
+         ' pedido' + (peds.length !== 1 ? 's' : ''));
+  L.push('');
+  L.push('=== TOTAL A CARGAR EN LA CAMIONETA ===');
+  totals.forEach(t => {
+    L.push('- ' + itemLineLabel(t) + '  ' + t.prod + repTagsTexto(t));
+  });
+  L.push('');
+  L.push('=== ENTREGAS ===');
+  peds.forEach((p, i) => {
+    const dir = String(p.direccion || '').trim() || '(sin dirección)';
+    L.push('');
+    L.push((i + 1) + ') ' + p.cliente + ' - ' + dir);
+    p.items.forEach(it => {
+      // Acá va la etiqueta corta ("1 caja" y no "1 caja (= 72 un.)"): es lo
+      // que se entrega en la puerta. La equivalencia en unidades sirve para
+      // cargar la camioneta, y por eso queda arriba, en el total.
+      L.push('   · ' + itemLabelCorto(it) + ' ' + it.prod + repTagsTexto(it));
+    });
+    if (p.notas) L.push('   Obs: ' + p.notas);
+  });
+  return L.join('\n');
+}
+
+// Copiar al portapapeles. El camino moderno pide contexto seguro (https,
+// que es lo que hay en GitHub Pages); el textarea de abajo es el que
+// salva a los teléfonos viejos, donde navigator.clipboard no existe.
+function copiarTexto(txt) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(txt);
+  }
+  return new Promise((ok, mal) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.style.position = 'fixed'; ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const bien = document.execCommand('copy');
+      document.body.removeChild(ta);
+      bien ? ok() : mal(new Error('No se pudo copiar'));
+    } catch (e) { mal(e); }
+  });
+}
+
+// Copiar SIEMPRE funciona (es local). Guardar puede fallar sin señal, y
+// en ese caso se avisa pero no se pierde nada: el texto ya está copiado
+// y el botón Guardar queda para reintentar.
+function repCopiarYGuardar() {
+  const txt = textoHojaReparto();
+  if (!txt) return;
+  copiarTexto(txt)
+    .then(() => {
+      toast('📋 Hoja copiada — pegala en WhatsApp');
+      repGuardarHoja(txt);
+    })
+    .catch(() => {
+      // Sin portapapeles queda mostrarlo para copiarlo a mano.
+      repMostrarTexto(txt);
+      repGuardarHoja(txt);
+    });
+}
+
+function repMostrarTexto(txt) {
+  document.getElementById('detailTitle').textContent = '📋 Hoja de reparto';
+  document.getElementById('detailBody').innerHTML =
+    `<p style="font-size:13px;color:var(--gray);margin-bottom:10px">No se pudo copiar solo. Mantené apretado el texto y copialo.</p>
+     <textarea readonly style="width:100%;height:320px;font-size:12px;font-family:monospace;
+       border:1.5px solid var(--border);border-radius:10px;padding:10px">${esc(txt)}</textarea>`;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+// Guarda la hoja en Supabase. El id lo genera el celular, igual que en los
+// pedidos: si el reintento llega dos veces, la función de la base no la
+// escribe dos veces.
+function repGuardarHoja(txt) {
+  const peds = repElegidos();
+  if (!peds.length) return;
+  if (repHojaId) { toast('✓ Esta hoja ya estaba guardada'); return; }
+
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const hoja = {
+    id: id,
+    fecha: state.today || hoyArg(),
+    quien: state.who || '',
+    cantidad_pedidos: peds.length,
+    clientes: peds.map(p => p.cliente).join(', '),
+    texto: txt
+  };
+  const items = peds.map((p, i) => ({ pedido_id: p.id, orden: i }));
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || res.ok === false) { toast('⚠ No se pudo guardar la hoja'); return; }
+      repHojaId = id;
+      // Se agrega arriba sin esperar al próximo refresco, para que se vea
+      // en el acto que quedó anotada.
+      // Se suma a la lista en memoria para que se vea en el acto. No se
+      // toca la caché: la reescribe el próximo refresco con lo que diga el
+      // servidor, que es la fuente de verdad.
+      state.hojas = [{ id: id, fecha: hoja.fecha, quien: hoja.quien,
+                       cantidad: peds.length, clientes: hoja.clientes, texto: txt }]
+                    .concat(state.hojas || []);
+      renderRepHistorial();
+      actualizarBarraRep();
+      toast('💾 Hoja guardada');
+    })
+    .withFailureHandler(err => {
+      if (err && err.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
+      // La hoja no se pierde: el texto ya está copiado y la selección
+      // sigue puesta, así que volver a tocar 📋 Copiar la guarda.
+      const m = String((err && err.message) || '');
+      toast(/fetch|network|timeout|load failed/i.test(m)
+        ? '⚠ Copiada, pero no se pudo guardar: sin conexión. Tocá 📋 Copiar de nuevo.'
+        : '⚠ Copiada, pero no se pudo guardar: ' + (m || 'error'));
+    })
+    .guardarHoja(hoja, items);
+}
+
+// Copiar de nuevo una hoja vieja: sale tal cual se guardó, no rearmada
+// con los pedidos de hoy (que pueden haber cambiado desde entonces).
+function repCopiarHoja(id) {
+  const h = (state.hojas || []).find(x => x.id === id);
+  if (!h || !h.texto) { toast('Esa hoja no tiene texto guardado'); return; }
+  copiarTexto(h.texto)
+    .then(() => toast('📋 Copiada'))
+    .catch(() => repMostrarTexto(h.texto));
+}
+
+// ── El recorrido en Google Maps ──
+// Va a Google sí o sí, aunque estemos en iPhone: Apple Maps no acepta
+// paradas intermedias desde un link, solo un destino. Conviene que el que
+// reparte tenga la app de Google Maps instalada; si no, se abre la versión
+// web, que anda pero es más incómoda para navegar.
+function repAbrirRuta() {
+  const paradas = repElegidos().filter(p => String(p.direccion || '').trim());
   if (!paradas.length || paradas.length > MAX_PARADAS) return;
 
   const dir = p => {
@@ -2770,17 +3195,11 @@ function pedidoBloqueHtml(p) {
   const muestra = p.items.slice(0, 4);
   const resto = p.items.length - muestra.length;
 
-  // Armando el recorrido, tocar el bloque elige la parada en vez de abrir
-  // el detalle: el dedo cae en cualquier lado del bloque, que es grande.
-  const enRuta = rutaActiva && esParadaPosible(p);
-  const nParada = enRuta ? rutaSel.indexOf(p.id) : -1;
-
   return `
-    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${enRuta ? ' seleccionable' : ''}${nParada !== -1 ? ' elegido' : ''}"
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}"
          data-pid="${p.id}"
-         onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
+         onclick="openPedidoDetail('${p.id}')">
       <div class="blk-top">
-        ${enRuta ? `<span class="blk-check">${nParada === -1 ? '' : nParada + 1}</span>` : ''}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
@@ -2825,18 +3244,11 @@ function pedidoCardHtml(p) {
   else if (entCard) chip = `<span class="oc-chip ${entCard.cls}">${entCard.txt}</span>`;
   else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
-  // Armando el recorrido la tarjeta se elige en vez de abrir el detalle,
-  // igual que el bloque del celular. Esto faltaba: la selección estaba
-  // hecha solo para celular y en PC la tarjeta seguía abriendo el detalle.
-  const enRuta = rutaActiva && esParadaPosible(p);
-  const nParada = enRuta ? rutaSel.indexOf(p.id) : -1;
-
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${enRuta ? ' seleccionable' : ''}${nParada !== -1 ? ' elegido' : ''}"
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}"
          data-pid="${p.id}"
-         onclick="${enRuta ? `toggleParada('${p.id}')` : `openPedidoDetail('${p.id}')`}">
+         onclick="openPedidoDetail('${p.id}')">
       <div class="oc-top">
-        ${enRuta ? `<span class="oc-check">${nParada === -1 ? '' : nParada + 1}</span>` : ''}
         <div style="min-width:0">
           <div class="oc-main">${esc(p.cliente)}</div>
           <div class="oc-sub">${meta.join(' · ')}</div>
@@ -2952,10 +3364,7 @@ function renderPedidos() {
   cuerpo += pedidoSectionHtml('Pendiente', pend);
 
   if (prog.length) {
-    // Armando el recorrido se abre solo y no se puede plegar: un pedido
-    // pendiente escondido ahí adentro sería una parada que no se puede
-    // elegir y de la que nadie se entera.
-    const abierto = showProgramados || rutaActiva;
+    const abierto = showProgramados;
     cuerpo += `<div class="prog-notice" onclick="toggleProgramados()">
       <span>📆 <span class="pn-n">${prog.length}</span> pedido${prog.length !== 1 ? 's' : ''} programado${prog.length !== 1 ? 's' : ''} para más adelante</span>
       <span>${abierto ? '▲' : '▼'}</span>
@@ -2986,7 +3395,10 @@ function renderPedidos() {
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
   updatePapeleraFab();
   renderComprometido();
-  actualizarBarraRuta();
+  // La hoja de reparto sale de los mismos pedidos: si la lista cambió,
+  // tiene que cambiar con ella (un pedido que despachó otro se cae solo
+  // de la selección, y el total a cargar se recalcula).
+  renderReparto();
   // Los datos del historial salen de state.pedidos: si la lista cambio,
   // el panel del costado tiene que cambiar con ella.
   actualizarHistCliente();
