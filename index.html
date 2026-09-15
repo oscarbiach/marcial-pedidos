@@ -1096,6 +1096,64 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 /* Y la lista necesita aire al final, o la barra tapa el último pedido. */
 #tab-reparto.active { padding-bottom:86px; }
 
+/* ── Hoja guardada: la ✕ para eliminarla ── */
+.rep-hoja button.rh-x {
+  width:32px; padding:7px 0; color:var(--gray);
+}
+.rep-hoja button.rh-x:hover { border-color:var(--red); color:var(--red); background:var(--lred); }
+
+/* ══ DESPACHAR VARIOS (pestaña Pedidos) ══ */
+.desp-btn {
+  flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green);
+  border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700;
+  cursor:pointer; white-space:nowrap;
+}
+.desp-btn:hover { background:#D5F5E3; }
+@media(max-width:767.98px) {
+  .pedidos-top { flex-wrap:wrap; }
+  .desp-btn { width:100%; padding:13px; font-size:15px; }
+}
+/* Eligiendo, la lista se queda quieta: sin buscar, sin recargar. */
+body.modo-desp #despBtn, body.modo-desp #refreshBtn,
+body.modo-desp .pedidos-top .ac-wrap, body.modo-desp #frescura { display:none !important; }
+/* Lo que no se puede despachar (ya despachado, cancelado, sin enviar) se
+   apaga para que se note qué se puede tocar. */
+body.modo-desp .order-card:not(.desp-ok), body.modo-desp .pedido-blk:not(.desp-ok) { opacity:.4; }
+.order-card.desp-ok, .pedido-blk.desp-ok { cursor:pointer; }
+.order-card.desp-sel, .pedido-blk.desp-sel {
+  box-shadow:0 0 0 2.5px var(--green), 0 2px 10px rgba(0,0,0,.10);
+}
+.desp-check {
+  width:26px; height:26px; border-radius:50%; flex-shrink:0;
+  border:2px solid var(--green); background:#fff; color:#fff;
+  font-size:15px; font-weight:900; line-height:22px; text-align:center;
+}
+.desp-sel .desp-check { background:var(--green); }
+#despBar {
+  display:none; position:fixed; left:12px; right:12px; z-index:260;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  background:var(--green); color:#fff; border-radius:14px; padding:11px 13px;
+  box-shadow:0 4px 18px rgba(0,0,0,.3); align-items:center; gap:10px;
+}
+#despBar.show { display:flex; }
+#despInfo { flex:1; min-width:0; font-size:13px; line-height:1.4; }
+#despInfo b { display:block; font-size:14.5px; }
+#despInfo span { opacity:.85; font-size:12px; }
+#despBar .rep-copiar { color:var(--green); }
+@media(max-width:767.98px) { #despBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
+
+/* ── Papelera: vaciar ── */
+.pap-vaciar { display:flex; align-items:center; justify-content:space-between; gap:10px;
+  margin-bottom:12px; flex-wrap:wrap; }
+.pap-vaciar p { font-size:12px; color:var(--gray); flex:1; min-width:180px; }
+.pap-vaciar button {
+  border:1.5px solid var(--red); background:#fff; color:var(--red);
+  border-radius:10px; padding:9px 13px; font-size:13px; font-weight:800; cursor:pointer;
+}
+.pap-vaciar button:hover { background:var(--lred); }
+.pap-vaciar button:disabled { opacity:.5; cursor:default; }
+
 /* ── Dirección tocable: abre el mapa ──
    Se ve como link para que se note que hace algo. En el celular lleva
    algo de aire vertical: es un objetivo táctil dentro de una tarjeta que
@@ -1297,6 +1355,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
           </button>
+          <button class="desp-btn" id="despBtn" onclick="entrarDespacho()">✓ Despachar varios</button>
         </div>
         <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
@@ -1496,6 +1555,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   <button class="rep-x" onclick="repLimpiar()" title="Limpiar la selección">✕</button>
 </div>
 
+<!-- Barra de "despachar varios" (pestaña Pedidos): cuántos van elegidos y
+     el botón que los marca a todos de una. -->
+<div id="despBar">
+  <div id="despInfo"></div>
+  <button class="rep-copiar" id="despOkBtn" onclick="despConfirmar()">✓ Marcar despachados</button>
+  <button class="rep-x" onclick="salirDespacho()" title="Salir sin despachar">✕</button>
+</div>
+
 <!-- Aviso de pedidos todavía sin confirmar en el servidor -->
 <div id="colaAviso"></div>
 
@@ -1597,6 +1664,7 @@ async function sbGetAppData() {
     // demás (Promise.all), así que no agrega espera.
     sb.from('hojas_reparto')
       .select('id,fecha,quien,cantidad_pedidos,clientes,texto')
+      .is('eliminada_en', null)
       .order('creado_en', { ascending: false }).limit(20)
   ]);
   if (prod.error) throw sbError_(prod.error);
@@ -1701,6 +1769,36 @@ async function sbUpdateEstado(id, estado) {
   return { ok: true };
 }
 
+// Marcar varios como despachados de una. Solo toca los que siguen
+// Pendientes: si otro ya despachó o canceló alguno mientras tanto, a ese
+// no se le pisa el estado ni la fecha.
+async function sbDespacharVarios(ids) {
+  const { data, error } = await sb.from('pedidos')
+    .update({ estado: 'Despachado', fecha_despacho: hoyArg() })
+    .in('id', ids).eq('estado', 'Pendiente').is('eliminado_en', null)
+    .select('id');
+  if (error) throw sbError_(error);
+  return { ok: true, n: (data || []).length };
+}
+
+// ✕ de una hoja de reparto guardada: baja lógica (ver 10-hojas-y-papelera.sql).
+async function sbEliminarHoja(id, quien) {
+  const { data, error } = await sb.from('hojas_reparto')
+    .update({ eliminada_en: new Date().toISOString(), eliminada_por: quien || null })
+    .eq('id', id).is('eliminada_en', null).select('id');
+  if (error) throw sbError_(error);
+  return { ok: true, n: (data || []).length };
+}
+
+// Vaciar la papelera: borra de verdad, pero solo los ids que se estaban
+// viendo y solo si siguen en la papelera. Lo hace una función de la base
+// que antes guarda una copia de cada pedido en el respaldo.
+async function sbVaciarPapelera(ids, quien) {
+  const { data, error } = await sb.rpc('vaciar_papelera', { ids: ids, quien: quien || '' });
+  if (error) throw sbError_(error);
+  return data;   // {ok:true, borrados:n}
+}
+
 async function sbDeletePedido(id, quien) {
   const patch = { eliminado_en: new Date().toISOString(), eliminado_por: quien || null };
   const { data, error } = await sb.from('pedidos').update(patch)
@@ -1727,6 +1825,9 @@ function sbAccion(action, args) {
     case 'deletePedido':       return sbDeletePedido(args[0], args[1]);
     case 'restorePedido':      return sbRestorePedido(args[0]);
     case 'guardarHoja':        return sbGuardarHoja(args[0], args[1]);
+    case 'despacharVarios':    return sbDespacharVarios(args[0]);
+    case 'eliminarHoja':       return sbEliminarHoja(args[0], args[1]);
+    case 'vaciarPapelera':     return sbVaciarPapelera(args[0], args[1]);
     default: {
       const e = new Error('Acción desconocida: ' + action);
       e.transitorio = false;
@@ -1802,7 +1903,7 @@ function makeRunner() {
   // Las funciones que existen del lado de Supabase. Cualquier otra
   // llamada cae en sbAccion y devuelve "Acción desconocida".
   ['getAppData','savePedido','updatePedido','updatePedidoStatus','deletePedido',
-   'restorePedido','guardarHoja']
+   'restorePedido','guardarHoja','despacharVarios','eliminarHoja','vaciarPapelera']
     .forEach(action => {
       runner[action] = function () {
         apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
@@ -2173,6 +2274,8 @@ function refrescarSiCorresponde(minEdadMs) {
   // eligiendo que sube a la camioneta. Al terminar (o al limpiar) se
   // vuelve a refrescar solo.
   if (activeTab === 'reparto' && repSel.length) return;
+  // Lo mismo eligiendo qué despachar en Pedidos.
+  if (despActivo) return;
   if (Date.now() - ultimoRefresh < (minEdadMs || REFRESCO_MS)) return;
   reload();
 }
@@ -2220,6 +2323,9 @@ function setTab(tab) {
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
+  // Irse de Pedidos a mitad de "despachar varios" cancela la selección:
+  // volver y encontrarse pedidos tildados de hace rato sería una trampa.
+  if (tab !== 'pedidos' && despActivo) salirDespacho();
   window.scrollTo(0, 0);
 }
 
@@ -2949,8 +3055,27 @@ function renderRepHistorial() {
             <span>${esc(h.clientes || '')}</span>
           </div>
           <button onclick="repCopiarHoja('${h.id}')">📋 Copiar</button>
+          <button class="rh-x" onclick="repEliminarHoja('${h.id}')" title="Eliminar esta hoja">✕</button>
         </div>`).join('')}
     </div>`;
+}
+
+// ✕ de una hoja guardada. Sale de la lista al toque; si la base no la
+// pudo dar de baja, vuelve a aparecer con el próximo refresco.
+function repEliminarHoja(id) {
+  const h = (state.hojas || []).find(x => x.id === id);
+  if (!h) return;
+  if (!confirm(`¿Eliminar la hoja de reparto del ${fmtDate(h.fecha)}?\n${h.clientes || ''}`)) return;
+  state.hojas = state.hojas.filter(x => x.id !== id);
+  renderRepHistorial();
+  google.script.run
+    .withSuccessHandler(() => toast('✓ Hoja eliminada'))
+    .withFailureHandler(e => {
+      if (e && e.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
+      toast('Error: no se pudo eliminar la hoja');
+      reload();
+    })
+    .eliminarHoja(id, state.who);
 }
 
 function actualizarBarraRep() {
@@ -3201,11 +3326,15 @@ function pedidoBloqueHtml(p) {
   const muestra = p.items.slice(0, 4);
   const resto = p.items.length - muestra.length;
 
+  // Despachando varios, tocar el bloque lo elige en vez de abrir el detalle.
+  const d = despHtml(p);
+
   return `
-    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}"
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${d.cls}"
          data-pid="${p.id}"
-         onclick="openPedidoDetail('${p.id}')">
+         onclick="${d.onclick}">
       <div class="blk-top">
+        ${d.check}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
@@ -3250,11 +3379,14 @@ function pedidoCardHtml(p) {
   else if (entCard) chip = `<span class="oc-chip ${entCard.cls}">${entCard.txt}</span>`;
   else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
+  const d = despHtml(p);
+
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}"
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
          data-pid="${p.id}"
-         onclick="openPedidoDetail('${p.id}')">
+         onclick="${d.onclick}">
       <div class="oc-top">
+        ${d.check}
         <div style="min-width:0">
           <div class="oc-main">${esc(p.cliente)}</div>
           <div class="oc-sub">${meta.join(' · ')}</div>
@@ -3401,6 +3533,7 @@ function renderPedidos() {
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
   updatePapeleraFab();
   renderComprometido();
+  actualizarBarraDesp();
   // La hoja de reparto sale de los mismos pedidos: si la lista cambió,
   // tiene que cambiar con ella (un pedido que despachó otro se cae solo
   // de la selección, y el total a cargar se recalcula).
@@ -3434,7 +3567,94 @@ function toggleCompPanel() {
   document.getElementById('compPanel').classList.toggle('open');
 }
 
-// ── Papelera (solo PC): pedidos eliminados, restaurables por 3 días ──
+// ═══════════════════════════════════════════════════════════════
+//  DESPACHAR VARIOS A LA VEZ
+//  Antes había que abrir cada pedido y tocar "Marcar Despachado" uno por
+//  uno. Ahora se entra al modo, se tildan los que salieron y se marcan
+//  todos juntos en una sola operación contra la base.
+// ═══════════════════════════════════════════════════════════════
+let despActivo = false;
+let despSel = [];
+
+// Solo se puede despachar lo que está pendiente y ya llegó al servidor.
+function despElegible(p) {
+  return p.estado === 'Pendiente' && !p.enCola && !p.errorCola;
+}
+
+// Lo que cambia en la tarjeta según el modo: clase, check y qué hace el toque.
+function despHtml(p) {
+  if (!despActivo) return { cls: '', check: '', onclick: `openPedidoDetail('${p.id}')` };
+  if (!despElegible(p)) return { cls: '', check: '', onclick: '' };
+  const sel = despSel.indexOf(p.id) !== -1;
+  return { cls: ' desp-ok' + (sel ? ' desp-sel' : ''),
+           check: `<span class="desp-check">${sel ? '✓' : ''}</span>`,
+           onclick: `despToggle('${p.id}')` };
+}
+
+function entrarDespacho() {
+  despActivo = true;
+  despSel = [];
+  document.body.classList.add('modo-desp');
+  // Los programados plegados serían pendientes que no se pueden tildar.
+  showProgramados = true;
+  renderPedidos();
+}
+
+function salirDespacho() {
+  despActivo = false;
+  despSel = [];
+  document.body.classList.remove('modo-desp');
+  renderPedidos();
+}
+
+function despToggle(id) {
+  const i = despSel.indexOf(id);
+  if (i === -1) despSel.push(id); else despSel.splice(i, 1);
+  renderPedidos();
+}
+
+function actualizarBarraDesp() {
+  const bar = document.getElementById('despBar');
+  if (!bar) return;
+  if (!despActivo || activeTab !== 'pedidos') { bar.classList.remove('show'); return; }
+  // Si mientras tanto otro despachó alguno, se cae solo de la selección.
+  despSel = despSel.filter(id => {
+    const p = (state.pedidos || []).find(x => x.id === id);
+    return p && despElegible(p);
+  });
+  const n = despSel.length;
+  document.getElementById('despInfo').innerHTML = n
+    ? `<b>${n} pedido${n !== 1 ? 's' : ''} elegido${n !== 1 ? 's' : ''}</b><span>Tocá más, o marcalos como despachados.</span>`
+    : '<b>Elegí los pedidos</b><span>Tocá los que ya salieron.</span>';
+  document.getElementById('despOkBtn').disabled = n === 0;
+  bar.classList.add('show');
+}
+
+function despConfirmar() {
+  const ids = despSel.slice();
+  if (!ids.length) return;
+  const nombres = ids.map(id => (state.pedidos.find(p => p.id === id) || {}).cliente).filter(Boolean);
+  if (!confirm(`¿Marcar ${ids.length} pedido${ids.length !== 1 ? 's' : ''} como despachado${ids.length !== 1 ? 's' : ''}?\n\n${nombres.join('\n')}`)) return;
+  const btn = document.getElementById('despOkBtn');
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(r => {
+      const hechos = (r && r.n) || 0;
+      toast(hechos === ids.length
+        ? `✓ ${hechos} pedido${hechos !== 1 ? 's' : ''} despachado${hechos !== 1 ? 's' : ''}`
+        : `✓ ${hechos} despachados · ${ids.length - hechos} ya no estaban pendientes`);
+      salirDespacho();
+      reload();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      if (e && e.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
+      toast('Error: no se pudieron despachar. ' + ((e && e.message) || ''));
+    })
+    .despacharVarios(ids);
+}
+
+// ── Papelera (solo PC): pedidos eliminados, restaurables o para vaciar ──
 function updatePapeleraFab() {
   const n = (state.papelera || []).length;
   const c = document.getElementById('papeleraCount');
@@ -3443,13 +3663,12 @@ function updatePapeleraFab() {
 }
 
 function papeleraCardHtml(p) {
-  const rest = 3 - daysSince(p.fechaElim);
-  const cuando = rest <= 0 ? 'hoy' : (rest === 1 ? 'mañana' : 'en ' + rest + ' días');
+  // Antes decía "se borra en X días", pero con Supabase no hay nada que los
+  // borre solo: quedan hasta que alguien los restaura o vacía la papelera.
   const sub = [];
   if (p.direccion) sub.push(dirLinkHtml(p.direccion, 'dir-link'));
   sub.push('Eliminado ' + fmtDate(p.fechaElim));
   if (p.elimPor) sub.push(esc(p.elimPor));
-  sub.push('se borra ' + cuando);
   return `
     <div class="order-card ${p.estado}" style="cursor:default;margin-bottom:8px">
       <div class="oc-top">
@@ -3476,9 +3695,38 @@ function papeleraCardHtml(p) {
 function renderPapelera() {
   const list = state.papelera || [];
   document.getElementById('papeleraBody').innerHTML = list.length
-    ? `<p style="font-size:12px;color:var(--gray);margin-bottom:10px">Los pedidos eliminados se guardan acá 3 días y después se borran definitivamente.</p>`
+    ? `<div class="pap-vaciar">
+         <p>Los pedidos eliminados quedan acá hasta que los restaures o vacíes la papelera.</p>
+         <button id="papVaciarBtn" onclick="vaciarPapeleraUi()">🗑 Vaciar papelera (${list.length})</button>
+       </div>`
       + list.map(papeleraCardHtml).join('')
-    : '<p style="text-align:center;color:var(--gray);padding:30px">La papelera está vacía.<br>Los pedidos que elimines se guardan acá 3 días.</p>';
+    : '<p style="text-align:center;color:var(--gray);padding:30px">La papelera está vacía.<br>Los pedidos que elimines quedan acá hasta que la vacíes.</p>';
+}
+
+// Vaciar: borra de verdad los pedidos que se están viendo en la papelera.
+// Se pasan los ids a la base para que no se lleve puesto uno que otro
+// vendedor mandó a la papelera en este mismo momento.
+function vaciarPapeleraUi() {
+  const ids = (state.papelera || []).map(p => p.id);
+  if (!ids.length) return;
+  if (!confirm(`¿Vaciar la papelera?\n\nSe borran definitivamente ${ids.length} pedido${ids.length !== 1 ? 's' : ''} y no se pueden restaurar desde la app.`)) return;
+  const btn = document.getElementById('papVaciarBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Vaciando…'; }
+  google.script.run
+    .withSuccessHandler(r => {
+      if (!r || r.ok === false) { toast('Error: no se pudo vaciar'); renderPapelera(); return; }
+      state.papelera = (state.papelera || []).filter(p => ids.indexOf(p.id) === -1);
+      renderPapelera();
+      updatePapeleraFab();
+      toast(`✓ Papelera vaciada (${r.borrados} pedido${r.borrados !== 1 ? 's' : ''})`);
+      reload();
+    })
+    .withFailureHandler(e => {
+      if (e && e.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
+      toast('Error: ' + ((e && e.message) || 'no se pudo vaciar'));
+      renderPapelera();
+    })
+    .vaciarPapelera(ids, state.who);
 }
 
 function openPapelera() {
