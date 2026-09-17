@@ -1146,21 +1146,41 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 /* ══ CHECKLIST DE DESPACHO ══ */
 .chk-ayuda { font-size:13px; color:var(--gray); margin-bottom:14px; }
 .chk-item {
-  border:1.5px solid var(--border); border-radius:12px; padding:12px;
+  border:1.5px solid var(--border); border-radius:12px; padding:14px;
   margin-bottom:10px;
 }
-.chk-item-head { display:flex; justify-content:space-between; gap:10px; font-size:14.5px; }
-.chk-item-head span { color:var(--gray); text-align:right; }
-.chk-toggle { display:flex; gap:8px; margin-top:10px; }
+/* El nombre del producto es lo primero que hay que leer bien: grande,
+   oscuro y con lugar propio arriba. La cantidad pedida va abajo, en
+   chico, como referencia. */
+.chk-item-head { margin-bottom:2px; }
+.chk-item-nombre { font-size:17px; font-weight:800; color:var(--text); line-height:1.35; }
+.chk-item-cant { font-size:13px; color:var(--blue); font-weight:700; margin-top:4px; }
+.chk-toggle { display:flex; gap:8px; margin-top:12px; }
 .chk-opt {
-  flex:1; padding:9px; border-radius:9px; border:2px solid var(--border);
-  background:#fff; color:var(--gray); font-size:13.5px; font-weight:700; cursor:pointer;
+  flex:1; padding:10px; border-radius:9px; border:2px solid var(--border);
+  background:#fff; color:var(--gray); font-size:14px; font-weight:700; cursor:pointer;
 }
 .chk-opt.on { border-color:var(--green); color:var(--green); background:var(--lgreen); }
 .chk-opt.warn.on { border-color:var(--orange); color:var(--orange); background:var(--lorng); }
-.chk-detalle { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
-.chk-detalle .field { margin-bottom:10px; }
-.chk-detalle .field:last-child { margin-bottom:0; }
+.chk-incompleto { margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); }
+.chk-incompleto label {
+  display:block; font-size:12px; font-weight:700; color:var(--gray);
+  text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;
+}
+.chk-cant-wrap { display:flex; align-items:center; gap:9px; }
+.chk-cant-wrap input {
+  flex:1; min-width:0; padding:11px 12px; border:1.5px solid var(--border);
+  border-radius:10px; font-size:16px; outline:none; transition:.2s;
+}
+.chk-cant-wrap input:focus { border-color:var(--orange); }
+.chk-unidad { font-size:14px; font-weight:700; color:var(--gray); white-space:nowrap; }
+@media(min-width:768px) {
+  .chk-item { padding:16px 18px; }
+  .chk-item-nombre { font-size:18px; }
+  .chk-opt { padding:11px; font-size:14.5px; cursor:pointer; }
+  .chk-opt:hover { border-color:var(--gray); }
+  .chk-cant-wrap input { font-size:15.5px; padding:12px 13px; }
+}
 .chk-nav { display:flex; gap:10px; margin-top:6px; }
 .chk-nav .btn { width:auto; flex:1; margin-top:0; }
 #despChkAtras { flex:0 0 auto; padding-left:16px; padding-right:16px; }
@@ -1514,7 +1534,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button class="close-btn" onclick="cancelarChecklistDespacho()">✕</button>
     </div>
     <div class="modal-body">
-      <p class="chk-ayuda">Marcá qué salió completo y qué quedó con alguna novedad.</p>
+      <p class="chk-ayuda">Marcá qué salió completo y qué quedó incompleto.</p>
       <div id="despChkBody"></div>
       <div class="chk-nav">
         <button type="button" class="btn btn-secondary" id="despChkAtras" onclick="chkAtras()">← Atrás</button>
@@ -3724,22 +3744,14 @@ function despConfirmar() {
 // ═══════════════════════════════════════════════════════════════
 //  CHECKLIST DE DESPACHO
 //  Antes de marcar Despachado (uno solo o varios de una) se pasa por
-//  acá: pedido por pedido, renglón por renglón, para anotar si algo no
-//  salió completo (sin stock, mal estado, error de carga, devolución)
-//  y cuánto salió de verdad. Nada se guarda hasta "Confirmar despacho":
-//  cerrar el checklist antes no cambia nada en el servidor.
+//  acá: pedido por pedido, renglón por renglón, para marcar si algo
+//  quedó INCOMPLETO y cuánto de eso vuelve al depósito. Nada se guarda
+//  hasta "Confirmar despacho": cerrar el checklist antes no cambia nada
+//  en el servidor. Ya no se pide motivo: solo importa el numero que
+//  vuelve, para saber cuanta mercaderia hay que reponer/guardar.
 // ═══════════════════════════════════════════════════════════════
 
-const MOTIVOS_FALTANTE = [
-  { v: 'sin_stock',   t: 'Sin stock' },
-  { v: 'mal_estado',  t: 'Producto en mal estado' },
-  { v: 'error_carga', t: 'Error de carga' },
-  { v: 'devolucion',  t: 'Devolución / no lo recibió el cliente' },
-  { v: 'otro',        t: 'Otro' }
-];
-const MOTIVO_LABEL = MOTIVOS_FALTANTE.reduce((a, m) => (a[m.v] = m.t, a), {});
-
-// { ids:[...], idx:0, resp:{ [pedidoId]: { [itemId]: {completo,cantidadEntregada,motivo,detalle} } } }
+// { ids:[...], idx:0, resp:{ [pedidoId]: { [itemId]: {completo,cantidadNoEntregada} } } }
 let despChecklist = null;
 
 function abrirChecklistDespacho(ids) {
@@ -3766,8 +3778,21 @@ function pedidoActualChecklist() {
 function respItemChecklist(pedidoId, itemId) {
   const r = despChecklist.resp;
   if (!r[pedidoId]) r[pedidoId] = {};
-  if (!r[pedidoId][itemId]) r[pedidoId][itemId] = { completo: true, cantidadEntregada: 0, motivo: '', detalle: '' };
+  if (!r[pedidoId][itemId]) r[pedidoId][itemId] = { completo: true, cantidadNoEntregada: 0 };
   return r[pedidoId][itemId];
+}
+
+// La unidad para mostrar al lado del campo: kg si se fetea, o la unidad
+// del producto tal como está cargado el renglón (cajas, o sueltas si se
+// cargó "en unidades"). Sin catálogo, no se muestra nada.
+function unidadItemChecklist(it) {
+  if (it.fetear) return 'kg';
+  const p = prodInfo(it.prod);
+  if (!p || !p.u) return '';
+  if (p.u === 'caja') return it.unidades ? 'un.' : 'cajas';
+  if (p.u === 'kg') return 'kg';
+  if (p.u === 'unidad') return 'un.';
+  return p.u;
 }
 
 function renderChecklistPaso() {
@@ -3780,31 +3805,25 @@ function renderChecklistPaso() {
 
   document.getElementById('despChkBody').innerHTML = p.items.map(it => {
     const r = respItemChecklist(p.id, it.id);
+    const unidad = unidadItemChecklist(it);
     return `
       <div class="chk-item">
-        <div class="chk-item-head"><b>${itemLineLabel(it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>
+        <div class="chk-item-head">
+          <div class="chk-item-nombre">${esc(it.prod)}${itemTags(it)}</div>
+          <div class="chk-item-cant">Pedido: ${itemLineLabel(it)}</div>
+        </div>
         <div class="chk-toggle">
           <button type="button" class="chk-opt ${r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',true)">✓ Completo</button>
-          <button type="button" class="chk-opt warn ${!r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',false)">⚠ Con novedad</button>
+          <button type="button" class="chk-opt warn ${!r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',false)">⚠ INCOMPLETO</button>
         </div>
         ${!r.completo ? `
-        <div class="chk-detalle">
-          <div class="field">
-            <label>¿Cuánto salió? (de ${itemLineLabel(it)})</label>
-            <input type="number" min="0" max="${it.qty}" step="any" value="${r.cantidadEntregada}"
-              onchange="chkSetCantidad('${it.id}', this.value, ${it.qty})">
-          </div>
-          <div class="field">
-            <label>Motivo</label>
-            <select onchange="chkSetMotivo('${it.id}', this.value)">
-              <option value="">Elegí un motivo…</option>
-              ${MOTIVOS_FALTANTE.map(m => `<option value="${m.v}" ${r.motivo === m.v ? 'selected' : ''}>${m.t}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label>Detalle (opcional)</label>
-            <input type="text" placeholder="Ej: quedaron 2 kg en la cámara" value="${escAttr(r.detalle || '')}"
-              onchange="chkSetDetalle('${it.id}', this.value)">
+        <div class="chk-incompleto">
+          <label>¿Cuánto NO se entregó? (vuelve al depósito)</label>
+          <div class="chk-cant-wrap">
+            <input type="number" inputmode="decimal" min="0" max="${it.qty}" step="any"
+              value="${r.cantidadNoEntregada}"
+              onchange="chkSetCantidad(this,'${it.id}',${it.qty})">
+            ${unidad ? `<span class="chk-unidad">${esc(unidad)}</span>` : ''}
           </div>
         </div>` : ''}
       </div>`;
@@ -3819,34 +3838,32 @@ function chkSetCompleto(itemId, val) {
   const p = pedidoActualChecklist();
   const r = respItemChecklist(p.id, itemId);
   r.completo = val;
-  if (val) { r.cantidadEntregada = 0; r.motivo = ''; r.detalle = ''; }
+  if (val) r.cantidadNoEntregada = 0;
   renderChecklistPaso();
 }
-function chkSetCantidad(itemId, val, max) {
+
+// Clampea entre 0 y lo pedido, y corrige lo que se ve en el campo (si
+// alguien escribe un número negativo o más grande que lo pedido, se
+// corrige a la vista, no solo por dentro).
+function chkSetCantidad(input, itemId, max) {
   const p = pedidoActualChecklist();
-  let num = Number(val);
+  let num = Number(input.value);
   if (isNaN(num) || num < 0) num = 0;
   if (num > Number(max)) num = Number(max);
-  respItemChecklist(p.id, itemId).cantidadEntregada = num;
-}
-function chkSetMotivo(itemId, val) {
-  const p = pedidoActualChecklist();
-  respItemChecklist(p.id, itemId).motivo = val;
-}
-function chkSetDetalle(itemId, val) {
-  const p = pedidoActualChecklist();
-  respItemChecklist(p.id, itemId).detalle = val;
+  num = round2(num);
+  input.value = num;
+  respItemChecklist(p.id, itemId).cantidadNoEntregada = num;
 }
 
-// No deja avanzar un renglón "con novedad" sin motivo: sin eso, después
-// no se puede ni filtrar ni entender qué pasó.
+// No deja avanzar un renglón INCOMPLETO sin decir cuánto no se entregó:
+// en 0 no tendría sentido marcarlo incompleto.
 function chkValidarPaso() {
   const p = pedidoActualChecklist();
   const resp = despChecklist.resp[p.id] || {};
   for (const it of p.items) {
     const r = resp[it.id];
-    if (r && !r.completo && !r.motivo) {
-      toast(`Elegí el motivo de "${it.prod}", o marcalo como completo.`);
+    if (r && !r.completo && !(r.cantidadNoEntregada > 0)) {
+      toast(`Decime cuánto no se entregó de "${it.prod}", o marcalo como completo.`);
       return false;
     }
   }
@@ -3872,14 +3889,21 @@ async function finalizarChecklistDespacho() {
   btn.disabled = true;
   const ids = despChecklist.ids.slice();
 
-  // Todos los renglones con novedad, de todos los pedidos del checklist.
+  // Todos los renglones marcados INCOMPLETO, de todos los pedidos del
+  // checklist. Se guarda cuánto ENTREGÓ (lo pedido menos lo que no se
+  // entregó), que es el dato que ya sabe leer el resto de la app. El
+  // motivo queda fijo en 'otro': ya no se le pide al vendedor, pero se
+  // deja algo cargado para que un reporte futuro (pedidos_con_faltantes)
+  // pueda seguir encontrando estos renglones.
   const cambios = [];
   ids.forEach(pid => {
+    const ped = state.pedidos.find(x => x.id === pid);
     const resp = despChecklist.resp[pid] || {};
-    Object.keys(resp).forEach(itemId => {
-      const r = resp[itemId];
-      if (r.completo) return;
-      cambios.push({ itemId, cantidadEntregada: r.cantidadEntregada, motivo: r.motivo, detalle: r.detalle });
+    (ped ? ped.items : []).forEach(it => {
+      const r = resp[it.id];
+      if (!r || r.completo) return;
+      const cantidadEntregada = round2(Number(it.qty) - Number(r.cantidadNoEntregada || 0));
+      cambios.push({ itemId: it.id, cantidadEntregada });
     });
   });
 
@@ -3889,7 +3913,7 @@ async function finalizarChecklistDespacho() {
 
   try {
     for (const c of cambios) {
-      const r = await llamar('guardarNovedadItem', [c.itemId, c.cantidadEntregada, c.motivo, c.detalle]);
+      const r = await llamar('guardarNovedadItem', [c.itemId, c.cantidadEntregada, 'otro', '']);
       if (!r.ok) throw new Error(r.error || 'No se pudo guardar una novedad');
     }
     const r2 = await llamar('despacharVarios', [ids]);
@@ -3908,12 +3932,14 @@ async function finalizarChecklistDespacho() {
   }
 }
 
-// Cómo se ve una novedad ya guardada, en el detalle de un pedido despachado.
+// Cómo se ve un renglón INCOMPLETO ya guardado, en el detalle de un
+// pedido despachado: cuánto vuelve al depósito, que es lo que importa.
 function itemNovedadHtml(it) {
   if (!it.motivoFaltante) return '';
-  const motivo = MOTIVO_LABEL[it.motivoFaltante] || it.motivoFaltante;
-  const salio = qtyLabel(it.prod, it.cantidadEntregada, it.fetear, it.unidades);
-  return `<div class="item-novedad">⚠ Salió ${salio} de ${itemLineLabel(it)} — ${esc(motivo)}${it.detalleFaltante ? ': ' + esc(it.detalleFaltante) : ''}</div>`;
+  const noEntregada = round2((Number(it.qty) || 0) - (Number(it.cantidadEntregada) || 0));
+  if (noEntregada <= 0) return '';
+  const vuelve = qtyLabel(it.prod, noEntregada, it.fetear, it.unidades);
+  return `<div class="item-novedad">⚠ Incompleto — vuelven al depósito ${vuelve} (de ${itemLineLabel(it)})</div>`;
 }
 
 // ── Papelera (solo PC): pedidos eliminados, restaurables o para vaciar ──
@@ -4686,10 +4712,36 @@ function itemLabelCorto(it) {
 // Close modals on overlay click. El de usuario solo es obligatorio la
 // primera vez: si ya hay un usuario con PIN validado, tocar afuera lo
 // cierra. Sin PIN no se puede cerrar, o quedaría una app sin datos.
+//
+// En PC (mouse) es fácil cerrar sin querer: arrastrar para seleccionar
+// texto de un campo y soltar el botón unos píxeles afuera del recuadro
+// ya vale como "click afuera" para el navegador. Ahí se agrega una zona
+// de tolerancia alrededor del recuadro Y se exige que el clic entero
+// (apretar Y soltar) haya pasado por el fondo, no por adentro del
+// recuadro. En celular el comportamiento queda exactamente igual que
+// antes: tocar el fondo cierra, sin tolerancia ni chequeo de arrastre.
+const PC_TOLERANCIA_CIERRE = 24; // px de margen alrededor del recuadro, solo PC
+
+function fueraDelRecuadroConTolerancia(overlay, x, y) {
+  const recuadro = overlay.querySelector('.modal');
+  if (!recuadro) return true;
+  const r = recuadro.getBoundingClientRect();
+  return x < r.left - PC_TOLERANCIA_CIERRE || x > r.right + PC_TOLERANCIA_CIERRE ||
+         y < r.top - PC_TOLERANCIA_CIERRE || y > r.bottom + PC_TOLERANCIA_CIERRE;
+}
+
+let cierreEmpezoEnElFondo = null; // overlay donde el mousedown arrancó en el fondo (no en el recuadro)
+
 document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('mousedown', e => {
+    cierreEmpezoEnElFondo = (e.target === o) ? o : null;
+  });
   o.addEventListener('click', e => {
     if (e.target !== o) return;
     if (o.id === 'whoModal' && (!VENDEDORES.includes(state.who) || !state.pin)) return;
+    if (esMobile()) { o.classList.remove('open'); return; }
+    if (cierreEmpezoEnElFondo !== o) return;
+    if (!fueraDelRecuadroConTolerancia(o, e.clientX, e.clientY)) return;
     o.classList.remove('open');
   });
 });
