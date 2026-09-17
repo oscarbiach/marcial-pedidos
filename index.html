@@ -262,6 +262,19 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   background:#117A65; color:#fff; white-space:nowrap; letter-spacing:.3px;
 }
 .order-card.retiro { border-left-color:#117A65; background:#E8F8F5; }
+/* Pedido armado solo con lo que faltó de otro: se distingue en violeta,
+   el mismo color que ya usa "stock comprometido", para que no se
+   confunda con un pedido nuevo de verdad del cliente. */
+.repo-tag {
+  font-size:11px; font-weight:800; border-radius:10px; padding:3px 9px;
+  background:#7D3C98; color:#fff; white-space:nowrap; letter-spacing:.3px;
+}
+.order-card.es-repo, .pedido-blk.es-repo { border-left-color:#7D3C98; }
+.repo-aviso {
+  font-size:12.5px; line-height:1.45; color:#5B2C6F; background:#F4ECF7;
+  border:1.5px solid #D7BDE2; border-radius:10px; padding:9px 11px; margin:8px 0;
+}
+.repo-aviso b { color:#7D3C98; }
 .cuero-tag {
   font-size:11px; font-weight:700; white-space:nowrap;
   color:#935116; background:#FDEBD0; border-radius:8px; padding:2px 7px;
@@ -3411,6 +3424,30 @@ function entregaInfo(p) {
            txt:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) + ' · en ' + d + ' días' };
 }
 
+// ── PEDIDOS DE REPOSICIÓN ──
+// Cuando algo vuelve INCOMPLETO del reparto, se arma solo un pedido
+// Pendiente nuevo, al mismo cliente, con lo que faltó (ver
+// finalizarChecklistDespacho). No hay columna aparte para esto: se
+// reconoce por un prefijo fijo al principio de la observación. Es
+// texto, no un vínculo real en la base — se ve pero no se puede
+// reportar por SQL sin tocar el esquema.
+const REPO_MARCA = '🔁 REPOSICIÓN';
+
+function esReposicion(p) { return !!(p.notas && p.notas.indexOf(REPO_MARCA) === 0); }
+
+// El texto sin la marca, para mostrarlo más prolijo en el aviso.
+function repoDetalle(p) {
+  return (p.notas || '').slice(REPO_MARCA.length).replace(/^\s*[—-]\s*/, '').trim();
+}
+
+// Aviso destacado, igual en la tarjeta/bloque de la lista y en el
+// detalle: lo primero que hay que notar es que este pedido no lo pidió
+// el cliente de nuevo, es lo que quedó pendiente de otro.
+function pedidoRepoHtml(p) {
+  if (!esReposicion(p)) return '';
+  return `<div class="repo-aviso">🔁 <b>Repone faltante</b> — ${esc(repoDetalle(p))}</div>`;
+}
+
 // Bloque de un pedido (celular). La diferencia con la tarjeta de PC no es
 // decorativa: acá el cliente tiene todo el ancho para él, en vez de
 // pelearlo con las etiquetas de estado y cortarse con puntitos.
@@ -3433,19 +3470,21 @@ function pedidoBloqueHtml(p) {
   const d = despHtml(p);
 
   return `
-    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${d.cls}"
+    <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${d.cls}"
          data-pid="${p.id}"
          onclick="${d.onclick}">
       <div class="blk-top">
         ${d.check}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
         ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+        ${esReposicion(p) ? '<span class="repo-tag">🔁 REPOSICIÓN</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
         ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
         ${fecha ? `<span class="blk-fecha${fechaCls}">${fecha}</span>` : ''}
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
       ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
+      ${pedidoRepoHtml(p)}
       <div class="blk-prods">
         ${muestra.map(it => `
           <span class="blk-q">${itemLabelCorto(it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
@@ -3454,7 +3493,7 @@ function pedidoBloqueHtml(p) {
       <div class="blk-pie">
         ${p.quien ? `<span class="blk-quien">👤 ${esc(p.quien)}</span>` : ''}
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
-        ${p.notas ? `<span>⚠ ${esc(p.notas)}</span>` : ''}
+        ${p.notas && !esReposicion(p) ? `<span>⚠ ${esc(p.notas)}</span>` : ''}
       </div>
     </div>`;
 }
@@ -3485,7 +3524,7 @@ function pedidoCardHtml(p) {
   const d = despHtml(p);
 
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
          data-pid="${p.id}"
          onclick="${d.onclick}">
       <div class="oc-top">
@@ -3497,11 +3536,13 @@ function pedidoCardHtml(p) {
         <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
           ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+          ${esReposicion(p) ? '<span class="repo-tag">🔁 REPOSICIÓN</span>' : ''}
           ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
           ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
           ${chip}
         </div>
       </div>
+      ${pedidoRepoHtml(p)}
       <div class="oc-items">
         ${p.items.slice(0, 3).map(it => `
           <span class="oc-q">${itemLabelCorto(it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
@@ -3895,16 +3936,27 @@ async function finalizarChecklistDespacho() {
   // motivo queda fijo en 'otro': ya no se le pide al vendedor, pero se
   // deja algo cargado para que un reporte futuro (pedidos_con_faltantes)
   // pueda seguir encontrando estos renglones.
+  //
+  // De paso se junta, pedido por pedido, lo que faltó: con eso se arma
+  // un pedido Pendiente nuevo al mismo cliente (ver más abajo), para que
+  // lo que volvió al depósito no se pierda de vista.
   const cambios = [];
+  const reposiciones = []; // { ped, faltantes:[{prod,qty,fetear,sinCuero,unidades}] }
   ids.forEach(pid => {
     const ped = state.pedidos.find(x => x.id === pid);
     const resp = despChecklist.resp[pid] || {};
+    const faltantes = [];
     (ped ? ped.items : []).forEach(it => {
       const r = resp[it.id];
       if (!r || r.completo) return;
-      const cantidadEntregada = round2(Number(it.qty) - Number(r.cantidadNoEntregada || 0));
+      const cantidadNoEntregada = round2(Number(r.cantidadNoEntregada || 0));
+      const cantidadEntregada = round2(Number(it.qty) - cantidadNoEntregada);
       cambios.push({ itemId: it.id, cantidadEntregada });
+      if (cantidadNoEntregada > 0) {
+        faltantes.push({ prod: it.prod, qty: cantidadNoEntregada, fetear: it.fetear, sinCuero: it.sinCuero, unidades: it.unidades });
+      }
     });
+    if (ped && faltantes.length) reposiciones.push({ ped, faltantes });
   });
 
   const llamar = (accion, args) => new Promise((resolve, reject) => {
@@ -3918,9 +3970,42 @@ async function finalizarChecklistDespacho() {
     }
     const r2 = await llamar('despacharVarios', [ids]);
     const hechos = (r2 && r2.n) || 0;
-    toast(hechos === ids.length
+
+    // Un pedido Pendiente nuevo por cada pedido con faltantes, con SOLO
+    // lo que no se entregó, sin fecha de entrega (queda para coordinar
+    // cuándo sale) y con la observación marcada bien visible como
+    // reposición. Si alguno falla, no se deshace el despacho (ya salió
+    // de verdad): se avisa aparte para cargarlo a mano si hace falta.
+    let repoFallidas = 0;
+    for (const rep of reposiciones) {
+      const detalle = rep.faltantes
+        .map(f => `${qtyLabel(f.prod, f.qty, f.fetear, f.unidades)} ${f.prod}`)
+        .join('; ');
+      const datos = {
+        cliente: rep.ped.cliente,
+        direccion: rep.ped.direccion || '',
+        notas: `${REPO_MARCA} — Faltó del pedido del ${fmtDate(rep.ped.fecha)}: ${detalle}`,
+        retiro: !!rep.ped.retiro,
+        quien: state.who,
+        items: rep.faltantes
+      };
+      try {
+        const rr = await llamar('savePedido', [datos]);
+        if (!rr.ok) throw new Error(rr.error || 'sin detalle');
+      } catch (e) {
+        repoFallidas++;
+      }
+    }
+
+    let msg = hechos === ids.length
       ? `✓ ${hechos} pedido${hechos !== 1 ? 's' : ''} despachado${hechos !== 1 ? 's' : ''}`
-      : `✓ ${hechos} despachados · ${ids.length - hechos} ya no estaban pendientes`);
+      : `✓ ${hechos} despachados · ${ids.length - hechos} ya no estaban pendientes`;
+    if (reposiciones.length) {
+      const creadas = reposiciones.length - repoFallidas;
+      if (creadas) msg += ` · 🔁 ${creadas} pedido${creadas !== 1 ? 's' : ''} de reposición`;
+      if (repoFallidas) msg += ` · ⚠ ${repoFallidas} reposición${repoFallidas !== 1 ? 'es' : ''} no se pudo crear, cargala a mano`;
+    }
+    toast(msg);
     despChecklist = null;
     closeModal('despChecklistModal');
     if (despActivo) salirDespacho();
@@ -4193,6 +4278,7 @@ function openPedidoDetail(id) {
     <button class="btn btn-danger" onclick="confirmDeletePedido('${p.id}')">🗑 Eliminar pedido</button>` : '');
 
   document.getElementById('detailBody').innerHTML = `
+    ${pedidoRepoHtml(p)}
     <div class="detail-section">
       <h4>Info</h4>
       <div class="detail-item"><span>Cliente</span><b>${esc(p.cliente)}</b></div>
@@ -4203,7 +4289,7 @@ function openPedidoDetail(id) {
       ${p.fechaDespacho ? `<div class="detail-item"><span>${p.estado === 'Cancelado' ? 'Cancelado el' : 'Despachado el'}</span><b>${fmtDate(p.fechaDespacho)}</b></div>` : ''}
       <div class="detail-item"><span>Estado</span><span class="status-pill sp-${p.estado}">${p.estado}</span></div>
       ${p.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(p.quien)}</b></div>` : ''}
-      ${p.notas ? `<div class="detail-item"><span>Observación</span><b>${esc(p.notas)}</b></div>` : ''}
+      ${p.notas && !esReposicion(p) ? `<div class="detail-item"><span>Observación</span><b>${esc(p.notas)}</b></div>` : ''}
     </div>
     <div class="detail-section">
       <h4>Productos</h4>
