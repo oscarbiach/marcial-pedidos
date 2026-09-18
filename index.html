@@ -39,6 +39,15 @@
   --text:   #1C2833;
   --shadow: 0 2px 8px rgba(0,0,0,.12);
   --radius: 12px;
+  /* Tonos "ink": mismo color de estado pero oscurecido para el TEXTO sobre
+     fondo claro (pill, chip, aviso). Los tonos base (--orange/--green/--red/
+     --blue) no llegan a 4.5:1 de contraste sobre su propio fondo claro
+     (ej. naranja sobre lorng da ~2.6:1) y en Pedidos el texto es chico y
+     lleva el estado del pedido: tiene que leerse bien de un vistazo. */
+  --orange-ink: #A15E0A;
+  --green-ink:  #145A32;
+  --red-ink:    #A93226;
+  --blue-ink:   #1F6391;
 }
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 
@@ -113,7 +122,7 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 /* ── PEDIDOS LIST ── */
 .section-header {
   display:flex; align-items:center; justify-content:space-between;
-  margin-bottom:10px; margin-top:4px;
+  margin-bottom:9px; margin-top:4px;
 }
 .section-header h3 { font-size:15px; color:var(--gray); }
 .badge { background:var(--navy); color:#fff; border-radius:12px; padding:2px 8px; font-size:12px; }
@@ -123,7 +132,7 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
    nombres de cliente o producto largos (que llevan nowrap), la columna se
    estiraba más que la pantalla y el celular quedaba corrido, mostrando
    los bordes al costado. */
-.order-list { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:16px; }
+.order-list { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:26px; }
 .order-card { min-width:0; }
 
 /* La tarjeta de carga se centra por flex: si conserva el margen de abajo,
@@ -160,16 +169,16 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   font-size:11px; font-weight:700; border-radius:8px; padding:2px 8px;
   background:var(--lgray); color:var(--gray); white-space:nowrap;
 }
-.oc-chip.ok { background:var(--lgreen); color:var(--green); }
+.oc-chip.ok { background:var(--lgreen); color:var(--green-ink); }
 
 /* ── FECHA DE ENTREGA, POR URGENCIA ──
    El problema no era que la fecha no se viera: era que TODAS las fechas
    se veian igual, asi que una entrega para dentro de una semana pesaba a
    la vista lo mismo que una para hoy. Ahora el color dice cuando: rojo
    se paso, verde es hoy, naranja manana, gris apagado mas adelante. */
-.oc-chip.ent-vencida, .blk-fecha.ent-vencida { background:var(--lred);  color:var(--red); }
+.oc-chip.ent-vencida, .blk-fecha.ent-vencida { background:var(--lred);  color:var(--red-ink); }
 .oc-chip.ent-hoy,     .blk-fecha.ent-hoy     { background:var(--green); color:#fff; }
-.oc-chip.ent-maniana, .blk-fecha.ent-maniana { background:var(--lorng); color:var(--orange); }
+.oc-chip.ent-maniana, .blk-fecha.ent-maniana { background:var(--lorng); color:var(--orange-ink); }
 .oc-chip.ent-futura,  .blk-fecha.ent-futura  { background:var(--lgray); color:var(--gray); }
 /* En el bloque del celular la fecha era texto suelto; con color de fondo
    necesita la caja del chip para que se lea. */
@@ -219,11 +228,11 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 }
 .frescura.ver { display:flex; }
 .frescura.vieja {
-  background:var(--lorng); color:var(--orange); font-weight:700;
+  background:var(--lorng); color:var(--orange-ink); font-weight:700;
   border:1px solid #F5D9A0; padding:10px 12px; font-size:13px;
 }
 .frescura.rota {
-  background:var(--lred); color:var(--red); font-weight:800;
+  background:var(--lred); color:var(--red-ink); font-weight:800;
   border:1px solid #F1B0A8; padding:10px 12px; font-size:13px;
 }
 .frescura .fr-btn {
@@ -253,9 +262,9 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .status-pill {
   font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px; white-space:nowrap;
 }
-.sp-Pendiente  { background:var(--lorng);  color:var(--orange); }
-.sp-Despachado { background:var(--lgreen); color:var(--green); }
-.sp-Cancelado  { background:var(--lred);   color:var(--red); }
+.sp-Pendiente  { background:var(--lorng);  color:var(--orange-ink); }
+.sp-Despachado { background:var(--lgreen); color:var(--green-ink); }
+.sp-Cancelado  { background:var(--lred);   color:var(--red-ink); }
 /* Pedidos que pasan a retirar: se diferencian notoriamente del reparto. */
 .retiro-tag {
   font-size:11px; font-weight:800; border-radius:10px; padding:3px 9px;
@@ -460,9 +469,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   flex:1; padding:11px; border-radius:10px; border:2px solid var(--border);
   font-size:14px; font-weight:700; cursor:pointer; background:#fff; min-width:100px;
 }
-.st-btn.act-Pendiente  { border-color:var(--orange); color:var(--orange); background:var(--lorng); }
-.st-btn.act-Despachado { border-color:var(--green);  color:var(--green);  background:var(--lgreen); }
-.st-btn.act-Cancelado  { border-color:var(--red);    color:var(--red);    background:var(--lred); }
+.st-btn.act-Pendiente  { border-color:var(--orange); color:var(--orange-ink); background:var(--lorng); }
+.st-btn.act-Despachado { border-color:var(--green);  color:var(--green-ink);  background:var(--lgreen); }
+.st-btn.act-Cancelado  { border-color:var(--red);    color:var(--red-ink);    background:var(--lred); }
 
 /* ── AUTOCOMPLETE ── */
 .ac-wrap { position:relative; }
@@ -961,16 +970,16 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 .dia-check b { font-size:13.5px; }
 .dia-check span { font-size:12px; opacity:.85; }
-.dia-check.bien { background:var(--lgreen); color:var(--green); }
-.dia-check.malo { background:var(--lred);   color:var(--red); }
+.dia-check.bien { background:var(--lgreen); color:var(--green-ink); }
+.dia-check.malo { background:var(--lred);   color:var(--red-ink); }
 
 /* Tarjeta de un pedido que todavía no confirmó el servidor */
 .order-card.en-cola { opacity:.72; border-left-color:var(--blue); }
 .cola-tag {
   font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px;
-  background:var(--lblue); color:var(--blue); white-space:nowrap;
+  background:var(--lblue); color:var(--blue-ink); white-space:nowrap;
 }
-.cola-tag.err { background:var(--lred); color:var(--red); }
+.cola-tag.err { background:var(--lred); color:var(--red-ink); }
 
 /* Rueditita en el header mientras se refrescan los datos de fondo */
 #refreshDot {
@@ -1117,7 +1126,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 /* ══ DESPACHAR VARIOS (pestaña Pedidos) ══ */
 .desp-btn {
-  flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green);
+  flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green-ink);
   border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700;
   cursor:pointer; white-space:nowrap;
 }
