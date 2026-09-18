@@ -145,18 +145,31 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 }
 .day-divider::before, .day-divider::after { content:''; flex:1; border-top:1px solid var(--border); }
 .order-card {
-  background:#fff; border-radius:var(--radius); padding:12px 14px;
-  box-shadow:var(--shadow); cursor:pointer; transition:.15s;
-  border-left:4px solid var(--border);
+  position:relative;
+  background:#fff; border-radius:18px; overflow:hidden;
+  padding:16px 16px 14px;
+  box-shadow:0 1px 2px rgba(29,32,48,.05), 0 8px 20px -12px rgba(29,32,48,.22);
+  cursor:pointer; transition:transform .15s ease-out, box-shadow .2s ease;
 }
-.order-card:active { opacity:.85; }
-.order-card.Pendiente  { border-left-color:var(--orange); }
-.order-card.Despachado { border-left-color:var(--green); }
-.order-card.Cancelado  { border-left-color:var(--red); opacity:.65; }
+.order-card:active { transform:scale(.99); }
+/* Franja de color arriba de la tarjeta: reemplaza el borde izquierdo de
+   antes. Un div propio (no ::before) para que el overflow:hidden del
+   padre la recorte prolijo contra las esquinas redondeadas. */
+.oc-edge {
+  position:absolute; top:0; left:0; right:0; height:4px;
+  background:var(--border);
+}
+.order-card.Pendiente  .oc-edge { background:var(--orange); }
+.order-card.Despachado .oc-edge { background:var(--green); }
+.order-card.Cancelado  .oc-edge { background:var(--red); }
+.order-card.Cancelado .oc-main {
+  color:var(--gray); text-decoration:line-through; text-decoration-color:var(--red);
+}
 .oc-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
 .oc-main {
   font-size:15.5px; font-weight:700; line-height:1.25;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  transition:color .2s ease;
 }
 .oc-sub  {
   font-size:12px; color:var(--gray); margin-top:3px;
@@ -166,7 +179,7 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 /* Fecha que importa, como chip: se encuentra de un vistazo en vez de
    quedar perdida en una fila de texto separada por puntos. */
 .oc-chip {
-  font-size:11px; font-weight:700; border-radius:8px; padding:2px 8px;
+  font-size:11px; font-weight:700; border-radius:999px; padding:4px 10px;
   background:var(--lgray); color:var(--gray); white-space:nowrap;
 }
 .oc-chip.ok { background:var(--lgreen); color:var(--green-ink); }
@@ -183,7 +196,7 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 /* En el bloque del celular la fecha era texto suelto; con color de fondo
    necesita la caja del chip para que se lea. */
 .blk-fecha.ent-vencida, .blk-fecha.ent-hoy,
-.blk-fecha.ent-maniana, .blk-fecha.ent-futura { border-radius:8px; padding:2px 8px; font-size:11.5px; }
+.blk-fecha.ent-maniana, .blk-fecha.ent-futura { border-radius:999px; padding:4px 10px; font-size:11.5px; }
 
 /* ── PEDIDOS PROGRAMADOS PARA MAS ADELANTE ──
    Mismo criterio que los archivados: siguen estando, pero plegados, para
@@ -251,34 +264,44 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
    su propia grilla, cada uno mediría su columna por separado y las
    cantidades no quedarían alineadas entre sí. */
 .oc-items {
-  display:grid; grid-template-columns:auto 1fr; column-gap:9px; row-gap:3px;
-  align-items:baseline; margin-top:8px;
-  border-top:1px solid var(--lgray); padding-top:7px;
+  display:grid; grid-template-columns:auto 1fr; column-gap:9px; row-gap:6px;
+  align-items:baseline; margin-top:10px;
+  background:var(--lgray); border-radius:13px; padding:11px 12px;
   font-size:12.5px; color:var(--gray);
 }
 .oc-q { font-weight:700; color:var(--text); text-align:right; white-space:nowrap; }
 .oc-p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .oc-mas { grid-column:1 / -1; color:var(--blue); font-weight:600; }
+/* Punto/check/cruz antes del texto: el estado se lee sin necesidad de
+   color (el trazo cambia de forma, no solo de color), y es puro CSS
+   generado — no hace falta tocar el HTML de cada pedido. */
 .status-pill {
-  font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11px; font-weight:700; border-radius:999px; padding:4px 10px 4px 9px; white-space:nowrap;
+}
+.status-pill::before {
+  content:''; width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0;
 }
 .sp-Pendiente  { background:var(--lorng);  color:var(--orange-ink); }
 .sp-Despachado { background:var(--lgreen); color:var(--green-ink); }
 .sp-Cancelado  { background:var(--lred);   color:var(--red-ink); }
+.sp-Despachado::before { content:'✓'; width:auto; height:auto; background:none; font-size:10px; line-height:1; }
+.sp-Cancelado::before  { content:'✕'; width:auto; height:auto; background:none; font-size:10px; line-height:1; }
 /* Pedidos que pasan a retirar: se diferencian notoriamente del reparto. */
 .retiro-tag {
-  font-size:11px; font-weight:800; border-radius:10px; padding:3px 9px;
+  font-size:11px; font-weight:800; border-radius:999px; padding:3px 10px;
   background:#117A65; color:#fff; white-space:nowrap; letter-spacing:.3px;
 }
-.order-card.retiro { border-left-color:#117A65; background:#E8F8F5; }
+.order-card.retiro { background:#E8F8F5; }
+.order-card.retiro .oc-edge { background:#117A65; }
 /* Pedido armado solo con lo que faltó de otro: se distingue en violeta,
    el mismo color que ya usa "stock comprometido", para que no se
    confunda con un pedido nuevo de verdad del cliente. */
 .repo-tag {
-  font-size:11px; font-weight:800; border-radius:10px; padding:3px 9px;
+  font-size:11px; font-weight:800; border-radius:999px; padding:3px 10px;
   background:#7D3C98; color:#fff; white-space:nowrap; letter-spacing:.3px;
 }
-.order-card.es-repo, .pedido-blk.es-repo { border-left-color:#7D3C98; }
+.order-card.es-repo .oc-edge, .pedido-blk.es-repo .blk-edge { background:#7D3C98; }
 .repo-aviso {
   font-size:12.5px; line-height:1.45; color:#5B2C6F; background:#F4ECF7;
   border:1.5px solid #D7BDE2; border-radius:10px; padding:9px 11px; margin:8px 0;
@@ -466,11 +489,16 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .detail-item:last-child { border-bottom:none; }
 .status-btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
 .st-btn {
-  flex:1; padding:11px; border-radius:10px; border:2px solid var(--border);
+  flex:1; padding:11px; border-radius:12px; border:2px solid var(--border);
   font-size:14px; font-weight:700; cursor:pointer; background:#fff; min-width:100px;
+  transition:transform .16s ease-out;
 }
+.st-btn:active { transform:scale(.97); }
 .st-btn.act-Pendiente  { border-color:var(--orange); color:var(--orange-ink); background:var(--lorng); }
-.st-btn.act-Despachado { border-color:var(--green);  color:var(--green-ink);  background:var(--lgreen); }
+/* "Marcar Despachado" es la acción principal (seguir adelante con el
+   pedido): va sólida para que se note antes que "Cancelar", que queda
+   en su tono suave de siempre. */
+.st-btn.act-Despachado { border-color:var(--green); color:#fff; background:var(--green); }
 .st-btn.act-Cancelado  { border-color:var(--red);    color:var(--red-ink);    background:var(--lred); }
 
 /* ── AUTOCOMPLETE ── */
@@ -621,13 +649,13 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   #tab-cargar #cargarSubmitBtn { padding:17px; font-size:17px; border-radius:13px; margin-top:4px; }
 
   /* Pedidos: tarjetas con más aire, que era lo apretado. */
-  .order-list { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
-  .order-card { padding:15px 17px; }
+  .order-list { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
+  .order-card { padding:18px 18px 16px; }
   .oc-main { font-size:16.5px; }
   .oc-sub { font-size:12.5px; }
-  .oc-items { font-size:13px; row-gap:4px; padding-top:9px; margin-top:10px; }
+  .oc-items { font-size:13px; row-gap:6px; padding:12px 14px; margin-top:12px; }
   .section-header h3 { font-size:16px; }
-  .order-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.18); }
+  .order-card:hover { box-shadow:0 2px 4px rgba(29,32,48,.05), 0 14px 28px -14px rgba(29,32,48,.28); }
   .overlay { align-items:center; padding:24px; }
   .modal { border-radius:20px; max-width:560px; max-height:86vh; animation:popIn .18s ease; }
   .modal-handle { display:none; }
@@ -850,8 +878,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    separados en pisos: arriba las etiquetas, abajo el nombre solo, con
    todo el ancho y pudiendo ocupar dos renglones.
 
-   El bloque va de borde a borde (anula el padding de main) con esquinas
-   bien redondeadas, y los productos van en un panel hundido adentro: se
+   El bloque respira dentro del margen normal de la pantalla (antes iba
+   de borde a borde) y los productos van en un panel hundido adentro: se
    lee como un bloque con secciones y no como texto apilado.
 
    En PC se siguen usando las tarjetas en dos columnas, que aprovechan
@@ -861,28 +889,32 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .pedido-blk {
     position:relative;
     background:#fff; border-radius:18px; overflow:hidden;
-    box-shadow:0 2px 10px rgba(0,0,0,.10);
-    /* De borde a borde: anula los 12px de padding de main. */
-    margin:0 -12px; padding:14px 16px 0;
+    box-shadow:0 1px 2px rgba(29,32,48,.05), 0 8px 20px -12px rgba(29,32,48,.22);
+    padding:16px 16px 0;
     cursor:pointer; -webkit-user-select:none; user-select:none;
+    transition:transform .15s ease-out;
   }
-  .pedido-blk:active { background:#FBFCFD; }
-  /* Cinta de color al costado: el estado se reconoce sin leer. */
-  .pedido-blk::before {
-    content:''; position:absolute; left:0; top:0; bottom:0; width:5px;
+  .pedido-blk:active { background:#FBFCFD; transform:scale(.99); }
+  /* Franja de color arriba: el estado se reconoce sin leer. Un div propio
+     (no ::before) para que el overflow:hidden la recorte contra las
+     esquinas redondeadas igual que en la tarjeta de PC. */
+  .blk-edge {
+    position:absolute; top:0; left:0; right:0; height:4px;
     background:var(--border);
   }
-  .pedido-blk.Pendiente::before  { background:var(--orange); }
-  .pedido-blk.Despachado::before { background:var(--green); }
-  .pedido-blk.Cancelado::before  { background:var(--red); }
-  .pedido-blk.Cancelado { opacity:.62; }
-  .pedido-blk.retiro::before { background:#117A65; }
+  .pedido-blk.Pendiente  .blk-edge { background:var(--orange); }
+  .pedido-blk.Despachado .blk-edge { background:var(--green); }
+  .pedido-blk.Cancelado  .blk-edge { background:var(--red); }
+  .pedido-blk.Cancelado .blk-cliente {
+    color:var(--gray); text-decoration:line-through; text-decoration-color:var(--red);
+  }
+  .pedido-blk.retiro .blk-edge { background:#117A65; }
   .pedido-blk.en-cola { opacity:.75; }
-  .pedido-blk.en-cola::before { background:var(--blue); }
+  .pedido-blk.en-cola .blk-edge { background:var(--blue); }
   /* Un pedido que NO llegó al servidor no puede verse igual que uno que
-     está saliendo: la cinta se pone roja y el bloque no se atenúa. */
+     está saliendo: la franja se pone roja y el bloque no se atenúa. */
   .pedido-blk.blk-error { opacity:1; }
-  .pedido-blk.blk-error::before { background:var(--red); }
+  .pedido-blk.blk-error .blk-edge { background:var(--red); }
 
   /* Piso 1: etiquetas */
   .blk-top { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
@@ -891,7 +923,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   /* Piso 2: el cliente, con todo el ancho y sin cortarse */
   .blk-cliente {
     font-size:18.5px; font-weight:800; line-height:1.22; letter-spacing:-.2px;
-    word-break:break-word;
+    word-break:break-word; transition:color .2s ease;
   }
   .blk-dir { font-size:13px; color:var(--gray); margin-top:3px; line-height:1.35; }
 
@@ -951,10 +983,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .refresh-btn {
   flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:7px;
   border:1.5px solid var(--navy); background:#fff; color:var(--navy);
-  border-radius:10px; padding:10px 15px; font-size:14px; font-weight:700;
-  cursor:pointer; white-space:nowrap; transition:.15s;
+  border-radius:12px; padding:10px 15px; font-size:14px; font-weight:700;
+  cursor:pointer; white-space:nowrap; transition:transform .15s ease-out, background-color .15s ease;
 }
 .refresh-btn:hover:not(:disabled) { background:var(--lblue); }
+.refresh-btn:active:not(:disabled) { transform:scale(.97); }
 .refresh-btn:disabled { opacity:.55; cursor:default; }
 .refresh-btn .rb-ico { font-size:16px; line-height:1; }
 .refresh-btn.girando .rb-ico { animation:spin .8s linear infinite; }
@@ -974,9 +1007,10 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .dia-check.malo { background:var(--lred);   color:var(--red-ink); }
 
 /* Tarjeta de un pedido que todavía no confirmó el servidor */
-.order-card.en-cola { opacity:.72; border-left-color:var(--blue); }
+.order-card.en-cola { opacity:.72; }
+.order-card.en-cola .oc-edge { background:var(--blue); }
 .cola-tag {
-  font-size:11px; font-weight:700; border-radius:10px; padding:3px 9px;
+  font-size:11px; font-weight:700; border-radius:999px; padding:3px 10px;
   background:var(--lblue); color:var(--blue-ink); white-space:nowrap;
 }
 .cola-tag.err { background:var(--lred); color:var(--red-ink); }
@@ -1127,10 +1161,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 /* ══ DESPACHAR VARIOS (pestaña Pedidos) ══ */
 .desp-btn {
   flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green-ink);
-  border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700;
-  cursor:pointer; white-space:nowrap;
+  border-radius:12px; padding:10px 14px; font-size:14px; font-weight:700;
+  cursor:pointer; white-space:nowrap; transition:transform .15s ease-out, background-color .15s ease;
 }
 .desp-btn:hover { background:#D5F5E3; }
+.desp-btn:active { transform:scale(.97); }
 @media(max-width:767.98px) {
   .pedidos-top { flex-wrap:wrap; }
   .desp-btn { width:100%; padding:13px; font-size:15px; }
@@ -3482,6 +3517,7 @@ function pedidoBloqueHtml(p) {
     <div class="pedido-blk ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${p.errorCola ? ' blk-error' : ''}${d.cls}"
          data-pid="${p.id}"
          onclick="${d.onclick}">
+      <div class="blk-edge"></div>
       <div class="blk-top">
         ${d.check}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
@@ -3536,6 +3572,7 @@ function pedidoCardHtml(p) {
     <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
          data-pid="${p.id}"
          onclick="${d.onclick}">
+      <div class="oc-edge"></div>
       <div class="oc-top">
         ${d.check}
         <div style="min-width:0">
@@ -4053,6 +4090,7 @@ function papeleraCardHtml(p) {
   if (p.elimPor) sub.push(esc(p.elimPor));
   return `
     <div class="order-card ${p.estado}" style="cursor:default;margin-bottom:8px">
+      <div class="oc-edge"></div>
       <div class="oc-top">
         <div style="min-width:0">
           <div class="oc-main">${esc(p.cliente)}</div>
