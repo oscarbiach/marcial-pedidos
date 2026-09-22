@@ -139,11 +139,6 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
    el centrado lo cuenta como parte de la caja y la deja más arriba de lo
    que corresponde. Vale para celular y PC. */
 #tab-cargar .form-card { margin-bottom:0; }
-.day-divider {
-  display:flex; align-items:center; gap:10px; grid-column:1/-1;
-  color:var(--gray); font-size:12px; font-weight:600; margin-top:4px;
-}
-.day-divider::before, .day-divider::after { content:''; flex:1; border-top:1px solid var(--border); }
 .order-card {
   position:relative;
   background:#fff; border-radius:18px; overflow:hidden;
@@ -192,10 +187,11 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .oc-chip.ent-vencida, .blk-fecha.ent-vencida { background:var(--lred);  color:var(--red-ink); }
 .oc-chip.ent-hoy,     .blk-fecha.ent-hoy     { background:var(--green); color:#fff; }
 .oc-chip.ent-maniana, .blk-fecha.ent-maniana { background:var(--lorng); color:var(--orange-ink); }
-.oc-chip.ent-futura,  .blk-fecha.ent-futura  { background:var(--lgray); color:var(--gray); }
+.oc-chip.ent-futura,  .blk-fecha.ent-futura,
+.oc-chip.ent-sinfecha, .blk-fecha.ent-sinfecha { background:var(--lgray); color:var(--gray); }
 /* En el bloque del celular la fecha era texto suelto; con color de fondo
    necesita la caja del chip para que se lea. */
-.blk-fecha.ent-vencida, .blk-fecha.ent-hoy,
+.blk-fecha.ent-vencida, .blk-fecha.ent-hoy, .blk-fecha.ent-sinfecha,
 .blk-fecha.ent-maniana, .blk-fecha.ent-futura { border-radius:999px; padding:4px 10px; font-size:11.5px; }
 
 /* ── PEDIDOS PROGRAMADOS PARA MAS ADELANTE ──
@@ -312,6 +308,12 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   color:#935116; background:#FDEBD0; border-radius:8px; padding:2px 7px;
 }
 .cuero-tag.nc { color:#922B21; background:#FADBD8; }
+/* Renglón despachado INCOMPLETO: al lado del número que salió de verdad,
+   recuerda lo que se había pedido (o que el dato viejo no es confiable). */
+.partial-tag {
+  font-size:11px; font-weight:700; white-space:nowrap;
+  color:var(--orange-ink); background:var(--lorng); border-radius:8px; padding:2px 7px;
+}
 .cuero-check input { margin-right:6px; }
 .retiro-mini {
   display:inline-flex; align-items:center; gap:7px; cursor:pointer;
@@ -577,12 +579,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   #compPanel.open { display:block; }
 }
 
-/* ── BUSCADOR (solo PC) ── */
-#searchInput {
+/* ── BUSCADOR de Pedidos (PC y celular: mismo campo, mismo estilo) ── */
+.search-input {
   width:100%; padding:11px 40px 11px 12px; border:1.5px solid var(--border);
   border-radius:10px; font-size:15px; outline:none; transition:.2s;
 }
-#searchInput:focus { border-color:var(--blue); }
+.search-input:focus { border-color:var(--blue); }
 .search-clear {
   position:absolute; right:8px; top:50%; transform:translateY(-50%);
   border:none; background:var(--lgray); color:var(--gray); border-radius:50%;
@@ -612,8 +614,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   .toast { bottom:90px; }
   /* 16px evita que iOS haga zoom automático al enfocar un campo */
   .field input, .field select, .field textarea,
-  .ped-item-row input { font-size:16px; }
+  .ped-item-row input, .search-input { font-size:16px; }
   .btn { padding:15px; }
+  /* Buscador de Pedidos en celular: mismo campo que en PC, pero cómodo
+     para el pulgar (más alto, letra más grande) y ubicado antes que los
+     botones de Actualizar/Despachar varios. */
+  .pedido-search.mobile-only { margin-bottom:2px; }
+  .pedido-search.mobile-only .search-input { padding:13px 44px 13px 14px; }
+  .pedido-search.mobile-only .search-clear { width:30px; height:30px; font-size:14px; }
 }
 
 /* ── PC: nav en el header, dos columnas, modales centrados ── */
@@ -948,10 +956,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     padding:11px 0 13px;
   }
   .blk-pie .blk-quien { font-weight:700; }
-
-  /* Los separadores por día quedan hacia adentro: los bloques van a los
-     bordes y los títulos no, y ese contraste marca los grupos. */
-  .day-divider { margin:14px 0 10px; font-size:12.5px; }
   .order-list { gap:12px; }
 }
 
@@ -1003,8 +1007,15 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 .dia-check b { font-size:13.5px; }
 .dia-check span { font-size:12px; opacity:.85; }
-.dia-check.bien { background:var(--lgreen); color:var(--green-ink); }
 .dia-check.malo { background:var(--lred);   color:var(--red-ink); }
+/* Cuando está todo guardado no hace falta un cartel: alcanza con un
+   aviso chico. Si falta algo, .dia-check.malo (de arriba) sigue tan
+   evidente como siempre — acá solo se achica el caso "todo bien". */
+.sync-ok {
+  display:flex; align-items:center; gap:5px;
+  font-size:12px; font-weight:600; color:var(--green-ink);
+  padding:2px 2px 10px; white-space:nowrap;
+}
 
 /* Tarjeta de un pedido que todavía no confirmó el servidor */
 .order-card.en-cola { opacity:.72; }
@@ -1246,6 +1257,20 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   border-radius:8px; padding:6px 9px; margin:-2px 0 8px;
 }
 
+/* Observación del pedido, visible en la tarjeta/bloque sin abrir el
+   detalle. Tono neutro (gris, letra normal): tiene que leerse fácil sin
+   competir con el cliente ni con la fecha de entrega. */
+.ped-notas {
+  font-size:13px; line-height:1.45; color:var(--text);
+  background:var(--lgray); border-radius:10px; padding:8px 10px; margin:8px 0 0;
+}
+.ped-notas .pn-txt, b.pn-txt { white-space:pre-wrap; word-break:break-word; }
+.ped-notas .pn-ver {
+  display:block; margin-top:4px; border:none; background:none; padding:0;
+  color:var(--blue); font-weight:700; font-size:12.5px; cursor:pointer;
+}
+.ped-notas .pn-ver:hover { text-decoration:underline; }
+
 /* ── Papelera: vaciar ── */
 .pap-vaciar { display:flex; align-items:center; justify-content:space-between; gap:10px;
   margin-bottom:12px; flex-wrap:wrap; }
@@ -1448,12 +1473,22 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
              carga, no algo aparte — se elegían los pedidos dos veces, una
              para saber qué subir a la camioneta y otra para la ruta. -->
         <div class="form-card pedidos-top" style="padding:12px">
-          <div class="ac-wrap pc-only" style="flex:1;min-width:0">
-            <input type="text" id="searchInput" placeholder="🔍 Buscar por cliente o producto…"
+          <!-- Mismo buscador que en PC (misma lógica, mismos campos): acá
+               va primero y a todo el ancho, para que se note apenas se
+               entra a Pedidos desde el celular. -->
+          <div class="ac-wrap pedido-search mobile-only" style="width:100%">
+            <input type="text" class="search-input" placeholder="🔍 Buscar por cliente o producto…"
+              autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search"
+              oninput="onSearchInput(this)" onblur="setTimeout(()=>closeSearchAc(this),200)">
+            <button class="search-clear" onclick="clearSearch()">✕</button>
+            <div class="ac-list"></div>
+          </div>
+          <div class="ac-wrap pedido-search pc-only" style="flex:1;min-width:0">
+            <input type="text" class="search-input" placeholder="🔍 Buscar por cliente o producto…"
               autocomplete="off" oninput="onSearchInput(this)"
-              onblur="setTimeout(()=>document.getElementById('searchAcList').classList.remove('open'),200)">
-            <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
-            <div class="ac-list" id="searchAcList"></div>
+              onblur="setTimeout(()=>closeSearchAc(this),200)">
+            <button class="search-clear" onclick="clearSearch()">✕</button>
+            <div class="ac-list"></div>
           </div>
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
@@ -1588,7 +1623,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <div class="modal-handle"></div>
     <div class="modal-header">
       <h2 id="despChkTitulo">Despacho</h2>
-      <button class="close-btn" onclick="cancelarChecklistDespacho()">✕</button>
+      <button class="close-btn" id="despChkCerrar" onclick="cancelarChecklistDespacho()">✕</button>
     </div>
     <div class="modal-body">
       <p class="chk-ayuda">Marcá qué salió completo y qué quedó incompleto.</p>
@@ -1747,8 +1782,13 @@ function mapPedido_(row) {
       // Si tiene motivo, hubo una novedad al despachar (faltó, se cayó,
       // volvió con el cliente…): se guarda aparte, sin tocar qty, que
       // sigue siendo lo que el cliente pidió.
+      // cantidadEntregada se deja en null (no en 0) cuando la base no
+      // tiene el dato: son cosas distintas ("se entregó 0" vs "no se
+      // guardó cuánto"), y confundirlas inventaría un número que no se
+      // puede asegurar (ver itemEntregaInfo).
       if (it.motivo_faltante) {
-        o.cantidadEntregada = Number(it.cantidad_entregada) || 0;
+        o.cantidadEntregada = (it.cantidad_entregada === null || it.cantidad_entregada === undefined)
+          ? null : Number(it.cantidad_entregada);
         o.motivoFaltante = it.motivo_faltante;
         if (it.detalle_faltante) o.detalleFaltante = it.detalle_faltante;
       }
@@ -1929,14 +1969,18 @@ async function sbGuardarNovedadItem(itemId, cantidadEntregada, motivo, detalle) 
 
 // Marcar varios como despachados de una. Solo toca los que siguen
 // Pendientes: si otro ya despachó o canceló alguno mientras tanto, a ese
-// no se le pisa el estado ni la fecha.
+// no se le pisa el estado ni la fecha. Devuelve los ids que SÍ se
+// despacharon ahora (no solo el total): el checklist los necesita para no
+// tocar novedades ni armar una reposición sobre un pedido que en realidad
+// ya había resuelto otra sesión.
 async function sbDespacharVarios(ids) {
   const { data, error } = await sb.from('pedidos')
     .update({ estado: 'Despachado', fecha_despacho: hoyArg() })
     .in('id', ids).eq('estado', 'Pendiente').is('eliminado_en', null)
     .select('id');
   if (error) throw sbError_(error);
-  return { ok: true, n: (data || []).length };
+  const hechos = (data || []).map(r => r.id);
+  return { ok: true, n: hechos.length, ids: hechos };
 }
 
 // ✕ de una hoja de reparto guardada: baja lógica (ver 10-hojas-y-papelera.sql).
@@ -2080,8 +2124,9 @@ Object.defineProperty(google.script, 'run', { get: makeRunner });
 // ═══════════════════════════════════════════════════════════════
 let state = { products:[], pedidos:[], papelera:[], clientes:[], hojas:[], today:'', who:'—', pin:'' };
 let activeTab = 'cargar';
-let showArchived = false;
 let showProgramados = false;
+let showDespachados = false;
+let showCancelados = false;
 let searchQuery = '';
 // '' = texto escrito a mano (coincidencia parcial).
 // 'cliente' | 'producto' = salió de la lista desplegable (coincidencia exacta).
@@ -3456,16 +3501,29 @@ function nombreDiaCorto(f) {
   return isNaN(dt) ? '' : DIAS_CORTOS[dt.getDay()];
 }
 
+// d = null es "sin fecha" (nunca se asume hoy). Devuelve SIEMPRE un
+// objeto para un pedido Pendiente — así el resto del código (chips,
+// agrupación de la lista) no tiene que tratar "sin fecha" aparte.
 function entregaInfo(p) {
-  if (!p.fechaEntrega || p.estado !== 'Pendiente') return null;
+  if (p.estado !== 'Pendiente') return null;
+  if (!p.fechaEntrega) return { d: null, cls:'ent-sinfecha', corto:'Sin fecha', txt:'Sin fecha de entrega' };
   const d = -daysSince(p.fechaEntrega);   // >0 falta, 0 es hoy, <0 se pasó
-  if (d < 0)   return { d, cls:'ent-vencida', corto:'⚠ ' + fmtDiaMes(p.fechaEntrega),
+  if (d < 0)   return { d, cls:'ent-vencida', corto:'ATRASADO · ' + fmtDiaMes(p.fechaEntrega),
                         txt:'⚠ Se pasó — era ' + fmtDiaMes(p.fechaEntrega) };
-  if (d === 0) return { d, cls:'ent-hoy', corto:'📌 HOY', txt:'📌 ENTREGA HOY' };
-  if (d === 1) return { d, cls:'ent-maniana', corto:'📅 Mañana', txt:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega) };
+  if (d === 0) return { d, cls:'ent-hoy', corto:'ENTREGA HOY', txt:'📌 ENTREGA HOY' };
+  if (d === 1) return { d, cls:'ent-maniana', corto:'ENTREGA MAÑANA', txt:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega) };
   return { d, cls:'ent-futura',
-           corto:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega),
+           corto:'Entrega ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega),
            txt:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) + ' · en ' + d + ' días' };
+}
+
+// "Cargado hoy" / "Cargado ayer" / "Cargado el 18/09" — la fecha de
+// carga como dato secundario y explícito, ya no como título de grupo
+// ambiguo ("Hoy"/"Ayer" mezclaba con la fecha de entrega a simple vista).
+function cargaLabel(f) {
+  if (f === state.today) return 'Cargado hoy';
+  if (daysSince(f) === 1) return 'Cargado ayer';
+  return 'Cargado el ' + fmtDiaMes(f);
 }
 
 // ── PEDIDOS DE REPOSICIÓN ──
@@ -3492,6 +3550,51 @@ function pedidoRepoHtml(p) {
   return `<div class="repo-aviso">🔁 <b>Repone faltante</b> — ${esc(repoDetalle(p))}</div>`;
 }
 
+// ── Observación visible en la tarjeta/bloque, sin abrir el detalle ──
+// Antes solo se veía un texto suelto y recortado en el pie del bloque de
+// celular, y en PC no se veía nada hasta abrir el pedido. Cuánto entra sin
+// "Ver más": alcanza para una observación corta, pero no tanto como para
+// tapar el cliente o la fecha de entrega si alguien escribe un párrafo.
+const NOTA_PREVIEW_CHARS = 140;
+const NOTA_PREVIEW_LINEAS = 3;
+
+// Qué observaciones están desplegadas ENTERAS en la lista, por id de
+// pedido. Es un detalle de esta vista, no del dato: no hace falta
+// guardarlo, y no pasa nada si se pierde al recargar.
+let notasAbiertas = {};
+
+function notaEsLarga(texto) {
+  return texto.length > NOTA_PREVIEW_CHARS || texto.split('\n').length > NOTA_PREVIEW_LINEAS;
+}
+
+function notaPreview(texto) {
+  const lineas = texto.split('\n');
+  const cortada = lineas.length > NOTA_PREVIEW_LINEAS;
+  let s = lineas.slice(0, NOTA_PREVIEW_LINEAS).join('\n');
+  if (s.length > NOTA_PREVIEW_CHARS) return s.slice(0, NOTA_PREVIEW_CHARS) + '…';
+  return cortada ? s + '…' : s;
+}
+
+// No se muestra nada si no hay observación (nada de espacio vacío), ni
+// para una reposición: esa ya tiene su propio aviso violeta con el mismo
+// texto (pedidoRepoHtml), mostrarla dos veces sería ruido.
+function pedidoNotasHtml(p) {
+  if (!p.notas || esReposicion(p)) return '';
+  const texto = String(p.notas).replace(/\r\n?/g, '\n');
+  const larga = notaEsLarga(texto);
+  const abierta = !!notasAbiertas[p.id];
+  const mostrado = (larga && !abierta) ? notaPreview(texto) : texto;
+  return `<div class="ped-notas">
+    <span class="pn-txt">${esc(mostrado)}</span>
+    ${larga ? `<button type="button" class="pn-ver" onclick="event.stopPropagation();toggleNotaLarga('${p.id}')">${abierta ? 'Ver menos' : 'Ver más'}</button>` : ''}
+  </div>`;
+}
+
+function toggleNotaLarga(id) {
+  notasAbiertas[id] = !notasAbiertas[id];
+  renderPedidos();
+}
+
 // Bloque de un pedido (celular). La diferencia con la tarjeta de PC no es
 // decorativa: acá el cliente tiene todo el ancho para él, en vez de
 // pelearlo con las etiquetas de estado y cortarse con puntitos.
@@ -3500,8 +3603,8 @@ function pedidoBloqueHtml(p) {
 
   const ent = entregaInfo(p);
   let fecha = '', fechaCls = '';
-  if (p.estado === 'Despachado' && p.fechaDespacho) fecha = '✓ ' + fmtDiaMes(p.fechaDespacho);
-  else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = '✕ ' + fmtDiaMes(p.fechaDespacho);
+  if (p.estado === 'Despachado' && p.fechaDespacho) fecha = '✓ Despachado ' + fmtDiaMes(p.fechaDespacho);
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = '✕ Cancelado ' + fmtDiaMes(p.fechaDespacho);
   else if (ent) { fecha = ent.corto; fechaCls = ' ' + ent.cls; }
   else if (p.fechaEntrega) fecha = '📅 ' + fmtDiaMes(p.fechaEntrega);
 
@@ -3530,15 +3633,16 @@ function pedidoBloqueHtml(p) {
       <div class="blk-cliente">${esc(p.cliente)}</div>
       ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
       ${pedidoRepoHtml(p)}
+      ${pedidoNotasHtml(p)}
       <div class="blk-prods">
         ${muestra.map(it => `
-          <span class="blk-q">${itemLabelCorto(it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
+          <span class="blk-q">${itemDespachoLabelCorto(p, it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}${itemPartialTagHtml(p, it)}</span>`).join('')}
         ${resto > 0 ? `<div class="blk-mas">+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
       </div>
       <div class="blk-pie">
         ${p.quien ? `<span class="blk-quien">👤 ${esc(p.quien)}</span>` : ''}
+        <span>${cargaLabel(p.fecha)}</span>
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
-        ${p.notas && !esReposicion(p) ? `<span>⚠ ${esc(p.notas)}</span>` : ''}
       </div>
     </div>`;
 }
@@ -3549,11 +3653,11 @@ function pedidoCardHtml(p) {
 
   const sinConfirmar = p.enCola || p.errorCola;
 
-  // La fecha de CARGA no se repite acá: ya la dice el separador de día que
-  // encabeza cada grupo de la lista. Antes iba en todas las tarjetas y era
-  // la mitad del ruido de la línea gris.
+  // La fecha de carga es dato secundario y explícito ("Cargado hoy/ayer/
+  // el DD/MM"), separado de la fecha de ENTREGA (que va como chip abajo).
   const meta = [];
   if (p.direccion) meta.push(dirLinkHtml(p.direccion, 'dir-link'));
+  meta.push(cargaLabel(p.fecha));
   meta.push(p.items.length + ' producto' + (p.items.length !== 1 ? 's' : ''));
   if (p.quien) meta.push(esc(p.quien));
 
@@ -3561,8 +3665,8 @@ function pedidoCardHtml(p) {
   // separada por puntos.
   const entCard = entregaInfo(p);
   let chip = '';
-  if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">✓ ${fmtDiaMes(p.fechaDespacho)}</span>`;
-  else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">✓ Despachado ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ Cancelado ${fmtDiaMes(p.fechaDespacho)}</span>`;
   else if (entCard) chip = `<span class="oc-chip ${entCard.cls}">${entCard.txt}</span>`;
   else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
@@ -3589,23 +3693,13 @@ function pedidoCardHtml(p) {
         </div>
       </div>
       ${pedidoRepoHtml(p)}
+      ${pedidoNotasHtml(p)}
       <div class="oc-items">
         ${p.items.slice(0, 3).map(it => `
-          <span class="oc-q">${itemLabelCorto(it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}</span>`).join('')}
+          <span class="oc-q">${itemDespachoLabelCorto(p, it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}${itemPartialTagHtml(p, it)}</span>`).join('')}
         ${p.items.length > 3 ? `<div class="oc-mas">+ ${p.items.length - 3} más…</div>` : ''}
       </div>
     </div>`;
-}
-
-// Tarjetas con un separador cada vez que cambia la fecha de carga
-// (la lista ya viene con lo más reciente arriba).
-function listWithDividers(list) {
-  let html = '', last = null;
-  list.forEach(p => {
-    if (p.fecha !== last) { html += dayDividerHtml(p.fecha); last = p.fecha; }
-    html += pedidoCardHtml(p);
-  });
-  return html;
 }
 
 // Los programados se agrupan por la fecha de ENTREGA y de la más cercana
@@ -3626,23 +3720,35 @@ function listaPorEntrega(list) {
   return html;
 }
 
-function dayDividerHtml(f) {
-  let lbl = fmtDate(f) || 'Sin fecha';
-  if (f === state.today) lbl = 'Hoy · ' + lbl;
-  else if (daysSince(f) === 1) lbl = 'Ayer · ' + lbl;
-  return `<div class="day-divider">${lbl}</div>`;
+// Grupo simple (sin separadores por fecha de carga: esa fecha ahora va
+// dentro de cada tarjeta, como dato secundario — ver cargaLabel).
+function pedidoSectionHtml(titulo, list) {
+  if (!list.length) return '';
+  return `<div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>` +
+    `<div class="order-list">${list.map(pedidoCardHtml).join('')}</div>`;
 }
 
-function pedidoSectionHtml(est, list) {
+// Sección plegable genérica (Más adelante / Despachados / Cancelados).
+// Con el buscador activo se fuerza abierta: un resultado que coincide
+// nunca debe quedar escondido detrás de un plegado.
+function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaGrouping }) {
   if (!list.length) return '';
-  return `<div class="section-header"><h3>${est}</h3><span class="badge">${list.length}</span></div>` +
-    `<div class="order-list">${listWithDividers(list)}</div>`;
+  let html = `<div class="${claseAviso}" onclick="${onclick}()">
+    <span>${texto}</span>
+    <span>${abierto ? '▲' : '▼'}</span>
+  </div>`;
+  if (abierto) {
+    const inner = entregaGrouping ? listaPorEntrega(list) : list.map(pedidoCardHtml).join('');
+    html += `<div class="order-list prog-list">${inner}</div>`;
+  }
+  return html;
 }
 
 // Cierre del día: reemplaza al control contra WhatsApp. Dice, sin que
 // haya que acordarse de nada, si todo lo cargado hoy ya está en el
 // servidor. Si algo quedó colgado, lo grita en vez de esperar a que
-// alguien lo note.
+// alguien lo note. Si está todo bien, el aviso es chico a propósito: lo
+// que hay que ver rápido es lo que falta, no confirmar lo que ya anda.
 //
 // Cuenta solo los pedidos cargados HOY: los del servidor ya están
 // confirmados por definición (vinieron de ahí), y los de la cola se
@@ -3653,7 +3759,6 @@ function resumenDelDiaHtml() {
   const deHoy = (state.pedidos || []).filter(p => p.fecha === hoy);
   if (!deHoy.length) return '';
   const colgados = deHoy.filter(p => p.enCola || p.errorCola).length;
-  const enServidor = deHoy.length - colgados;
 
   if (colgados) {
     return `<div class="dia-check malo">
@@ -3661,59 +3766,52 @@ function resumenDelDiaHtml() {
       <span>Están guardados en este celular. No cierres la app hasta que salgan.</span>
     </div>`;
   }
-  return `<div class="dia-check bien">
-    <b>✅ Los ${enServidor} pedidos de hoy están guardados en el servidor</b>
-    <span>No quedó nada colgado en este celular.</span>
-  </div>`;
+  return `<div class="sync-ok">✓ Todo guardado</div>`;
 }
 
 function renderPedidos() {
   const pedidos = pedidosFiltrados();
   const q = searchQuery.trim().toLowerCase();
 
-  const pend = [], prog = [], desp = [], canc = [], arch = [];
+  // Pendientes agrupados por fecha de ENTREGA (no de carga), en este
+  // orden: atrasados, hoy, mañana, sin fecha, más adelante. "Sin fecha"
+  // es un grupo propio — nunca se asume "para hoy". Despachado/Cancelado
+  // van aparte, plegados, para no competir con lo que hay que resolver.
+  const atrasados = [], hoyG = [], mananaG = [], sinFecha = [], masAdelante = [], desp = [], canc = [];
   pedidos.forEach(p => {
     if (p.estado === 'Pendiente') {
-      // Programado = para pasado mañana o más adelante. Lo de mañana NO se
-      // pliega: mañana ya hay que prepararlo. Con el buscador activo no se
-      // pliega nada, porque ahí se está buscando algo puntual.
       const ent = entregaInfo(p);
-      ((ent && ent.d >= 2 && !q) ? prog : pend).push(p);
+      if (ent.d === null) sinFecha.push(p);
+      else if (ent.d < 0) atrasados.push(p);
+      else if (ent.d === 0) hoyG.push(p);
+      else if (ent.d === 1) mananaG.push(p);
+      else masAdelante.push(p);
     }
-    else if (p.estado === 'Cancelado') {
-      (daysSince(p.fechaDespacho || p.fecha) > 7 ? arch : canc).push(p);
-    }
-    else if (p.estado === 'Despachado') {
-      (daysSince(p.fechaDespacho || p.fecha) > 7 ? arch : desp).push(p);
-    }
+    else if (p.estado === 'Cancelado') canc.push(p);
+    else if (p.estado === 'Despachado') desp.push(p);
   });
 
   let cuerpo = resumenDelDiaHtml();
-  cuerpo += pedidoSectionHtml('Pendiente', pend);
+  cuerpo += pedidoSectionHtml('Atrasados', atrasados);
+  cuerpo += pedidoSectionHtml('Para hoy', hoyG);
+  cuerpo += pedidoSectionHtml('Para mañana', mananaG);
+  cuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha);
 
-  if (prog.length) {
-    const abierto = showProgramados;
-    cuerpo += `<div class="prog-notice" onclick="toggleProgramados()">
-      <span>📆 <span class="pn-n">${prog.length}</span> pedido${prog.length !== 1 ? 's' : ''} programado${prog.length !== 1 ? 's' : ''} para más adelante</span>
-      <span>${abierto ? '▲' : '▼'}</span>
-    </div>`;
-    if (abierto) {
-      cuerpo += `<div class="order-list prog-list">${listaPorEntrega(prog)}</div>`;
-    }
-  }
-
-  cuerpo += pedidoSectionHtml('Despachado', desp);
-  cuerpo += pedidoSectionHtml('Cancelado', canc);
-
-  if (arch.length) {
-    cuerpo += `<div class="archived-notice" onclick="toggleArchived()">
-      <span>✓ ${arch.length} pedido${arch.length !== 1 ? 's' : ''} de hace más de 1 semana</span>
-      <span>${showArchived ? '▲' : '▼'}</span>
-    </div>`;
-    if (showArchived) {
-      cuerpo += `<div class="order-list archived-list">${listWithDividers(arch)}</div>`;
-    }
-  }
+  cuerpo += pedidoPliegueHtml(masAdelante, {
+    claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
+    abierto: q ? true : showProgramados,
+    texto: `📆 <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
+  });
+  cuerpo += pedidoPliegueHtml(desp, {
+    claseAviso: 'prog-notice', onclick: 'toggleDespachados', entregaGrouping: false,
+    abierto: q ? true : showDespachados,
+    texto: `✓ <span class="pn-n">${desp.length}</span> despachado${desp.length !== 1 ? 's' : ''}`,
+  });
+  cuerpo += pedidoPliegueHtml(canc, {
+    claseAviso: 'archived-notice', onclick: 'toggleCancelados', entregaGrouping: false,
+    abierto: q ? true : showCancelados,
+    texto: `✕ ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}`,
+  });
 
   if (!cuerpo) {
     cuerpo = q
@@ -3848,6 +3946,7 @@ function abrirChecklistDespacho(ids) {
   });
   if (!validos.length) { toast('No hay nada para despachar.'); return; }
   despChecklist = { ids: validos, idx: 0, resp: {} };
+  document.getElementById('despChkCerrar').disabled = false;  // por si quedó deshabilitada de un despacho anterior
   document.getElementById('despChecklistModal').classList.add('open');
   renderChecklistPaso();
 }
@@ -3973,49 +4072,88 @@ function chkAtras() {
 
 async function finalizarChecklistDespacho() {
   const btn = document.getElementById('despChkSiguiente');
+  const btnCerrar = document.getElementById('despChkCerrar');
   btn.disabled = true;
+  btnCerrar.disabled = true;   // ver el porqué más abajo, junto a "respAll"
   const ids = despChecklist.ids.slice();
-
-  // Todos los renglones marcados INCOMPLETO, de todos los pedidos del
-  // checklist. Se guarda cuánto ENTREGÓ (lo pedido menos lo que no se
-  // entregó), que es el dato que ya sabe leer el resto de la app. El
-  // motivo queda fijo en 'otro': ya no se le pide al vendedor, pero se
-  // deja algo cargado para que un reporte futuro (pedidos_con_faltantes)
-  // pueda seguir encontrando estos renglones.
-  //
-  // De paso se junta, pedido por pedido, lo que faltó: con eso se arma
-  // un pedido Pendiente nuevo al mismo cliente (ver más abajo), para que
-  // lo que volvió al depósito no se pierda de vista.
-  const cambios = [];
-  const reposiciones = []; // { ped, faltantes:[{prod,qty,fetear,sinCuero,unidades}] }
-  ids.forEach(pid => {
-    const ped = state.pedidos.find(x => x.id === pid);
-    const resp = despChecklist.resp[pid] || {};
-    const faltantes = [];
-    (ped ? ped.items : []).forEach(it => {
-      const r = resp[it.id];
-      if (!r || r.completo) return;
-      const cantidadNoEntregada = round2(Number(r.cantidadNoEntregada || 0));
-      const cantidadEntregada = round2(Number(it.qty) - cantidadNoEntregada);
-      cambios.push({ itemId: it.id, cantidadEntregada });
-      if (cantidadNoEntregada > 0) {
-        faltantes.push({ prod: it.prod, qty: cantidadNoEntregada, fetear: it.fetear, sinCuero: it.sinCuero, unidades: it.unidades });
-      }
-    });
-    if (ped && faltantes.length) reposiciones.push({ ped, faltantes });
-  });
+  // Copia PROPIA de las respuestas (no una referencia a despChecklist.resp)
+  // porque de acá en más hay awaits de por medio, y con conexión lenta el
+  // checklist sigue en pantalla mientras tanto: si alguien llegara a tocar
+  // Completo/INCOMPLETO en ese lapso, no tiene que poder cambiar lo que ya
+  // se mandó a confirmar. Además, si se tocara la ✕ (cancelarChecklistDespacho
+  // pone despChecklist en null), seguir leyendo despChecklist.resp más abajo
+  // rompería con un pedido YA despachado en el servidor — por eso también se
+  // deshabilita la ✕ mientras se procesa: cancelar acá no tendría sentido,
+  // la operación ya está en vuelo.
+  const respAll = JSON.parse(JSON.stringify(despChecklist.resp));
 
   const llamar = (accion, args) => new Promise((resolve, reject) => {
     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[accion](...args);
   });
 
   try {
-    for (const c of cambios) {
-      const r = await llamar('guardarNovedadItem', [c.itemId, c.cantidadEntregada, 'otro', '']);
-      if (!r.ok) throw new Error(r.error || 'No se pudo guardar una novedad');
-    }
+    // Primero se confirma el despacho en sí, ANTES de tocar un solo
+    // renglón. Si mientras se llenaba el checklist otra sesión ya
+    // despachó o canceló alguno de estos pedidos, despacharVarios lo va a
+    // dejar afuera (solo toca los que siguen Pendientes) y acá se sabe
+    // exactamente cuáles se despacharon RECIÉN. Todo lo que sigue
+    // (guardar novedades, armar reposición) se hace solo para esos —
+    // nunca para uno que en realidad ya había resuelto otra sesión, que
+    // es lo que antes podía pisarle la novedad ya guardada por esa otra
+    // sesión (o crearle una reposición de más).
     const r2 = await llamar('despacharVarios', [ids]);
-    const hechos = (r2 && r2.n) || 0;
+    const hechosIds = (r2 && r2.ids) || [];
+    const hechosSet = new Set(hechosIds);
+    const hechos = hechosIds.length;
+
+    // De los pedidos recién despachados: por cada renglón se guarda
+    // cuánto ENTREGÓ con novedad (lo pedido menos lo que no se entregó)
+    // si quedó INCOMPLETO, que es el dato que ya sabe leer el resto de la
+    // app. El motivo queda fijo en 'otro': ya no se le pide al vendedor,
+    // pero deja algo cargado para que un reporte futuro
+    // (pedidos_con_faltantes) siga encontrando estos renglones. Un
+    // renglón COMPLETO se guarda "sin novedad" SIEMPRE, sin fijarse en
+    // it.motivoFaltante del estado local: si un intento de despacho
+    // anterior de ESTE MISMO pedido ya había escrito una novedad pero
+    // después falló antes de llegar a este punto, esta sesión —sin haber
+    // recargado— nunca se enteró de ese cambio, y un reintento la
+    // dejaría pisada para siempre creyendo que no había nada que limpiar.
+    //
+    // De paso se junta, pedido por pedido, lo que faltó: con eso se arma
+    // un pedido Pendiente nuevo al mismo cliente (ver más abajo), para que
+    // lo que volvió al depósito no se pierda de vista.
+    const cambios = [];
+    const reposiciones = []; // { ped, faltantes:[{prod,qty,fetear,sinCuero,unidades}] }
+    ids.filter(id => hechosSet.has(id)).forEach(pid => {
+      const ped = state.pedidos.find(x => x.id === pid);
+      const resp = respAll[pid] || {};
+      const faltantes = [];
+      (ped ? ped.items : []).forEach(it => {
+        const r = resp[it.id];
+        if (!r || r.completo) { cambios.push({ itemId: it.id, cantidadEntregada: null, limpiar: true }); return; }
+        const cantidadNoEntregada = round2(Number(r.cantidadNoEntregada || 0));
+        const cantidadEntregada = round2(Number(it.qty) - cantidadNoEntregada);
+        cambios.push({ itemId: it.id, cantidadEntregada });
+        if (cantidadNoEntregada > 0) {
+          faltantes.push({ prod: it.prod, qty: cantidadNoEntregada, fetear: it.fetear, sinCuero: it.sinCuero, unidades: it.unidades });
+        }
+      });
+      if (ped && faltantes.length) reposiciones.push({ ped, faltantes });
+    });
+
+    // El despacho ya se confirmó: de acá en más nada se deshace (no
+    // tendría sentido "des-despachar" algo que ya salió de verdad). Se
+    // intentan todos los renglones y reposiciones igual, y lo que no se
+    // pueda guardar se avisa aparte en vez de frenar todo a mitad de camino.
+    let novedadesFallidas = 0;
+    for (const c of cambios) {
+      try {
+        const r = c.limpiar
+          ? await llamar('guardarNovedadItem', [c.itemId, null, null, ''])
+          : await llamar('guardarNovedadItem', [c.itemId, c.cantidadEntregada, 'otro', '']);
+        if (!r.ok) novedadesFallidas++;
+      } catch (e) { novedadesFallidas++; }
+    }
 
     // Un pedido Pendiente nuevo por cada pedido con faltantes, con SOLO
     // lo que no se entregó, sin fecha de entrega (queda para coordinar
@@ -4051,26 +4189,88 @@ async function finalizarChecklistDespacho() {
       if (creadas) msg += ` · 🔁 ${creadas} pedido${creadas !== 1 ? 's' : ''} de reposición`;
       if (repoFallidas) msg += ` · ⚠ ${repoFallidas} reposición${repoFallidas !== 1 ? 'es' : ''} no se pudo crear, cargala a mano`;
     }
+    if (novedadesFallidas) msg += ` · ⚠ ${novedadesFallidas} novedad${novedadesFallidas !== 1 ? 'es' : ''} no se pudo guardar`;
     toast(msg);
     despChecklist = null;
     closeModal('despChecklistModal');
     if (despActivo) salirDespacho();
     reload();
   } catch (e) {
+    // Solo despacharVarios puede llegar hasta acá (lo de abajo ya no
+    // deshace nada): si esto falló, no se despachó ni se tocó ningún
+    // renglón, así que el checklist puede reintentarse tal cual está.
     btn.disabled = false;
+    btnCerrar.disabled = false;
     if (e && e.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
-    toast('Error: no se pudo guardar. ' + ((e && e.message) || ''));
+    toast('Error: no se pudo despachar. ' + ((e && e.message) || ''));
   }
 }
 
+// Cuánto se entregó REALMENTE de un renglón. Si nunca se marcó una
+// novedad al despachar, se entregó todo lo pedido: no hay nada que
+// distinguir. Si se marcó pero el dato no es confiable (no se guardó, o
+// dice más de lo pedido — no debería pasar con el flujo actual, pero un
+// registro viejo o tocado a mano podría traerlo así), no se inventa un
+// número: se avisa que no se puede saber con certeza.
+function itemEntregaInfo(it) {
+  if (!it.motivoFaltante) return { entregada: Number(it.qty) || 0, incierto: false };
+  const raw = it.cantidadEntregada;
+  if (raw === null || raw === undefined || isNaN(Number(raw))) return { entregada: null, incierto: true };
+  const entregada = round2(Number(raw));
+  const pedida = Number(it.qty) || 0;
+  if (entregada < 0 || entregada > pedida) return { entregada: null, incierto: true };
+  return { entregada, incierto: false };
+}
+
+// La cantidad que manda para un renglón de un pedido YA despachado: si
+// hubo novedad, es lo que salió de verdad (no lo pedido originalmente,
+// que sigue disponible aparte y nunca se pierde — ver itemNovedadHtml).
+//
+// Se exige p.estado === 'Despachado' A PROPÓSITO, no solo it.motivoFaltante:
+// el checklist guarda la novedad de cada renglón ANTES de marcar el
+// pedido como Despachado (ver finalizarChecklistDespacho), así que si esa
+// segunda operación llega a fallar (o falla la limpieza de novedades al
+// volver a Pendiente, en sbUpdateEstado), un pedido puede quedar
+// Pendiente con renglones que ya tienen motivoFaltante cargado. Sin este
+// chequeo, ese pedido mostraría lo "entregado" de un despacho que en
+// realidad nunca se confirmó — mostrando MENOS de lo que en verdad hay
+// que preparar. Mientras el pedido no esté Despachado, manda lo pedido.
+function itemDespachoLabel(p, it) {
+  if (p.estado !== 'Despachado' || !it.motivoFaltante) return itemLineLabel(it);
+  const info = itemEntregaInfo(it);
+  if (info.incierto) return itemLineLabel(it);
+  return qtyLabel(it.prod, info.entregada, it.fetear, it.unidades);
+}
+function itemDespachoLabelCorto(p, it) {
+  return itemDespachoLabel(p, it).replace(/\s*\(=[^)]*\)\s*$/, '');
+}
+
+// Etiqueta chica para la tarjeta/bloque: qué se pidió originalmente,
+// aparte del número principal (que ya pasó a ser lo entregado). Sin esto
+// se perdería de vista que hubo un faltante con solo mirar la lista.
+function itemPartialTagHtml(p, it) {
+  if (p.estado !== 'Despachado' || !it.motivoFaltante) return '';
+  const info = itemEntregaInfo(it);
+  if (info.incierto) return ' <span class="partial-tag" title="Quedó anotado como incompleto, pero no se guardó cuánto salió de verdad: no se puede saber cuánto se entregó ni cuánto volvió.">⚠ sin datos</span>';
+  const noEnt = round2((Number(it.qty) || 0) - info.entregada);
+  if (noEnt <= 0) return '';
+  return ` <span class="partial-tag" title="Se pidieron ${itemLineLabel(it)}; volvieron ${qtyLabel(it.prod, noEnt, it.fetear, it.unidades)} al depósito.">de ${itemLabelCorto(it)}</span>`;
+}
+
 // Cómo se ve un renglón INCOMPLETO ya guardado, en el detalle de un
-// pedido despachado: cuánto vuelve al depósito, que es lo que importa.
-function itemNovedadHtml(it) {
-  if (!it.motivoFaltante) return '';
-  const noEntregada = round2((Number(it.qty) || 0) - (Number(it.cantidadEntregada) || 0));
+// pedido despachado: dice lo que salió de verdad Y lo que se pidió
+// originalmente, sin perder ninguno de los dos números. Mismo chequeo de
+// estado que arriba, por la misma razón.
+function itemNovedadHtml(p, it) {
+  if (p.estado !== 'Despachado' || !it.motivoFaltante) return '';
+  const info = itemEntregaInfo(it);
+  if (info.incierto) {
+    return `<div class="item-novedad">⚠ Quedó anotado como incompleto, pero no se guardó cuánto salió de verdad: no se puede saber cuánto se entregó ni cuánto volvió al depósito.</div>`;
+  }
+  const noEntregada = round2((Number(it.qty) || 0) - info.entregada);
   if (noEntregada <= 0) return '';
   const vuelve = qtyLabel(it.prod, noEntregada, it.fetear, it.unidades);
-  return `<div class="item-novedad">⚠ Incompleto — vuelven al depósito ${vuelve} (de ${itemLineLabel(it)})</div>`;
+  return `<div class="item-novedad">⚠ Se pidieron ${itemLineLabel(it)} — volvieron ${vuelve} al depósito.</div>`;
 }
 
 // ── Papelera (solo PC): pedidos eliminados, restaurables o para vaciar ──
@@ -4168,13 +4368,18 @@ function restorePedidoUi(id) {
     .restorePedido(id);
 }
 
-function toggleArchived() {
-  showArchived = !showArchived;
+function toggleProgramados() {
+  showProgramados = !showProgramados;
   renderPedidos();
 }
 
-function toggleProgramados() {
-  showProgramados = !showProgramados;
+function toggleDespachados() {
+  showDespachados = !showDespachados;
+  renderPedidos();
+}
+
+function toggleCancelados() {
+  showCancelados = !showCancelados;
   renderPedidos();
 }
 
@@ -4215,15 +4420,36 @@ function filtroTagHtml() {
   </div>`;
 }
 
+// Pedidos tiene el MISMO buscador en dos lugares (PC y celular, ver
+// `.pedido-search` en el HTML): mismo campo, mismos resultados. En vez de
+// ids fijos (solo puede haber uno por página), cada función busca los
+// elementos relativos al input que la disparó — así los dos quedan
+// sincronizados sin duplicar lógica, y da lo mismo desde cuál se escriba.
+function searchInputs() { return Array.from(document.querySelectorAll('.search-input')); }
+function searchClears()  { return Array.from(document.querySelectorAll('.pedido-search .search-clear')); }
+function searchAcLists() { return Array.from(document.querySelectorAll('.pedido-search .ac-list')); }
+
+// Cierra la lista desplegable de ESTE campo al perder el foco (con un
+// pequeño delay: si no, el mousedown sobre un resultado nunca llegaría a
+// dispararse porque el blur lo cierra antes).
+function closeSearchAc(input) {
+  const wrap = input.closest('.pedido-search');
+  if (wrap) wrap.querySelector('.ac-list').classList.remove('open');
+}
+
 function onSearchInput(input) {
   searchQuery = input.value;
   // Escribir a mano vuelve al modo parcial: el filtro exacto solo lo fija
   // elegir de la lista.
   searchTipo = '';
-  document.getElementById('searchClear').style.display = input.value ? 'flex' : 'none';
+  // El otro campo (el que está oculto por el ancho de pantalla actual)
+  // se actualiza igual: si la ventana cambia de tamaño o se gira el
+  // celular, el que aparece ya arranca con lo mismo escrito.
+  searchInputs().forEach(i => { if (i !== input) i.value = input.value; });
+  searchClears().forEach(b => b.style.display = input.value ? 'flex' : 'none');
   renderPedidos();
   const q = input.value.trim().toLowerCase();
-  const list = document.getElementById('searchAcList');
+  const list = input.closest('.pedido-search').querySelector('.ac-list');
   if (!q) { list.classList.remove('open'); list.innerHTML = ''; return; }
   const cli = (state.clientes || []).filter(c => c.n.toLowerCase().includes(q)).slice(0, 15);
   // Acá SÍ entran los productos dados de baja, a propósito: esto busca
@@ -4240,22 +4466,20 @@ function onSearchInput(input) {
 
 function selectSearch(e, name, tipo) {
   e.preventDefault();
-  const input = document.getElementById('searchInput');
-  input.value = name;
+  searchInputs().forEach(i => i.value = name);
   searchQuery = name;
   searchTipo = tipo || '';
-  document.getElementById('searchAcList').classList.remove('open');
-  document.getElementById('searchClear').style.display = 'flex';
+  searchAcLists().forEach(l => l.classList.remove('open'));
+  searchClears().forEach(b => b.style.display = 'flex');
   renderPedidos();
 }
 
 function clearSearch() {
-  const input = document.getElementById('searchInput');
-  input.value = '';
+  searchInputs().forEach(i => i.value = '');
   searchQuery = '';
   searchTipo = '';
-  document.getElementById('searchAcList').classList.remove('open');
-  document.getElementById('searchClear').style.display = 'none';
+  searchAcLists().forEach(l => l.classList.remove('open'));
+  searchClears().forEach(b => b.style.display = 'none');
   renderPedidos();
 }
 
@@ -4336,11 +4560,11 @@ function openPedidoDetail(id) {
       ${p.fechaDespacho ? `<div class="detail-item"><span>${p.estado === 'Cancelado' ? 'Cancelado el' : 'Despachado el'}</span><b>${fmtDate(p.fechaDespacho)}</b></div>` : ''}
       <div class="detail-item"><span>Estado</span><span class="status-pill sp-${p.estado}">${p.estado}</span></div>
       ${p.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(p.quien)}</b></div>` : ''}
-      ${p.notas && !esReposicion(p) ? `<div class="detail-item"><span>Observación</span><b>${esc(p.notas)}</b></div>` : ''}
+      ${p.notas && !esReposicion(p) ? `<div class="detail-item"><span>Observación</span><b class="pn-txt">${esc(p.notas)}</b></div>` : ''}
     </div>
     <div class="detail-section">
       <h4>Productos</h4>
-      ${p.items.map(it => `<div class="detail-item qty-left"><b>${itemLineLabel(it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>${itemNovedadHtml(it)}`).join('')}
+      ${p.items.map(it => `<div class="detail-item qty-left"><b>${itemDespachoLabel(p, it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>${itemNovedadHtml(p, it)}`).join('')}
     </div>
     ${acciones}
   `;
