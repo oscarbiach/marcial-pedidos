@@ -135,6 +135,12 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .order-list { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:26px; }
 .order-card { min-width:0; }
 
+/* Los 5 grupos de pendientes (Atrasados/Para hoy/Para mañana/Sin fecha/
+   Más adelante). En celular esto no hace nada especial: cada grupo sigue
+   siendo un bloque normal, apilado uno debajo del otro como siempre. En
+   PC ancha se acomodan en columnas — ver @media(min-width:768px). */
+.pend-group { min-width:0; }
+
 /* La tarjeta de carga se centra por flex: si conserva el margen de abajo,
    el centrado lo cuenta como parte de la caja y la deja más arriba de lo
    que corresponde. Vale para celular y PC. */
@@ -656,8 +662,44 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   #tab-cargar .add-item-btn { padding:14px; font-size:14.5px; border-radius:12px; }
   #tab-cargar #cargarSubmitBtn { padding:17px; font-size:17px; border-radius:13px; margin-top:4px; }
 
-  /* Pedidos: tarjetas con más aire, que era lo apretado. */
-  .order-list { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
+  /* Pedidos usa todo el ancho disponible en PC (no el mismo bloque de
+     1000px angosto y centrado de las otras pestañas): main solo se
+     ensancha mientras Pedidos está activa — body.pedidos-ancho lo pone
+     setTab() al entrar a esa pestaña y lo saca al salir — así que Cargar,
+     Reparto y los modales (que además tienen su propio ancho fijo, ver
+     .modal) quedan exactamente como estaban. Los 32px de padding de main
+     siguen siendo el margen lateral. */
+  body.pedidos-ancho main { max-width:none; }
+
+  /* Pendientes en columnas: cada grupo (Atrasados, Para hoy, Para mañana,
+     Sin fecha de entrega, Más adelante) es una columna con su propio
+     encabezado y las tarjetas apiladas hacia abajo. auto-fit acomoda
+     tantos grupos por fila como entren cómodos (320px mínimo cada uno) y
+     manda el resto a la fila de abajo — nunca aprieta los 5 a la fuerza
+     ni los achica. Sin scroll horizontal: si no entran, se van abajo. */
+  .pend-grid {
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
+    gap:22px 24px; align-items:start; margin-bottom:8px;
+  }
+  /* Área propia por grupo: mismo panel blanco con sombra suave que ya usa
+     .form-card en el resto de la app (Cargar, Reparto), no un estilo
+     nuevo — así "Atrasados" y "Para hoy" se leen como bloques separados
+     uno al lado del otro, en vez de mezclarse por estar en columnas. */
+  .pend-group {
+    background:#fff; border-radius:var(--radius); padding:14px 14px 6px;
+    box-shadow:0 1px 2px rgba(29,32,48,.04), 0 6px 16px -12px rgba(29,32,48,.2);
+  }
+  .pend-group .section-header, .pend-group .prog-notice { margin-top:0; }
+  .pend-grid .pend-group .order-list,
+  .pend-grid .pend-group .prog-list { margin-bottom:0; }
+
+  /* Pedidos: tarjetas con más aire, que era lo apretado. auto-fit (no un
+     número fijo de columnas): un grupo angosto queda en una sola columna
+     de tarjetas, uno con más lugar (menos grupos activos, o pantalla muy
+     ancha) pasa solo a dos — nunca fuerza ni achica. Mismo criterio para
+     Despachados/Cancelados, que no van en columna sino sueltos a todo el
+     ancho: ahí "cabe más de una" simplemente significa más columnas. */
+  .order-list { grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px; }
   .order-card { padding:18px 18px 16px; }
   .oc-main { font-size:16.5px; }
   .oc-sub { font-size:12.5px; }
@@ -1820,9 +1862,51 @@ function sbError_(error) {
   return e;
 }
 
+// Trae TODA la tabla pedido_items (solo pedido_id+producto, para la
+// popularidad del selector), paginando de a 1000: es el máximo de filas
+// que la API de Supabase devuelve por página aunque no se pida un
+// .limit() explícito — sin paginar, pasado ese tope se perdería en
+// silencio la popularidad de los renglones más viejos, justo los que
+// esta consulta existe para no perder (ver sbGetAppData). Si una página
+// falla, corta ahí: sbGetAppData ya sabe seguir con lo que haya (o caer
+// al cálculo de respaldo) en vez de romper toda la carga por esto.
+async function fetchPedidoItemsPop_() {
+  const PAGINA = 1000;
+  let desde = 0;
+  let todos = [];
+  while (true) {
+    // .order('id') es imprescindible acá, no cosmético: sin un orden
+    // explícito, Postgres no garantiza el mismo orden entre una página y
+    // la siguiente (menos todavía si algo escribe en la tabla mientras se
+    // pagina, como un despacho en curso) — sin esto, un renglón podía
+    // aparecer en dos páginas (la deduplicación por pedido lo absorbe) o,
+    // peor, no aparecer en ninguna.
+    const { data, error } = await sb.from('pedido_items')
+      .select('id,pedido_id,producto')
+      .order('id', { ascending: true })
+      .range(desde, desde + PAGINA - 1);
+    if (error) return { data: null, error };
+    todos = todos.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return { data: todos, error: null };
+}
+
 // ── Las seis funciones ────────────────────────────────────────────
 async function sbGetAppData() {
-  const [prod, cli, ped, hoj] = await Promise.all([
+  // La carga de siempre trae TODOS los Pendientes (siguen siendo tarea
+  // pendiente sin importar la antigüedad) más solo los Despachados/
+  // Cancelados de los últimos 7 días — el resto del historial se trae
+  // aparte, solo si hace falta buscarlo (ver sbGetHistorialAntiguo). Un
+  // pedido eliminado (papelera) se trae siempre, sin importar la fecha:
+  // esa pantalla es un tema aparte de esta tarea.
+  //
+  // hoyArg() y no state.today: esto corre ANTES de que exista state.today
+  // (recién se llena con el resultado de esta misma función).
+  const hoy = hoyArg();
+  const corte = restarDias(hoy, 6);
+  const [prod, cli, ped, hoj, itemsPop] = await Promise.all([
     // Vienen TODOS, prendidos y apagados. Un producto apagado no se puede
     // cargar más (se filtra en el buscador de carga), pero los pedidos
     // viejos que lo tienen necesitan su ficha para seguir mostrando
@@ -1831,13 +1915,24 @@ async function sbGetAppData() {
     sb.from('clientes').select('nombre,direccion'),
     sb.from('pedidos')
       .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .or(`eliminado_en.not.is.null,estado.eq.Pendiente,fecha_despacho.gte.${corte}`)
       .order('fecha', { ascending: false }),
     // Las últimas hojas de reparto. Va en el MISMO viaje que todo lo
     // demás (Promise.all), así que no agrega espera.
     sb.from('hojas_reparto')
       .select('id,fecha,quien,cantidad_pedidos,clientes,texto')
       .is('eliminada_en', null)
-      .order('creado_en', { ascending: false }).limit(20)
+      .order('creado_en', { ascending: false }).limit(20),
+    // Solo para la popularidad del selector de productos (ver más abajo):
+    // TODO el historial, sin el recorte de 7 días de arriba — si no, un
+    // producto que un cliente pide siempre pero no en la última semana
+    // perdía su lugar en el picker. Va aparte y liviano (2 columnas, sin
+    // el resto del pedido) para no volver a traer todo el historial
+    // completo solo por esto. Paginada (ver fetchPedidoItemsPop_): la API
+    // de Supabase corta en 1000 filas por página aunque no se pida un
+    // .limit(), y un local con más de mil renglones de pedidos cargados
+    // perdería en silencio la popularidad de los más viejos.
+    fetchPedidoItemsPop_()
   ]);
   if (prod.error) throw sbError_(prod.error);
   if (cli.error)  throw sbError_(cli.error);
@@ -1873,21 +1968,70 @@ async function sbGetAppData() {
   });
 
   // Popularidad para ordenar el picker: en cuántos pedidos aparece cada
-  // producto. Antes la calculaba el servidor; acá sale gratis de los
-  // pedidos que ya trajimos, sin un viaje más.
+  // producto, sobre TODO el historial (itemsPop, ver arriba: no depende
+  // del recorte de 7 días de Pedidos). Si por lo que sea esa consulta
+  // liviana falló, no se rompe la carga: se resigna a contar solo lo que
+  // ya se trajo (pedidos + papelera), como quedaba antes de esta tarea.
   const pop = {};
-  pedidos.concat(papelera).forEach(p => {
-    const vistos = {};
-    p.items.forEach(it => {
-      const k = (it.prod || '').toLowerCase();
-      if (!k || vistos[k]) return;
+  if (itemsPop && !itemsPop.error && itemsPop.data) {
+    const vistosPorPedido = {};
+    itemsPop.data.forEach(it => {
+      const k = (it.producto || '').toLowerCase();
+      if (!k) return;
+      const vistos = vistosPorPedido[it.pedido_id] || (vistosPorPedido[it.pedido_id] = {});
+      if (vistos[k]) return;
       vistos[k] = true;
       pop[k] = (pop[k] || 0) + 1;
     });
-  });
+  } else {
+    pedidos.concat(papelera).forEach(p => {
+      const vistos = {};
+      p.items.forEach(it => {
+        const k = (it.prod || '').toLowerCase();
+        if (!k || vistos[k]) return;
+        vistos[k] = true;
+        pop[k] = (pop[k] || 0) + 1;
+      });
+    });
+  }
   products.forEach(pr => { pr.pop = pop[pr.n.toLowerCase()] || 0; });
 
-  return { products, clientes, pedidos, papelera, hojas, today: hoyArg() };
+  return { products, clientes, pedidos, papelera, hojas, today: hoy };
+}
+
+// El resto del historial de Despachados/Cancelados que la carga de
+// siempre NO trae (todo lo de más de 7 días, más lo que tenga
+// fecha_despacho sin cargar — no se asume que eso sea reciente). Se pide
+// aparte, una sola vez, cuando el buscador de Pedidos lo necesita (ver
+// asegurarHistorialCompleto): así el buscador puede encontrar un pedido
+// viejo sin que la carga normal de la app tenga que traer todo siempre.
+async function sbGetHistorialAntiguo() {
+  const corte = cortePedidosRecientes();
+  // Paginado de a 1000 (el tope por página de la API de Supabase, aunque
+  // no se pida un .limit()): con más de mil pedidos viejos, una sola
+  // consulta traía solo la primera página y asegurarHistorialCompleto()
+  // igual la marcaba como "completa" — el resto quedaba sin forma de
+  // aparecer nunca, ni buscándolo. .order('id') además de 'fecha': varios
+  // pedidos pueden compartir la misma fecha, y sin un desempate único la
+  // paginación no queda garantizada entre una página y la siguiente.
+  const PAGINA = 1000;
+  let desde = 0;
+  let todos = [];
+  while (true) {
+    const { data, error } = await sb.from('pedidos')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .in('estado', ['Despachado', 'Cancelado'])
+      .is('eliminado_en', null)
+      .or(`fecha_despacho.lt.${corte},fecha_despacho.is.null`)
+      .order('fecha', { ascending: false })
+      .order('id', { ascending: true })
+      .range(desde, desde + PAGINA - 1);
+    if (error) throw sbError_(error);
+    todos = todos.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return todos.map(mapPedido_);
 }
 
 // Guardar una hoja de reparto: la hoja y sus pedidos, todo junto o nada
@@ -2021,6 +2165,7 @@ async function sbRestorePedido(id) {
 function sbAccion(action, args) {
   switch (action) {
     case 'getAppData':         return sbGetAppData();
+    case 'historialAntiguo':   return sbGetHistorialAntiguo();
     case 'savePedido':         return sbSavePedido(args[0]);
     case 'updatePedido':       return sbUpdatePedido(args[0]);
     case 'updatePedidoStatus': return sbUpdateEstado(args[0], args[1]);
@@ -2105,7 +2250,7 @@ function makeRunner() {
   };
   // Las funciones que existen del lado de Supabase. Cualquier otra
   // llamada cae en sbAccion y devuelve "Acción desconocida".
-  ['getAppData','savePedido','updatePedido','updatePedidoStatus','deletePedido',
+  ['getAppData','historialAntiguo','savePedido','updatePedido','updatePedidoStatus','deletePedido',
    'restorePedido','guardarHoja','despacharVarios','guardarNovedadItem',
    'eliminarHoja','vaciarPapelera']
     .forEach(action => {
@@ -2293,6 +2438,8 @@ function loadData(silencioso) {
       const btn = document.getElementById('pinBtn');
       if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
       state = { ...state, ...data };
+      stateGeneracion++;
+      reencuadrarHistorialTrasRefresco();
       ultimoRefresh = Date.now();
       fallosSeguidos = 0;
       refrescando = false;
@@ -2372,9 +2519,16 @@ function reload(manual) {
   marcarRefrescando(true);
   google.script.run
     .withSuccessHandler(data => {
-      const antes = (state.pedidos || []).length;
+      // Por id, no por cantidad: si antes de este refresco una búsqueda
+      // había completado el historial viejo, state.pedidos tenía MÁS
+      // pedidos de los que trae la carga habitual (que solo es lo
+      // reciente) — comparar longitudes daba un número negativo y
+      // "Ya estaba al día" aunque sí hubiera llegado algo nuevo.
+      const idsAntes = new Set((state.pedidos || []).map(p => p.id));
       guardarCache(data);
       state = { ...state, ...data };
+      stateGeneracion++;
+      reencuadrarHistorialTrasRefresco();
       ultimoRefresh = Date.now();
       fallosSeguidos = 0;
       marcarRefrescando(false);
@@ -2386,7 +2540,7 @@ function reload(manual) {
       if (manual) {
         // Si aparecieron pedidos de otro, se dice cuántos: es el dato que
         // se está buscando al tocar Actualizar.
-        const nuevos = (state.pedidos || []).length - antes;
+        const nuevos = (state.pedidos || []).filter(p => !idsAntes.has(p.id)).length;
         toast(nuevos > 0
           ? `✓ ${nuevos} pedido${nuevos !== 1 ? 's' : ''} nuevo${nuevos !== 1 ? 's' : ''}`
           : '✓ Ya estaba al día');
@@ -2509,6 +2663,9 @@ function setTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById('appTitle').textContent = TAB_TITLES[tab] || 'Distribuidora Marcial';
+  // Pedidos usa todo el ancho en PC; las otras pestañas (y los modales,
+  // que tienen su propio ancho fijo aparte) quedan tal cual estaban.
+  document.body.classList.toggle('pedidos-ancho', tab === 'pedidos');
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
     .forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   // Al entrar a Pedidos, si lo que hay en pantalla ya tiene más de medio
@@ -2638,6 +2795,15 @@ function submitCargarPedido() {
 // rápido que abrir una pantalla aparte.
 function esMobile() { return window.innerWidth < 768; }
 
+// Mismo corte que @media(min-width:1320px) de #histCli: por debajo de eso
+// el panel de historial del cliente (Cargar Pedido) no entra al costado y
+// queda oculto por CSS (display:none). No se puede usar getComputedStyle
+// del panel para saberlo: su visibilidad TAMBIÉN depende de si hay
+// historial para mostrar (box.hidden lo pone actualizarHistCliente), y
+// ese dato es justo lo que la consulta está por completar — por eso el
+// ancho de pantalla, que no cambia con los datos, es lo que hay que mirar.
+function histClientePodriaVerse() { return window.innerWidth >= 1320; }
+
 // Alto realmente libre entre el header y la barra de abajo. Se mide en vez
 // de calcularlo con números fijos: el header crece con la isla del iPhone
 // y la barra inferior con la franja de gestos, así que cualquier constante
@@ -2654,6 +2820,12 @@ function medirAltoUtil() {
 }
 window.addEventListener('resize', medirAltoUtil);
 window.addEventListener('orientationchange', () => setTimeout(medirAltoUtil, 150));
+
+// Si alguien ensancha la ventana (o gira la tablet) con un cliente ya
+// escrito en Cargar Pedido, el panel de historial puede pasar de oculto a
+// visible sin que nadie haya tocado el campo de cliente — sin esto,
+// quedaba vacío hasta la próxima letra o el próximo refresco.
+window.addEventListener('resize', () => { if (activeTab === 'cargar') actualizarHistCliente(); });
 
 function agregarProducto(destino) {
   if (esMobile()) abrirPicker(destino, null);
@@ -3721,17 +3893,24 @@ function listaPorEntrega(list) {
 }
 
 // Grupo simple (sin separadores por fecha de carga: esa fecha ahora va
-// dentro de cada tarjeta, como dato secundario — ver cargaLabel).
+// dentro de cada tarjeta, como dato secundario — ver cargaLabel). Es uno
+// de los grupos de pendientes: en PC vive como columna propia dentro de
+// .pend-grid (ver CSS), en celular se apila igual que siempre.
 function pedidoSectionHtml(titulo, list) {
   if (!list.length) return '';
-  return `<div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>` +
-    `<div class="order-list">${list.map(pedidoCardHtml).join('')}</div>`;
+  return `<div class="pend-group">
+    <div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>
+    <div class="order-list">${list.map(pedidoCardHtml).join('')}</div>
+  </div>`;
 }
 
 // Sección plegable genérica (Más adelante / Despachados / Cancelados).
 // Con el buscador activo se fuerza abierta: un resultado que coincide
-// nunca debe quedar escondido detrás de un plegado.
-function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaGrouping }) {
+// nunca debe quedar escondido detrás de un plegado. comoColumna=true es
+// para "Más adelante": va adentro de .pend-grid como una columna más,
+// junto a los otros grupos de pendientes (Despachados/Cancelados, en
+// cambio, van sueltos, a todo el ancho, debajo de todo el bloque).
+function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaGrouping }, comoColumna) {
   if (!list.length) return '';
   let html = `<div class="${claseAviso}" onclick="${onclick}()">
     <span>${texto}</span>
@@ -3741,7 +3920,7 @@ function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaG
     const inner = entregaGrouping ? listaPorEntrega(list) : list.map(pedidoCardHtml).join('');
     html += `<div class="order-list prog-list">${inner}</div>`;
   }
-  return html;
+  return comoColumna ? `<div class="pend-group">${html}</div>` : html;
 }
 
 // Cierre del día: reemplaza al control contra WhatsApp. Dice, sin que
@@ -3778,6 +3957,14 @@ function renderPedidos() {
   // es un grupo propio — nunca se asume "para hoy". Despachado/Cancelado
   // van aparte, plegados, para no competir con lo que hay que resolver.
   const atrasados = [], hoyG = [], mananaG = [], sinFecha = [], masAdelante = [], desp = [], canc = [];
+  // Despachado/Cancelado: en la vista habitual (sin buscar) solo entran
+  // los de los últimos 7 días (fecha_despacho real, contra state.today —
+  // nunca la fecha de carga ni un período móvil de horas). Un registro
+  // sin fecha de despacho confiable no se asume reciente: solo aparece
+  // buscándolo (ver esReciente). Buscando, entra cualquiera que matchee,
+  // sin importar la antigüedad — pedidosFiltrados() ya hizo ese filtro.
+  const corte = cortePedidosRecientes();
+  const esReciente = p => !!p.fechaDespacho && p.fechaDespacho >= corte;
   pedidos.forEach(p => {
     if (p.estado === 'Pendiente') {
       const ent = entregaInfo(p);
@@ -3787,30 +3974,37 @@ function renderPedidos() {
       else if (ent.d === 1) mananaG.push(p);
       else masAdelante.push(p);
     }
-    else if (p.estado === 'Cancelado') canc.push(p);
-    else if (p.estado === 'Despachado') desp.push(p);
+    else if (p.estado === 'Cancelado') { if (q || esReciente(p)) canc.push(p); }
+    else if (p.estado === 'Despachado') { if (q || esReciente(p)) desp.push(p); }
   });
 
   let cuerpo = resumenDelDiaHtml();
-  cuerpo += pedidoSectionHtml('Atrasados', atrasados);
-  cuerpo += pedidoSectionHtml('Para hoy', hoyG);
-  cuerpo += pedidoSectionHtml('Para mañana', mananaG);
-  cuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha);
-
-  cuerpo += pedidoPliegueHtml(masAdelante, {
+  // Los 5 grupos de pendientes van en un bloque propio (en PC se acomodan
+  // en columnas — ver .pend-grid en el CSS; en celular se apilan igual
+  // que siempre, uno abajo del otro).
+  let pendCuerpo = '';
+  pendCuerpo += pedidoSectionHtml('Atrasados', atrasados);
+  pendCuerpo += pedidoSectionHtml('Para hoy', hoyG);
+  pendCuerpo += pedidoSectionHtml('Para mañana', mananaG);
+  pendCuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha);
+  pendCuerpo += pedidoPliegueHtml(masAdelante, {
     claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
     abierto: q ? true : showProgramados,
     texto: `📆 <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
-  });
+  }, true);
+  if (pendCuerpo) cuerpo += `<div class="pend-grid">${pendCuerpo}</div>`;
+
+  // Despachados y Cancelados van DEBAJO de todo el bloque de pendientes,
+  // a todo el ancho (no como una columna más).
   cuerpo += pedidoPliegueHtml(desp, {
     claseAviso: 'prog-notice', onclick: 'toggleDespachados', entregaGrouping: false,
     abierto: q ? true : showDespachados,
-    texto: `✓ <span class="pn-n">${desp.length}</span> despachado${desp.length !== 1 ? 's' : ''}`,
+    texto: `✓ <span class="pn-n">${desp.length}</span> despachado${desp.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
   });
   cuerpo += pedidoPliegueHtml(canc, {
     claseAviso: 'archived-notice', onclick: 'toggleCancelados', entregaGrouping: false,
     abierto: q ? true : showCancelados,
-    texto: `✕ ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}`,
+    texto: `✕ ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
   });
 
   if (!cuerpo) {
@@ -4437,6 +4631,125 @@ function closeSearchAc(input) {
   if (wrap) wrap.querySelector('.ac-list').classList.remove('open');
 }
 
+// ── Historial completo bajo demanda ──
+// La carga habitual (sbGetAppData) solo trae Despachados/Cancelados de
+// los últimos 7 días: buscar algo más viejo no lo iba a encontrar porque
+// ni siquiera estaba en memoria. Acá se completa, UNA sola vez por
+// tanda de datos (no en cada tecla), el resto del historial — se agrega
+// a state.pedidos y se vuelve a renderizar con la búsqueda que esté
+// escrita en ESE momento (nunca la de cuando arrancó el pedido, para no
+// pisar una búsqueda más nueva con el resultado de una vieja).
+let historialCargado = false;
+let historialCargando = false;
+
+// Se incrementa cada vez que loadData/reload reemplazan state.pedidos con
+// una respuesta fresca del servidor (ver esos dos withSuccessHandler). Una
+// consulta de historial que sigue en vuelo cuando eso pasa quedó pedida
+// contra datos que ya no son los últimos: mientras esperaba pudo haber
+// cambiado el corte de 7 días (cruzó medianoche), o algún pedido pudo
+// haberse eliminado/cambiado de estado en otra sesión — mezclar esa
+// respuesta igual podría, por ejemplo, resucitar en Pedidos algo que la
+// actualización más nueva ya sacó a la papelera.
+let stateGeneracion = 0;
+
+// Los dos lugares que necesitan el historial completo: el buscador de
+// Pedidos, y el panel de historial del cliente en Cargar Pedido (solo si
+// se puede llegar a ver — ver histClientePodriaVerse). Un solo chequeo
+// para no repetirlo en cada lugar que decide si vale la pena reintentar.
+function haceFaltaHistorialCompleto() {
+  if (searchQuery.trim()) return true;
+  const inpCliente = document.getElementById('n_cliente');
+  return !!(inpCliente && inpCliente.value.trim() && histClientePodriaVerse());
+}
+
+// Cada refresco (manual, automático o al entrar a la pestaña) reemplaza
+// state.pedidos entero por la carga habitual (reciente), así que un
+// historial completo ya traído se perdería. Si todavía hace falta en ese
+// momento, se vuelve a completar solo, sin que el usuario tenga que
+// volver a tocar nada.
+function reencuadrarHistorialTrasRefresco() {
+  historialCargado = false;
+  if (haceFaltaHistorialCompleto()) asegurarHistorialCompleto();
+}
+
+// Último aviso de "no se pudo traer el historial", para no repetir el
+// toast en cada tecla si la conexión sigue caída.
+let historialUltimoAviso = 0;
+
+// Identifica cada consulta puntual (no alcanza con historialCargando: ver
+// el vencimiento más abajo). Sin esto, una respuesta que llega TARDE —
+// después de que su propia consulta ya venció y se reintentó con una
+// nueva— podría pisar el resultado de esa consulta más nueva, o liberar
+// un candado que en realidad le pertenece a otra.
+let historialPedidoId = 0;
+
+function asegurarHistorialCompleto() {
+  if (historialCargado || historialCargando) return;
+  historialCargando = true;
+  // La generación vigente AL PEDIR esta consulta (ver stateGeneracion).
+  const generacionAlPedir = stateGeneracion;
+  const idPedido = ++historialPedidoId;
+
+  // Una conexión que se corta a mitad de camino (típico de wifi/datos en
+  // un celular en movimiento) puede dejar la consulta sin resolver NUNCA:
+  // ni éxito ni error, así que withFailureHandler no llega a dispararse.
+  // Sin este vencimiento, historialCargando quedaba trabado para siempre
+  // y el historial ya no se podía volver a pedir en toda la sesión.
+  const vencimiento = setTimeout(() => {
+    if (idPedido !== historialPedidoId) return; // ya se reintentó por otro lado
+    historialCargando = false;
+    if (Date.now() - historialUltimoAviso > 15000) {
+      historialUltimoAviso = Date.now();
+      toast('⚠ El historial completo está tardando demasiado: puede haber pedidos viejos sin mostrar. Reintentá en un momento.');
+    }
+  }, 20000);
+
+  google.script.run
+    .withSuccessHandler(extra => {
+      if (idPedido !== historialPedidoId) return; // llegó tarde, después de vencer
+      clearTimeout(vencimiento);
+      historialCargando = false;
+      const sigueVigente = generacionAlPedir === stateGeneracion;
+      if (!sigueVigente) {
+        // Llegó una actualización más nueva del servidor MIENTRAS esta
+        // consulta seguía en vuelo: lo que trajo puede estar corrido
+        // respecto de esos datos frescos (un pedido que ya se eliminó o
+        // cambió de estado ahí). Se descarta entero, sin mezclar nada, y
+        // si todavía hace falta se vuelve a pedir con los datos actuales.
+        if (haceFaltaHistorialCompleto()) asegurarHistorialCompleto();
+        return;
+      }
+      historialCargado = true;
+      const yaEstaban = new Set(state.pedidos.map(p => p.id));
+      (extra || []).forEach(p => { if (!yaEstaban.has(p.id)) state.pedidos.push(p); });
+      // Se agregó al final, no en su lugar: hay que reordenar por fecha de
+      // carga (más nuevo primero), el mismo orden que ya trae sbGetAppData
+      // y del que dependen actualizarHistCliente/pedidosDelCliente
+      // ("últimos pedidos" y "suele llevar" asumen esa lista ordenada).
+      state.pedidos.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+      // Si para cuando esto llegó ya no hay búsqueda (se borró mientras
+      // tanto), no pasa nada: renderPedidos() vuelve a mostrar solo lo
+      // reciente, que es lo que corresponde sin buscador activo.
+      renderPedidos();
+    })
+    .withFailureHandler(() => {
+      if (idPedido !== historialPedidoId) return; // llegó tarde, después de vencer
+      clearTimeout(vencimiento);
+      historialCargando = false;
+      // Sin este aviso, una búsqueda que en realidad no pudo consultar el
+      // historial completo se veía igual que una que sí lo consultó y no
+      // encontró nada — el usuario no podía distinguir "no existe" de "no
+      // se pudo revisar". No queda marcado como "ya cargado": la próxima
+      // vez que haga falta (otra tecla, u otro campo que lo pida) se
+      // reintenta solo.
+      if (Date.now() - historialUltimoAviso > 15000) {
+        historialUltimoAviso = Date.now();
+        toast('⚠ No se pudo traer el historial completo: puede haber pedidos viejos sin mostrar. Reintentá en un momento.');
+      }
+    })
+    .historialAntiguo();
+}
+
 function onSearchInput(input) {
   searchQuery = input.value;
   // Escribir a mano vuelve al modo parcial: el filtro exacto solo lo fija
@@ -4447,6 +4760,7 @@ function onSearchInput(input) {
   // celular, el que aparece ya arranca con lo mismo escrito.
   searchInputs().forEach(i => { if (i !== input) i.value = input.value; });
   searchClears().forEach(b => b.style.display = input.value ? 'flex' : 'none');
+  if (input.value.trim()) asegurarHistorialCompleto();
   renderPedidos();
   const q = input.value.trim().toLowerCase();
   const list = input.closest('.pedido-search').querySelector('.ac-list');
@@ -4471,6 +4785,7 @@ function selectSearch(e, name, tipo) {
   searchTipo = tipo || '';
   searchAcLists().forEach(l => l.classList.remove('open'));
   searchClears().forEach(b => b.style.display = 'flex');
+  asegurarHistorialCompleto();
   renderPedidos();
 }
 
@@ -4513,6 +4828,33 @@ function daysSince(dateStr) {
   const t = new Date((state.today || '') + 'T00:00:00');
   if (isNaN(d) || isNaN(t)) return 0;
   return Math.floor((t - d) / 86400000);
+}
+
+// Resta N días de calendario a una fecha 'YYYY-MM-DD' y devuelve el
+// resultado en el mismo formato. A propósito NO es un período móvil de
+// horas (nada de Date.now() ni relojes de dispositivo): siempre a partir
+// de una fecha ya calculada (hoyArg() o state.today), para que el corte
+// del historial reciente no dependa de a qué hora del día se mire.
+//
+// OJO con toISOString() acá: convierte a UTC, y con un dispositivo en un
+// huso horario adelantado a UTC (al este, ej. Europa) la medianoche local
+// cae en el día anterior en UTC — el resultado quedaría corrido un día.
+// Por eso se arma el string a mano con los getters LOCALES (los mismos
+// que ya movió setDate), sin pasar por UTC en ningún momento.
+function restarDias(fechaStr, n) {
+  const d = new Date(fechaStr + 'T00:00:00');
+  d.setDate(d.getDate() - n);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// El corte de "reciente" para Despachados/Cancelados: hoy y los 6 días
+// de calendario anteriores (7 días en total). Se usa tanto al pedir los
+// datos (sbGetAppData) como al agrupar en pantalla (renderPedidos) y al
+// decidir qué falta traer del historial viejo (sbGetHistorialAntiguo).
+function cortePedidosRecientes() {
+  return restarDias(state.today, 6);
 }
 
 function openPedidoDetail(id) {
@@ -4891,6 +5233,15 @@ function actualizarHistCliente() {
   if (!box) return;
   const inp = document.getElementById('n_cliente');
   const nombre = inp ? inp.value.trim() : '';
+  // Si el cliente tiene despachos de hace más de 7 días, la carga habitual
+  // ya no los trae: sin esto, el panel de "suele llevar"/últimos pedidos
+  // se veía pobre (o vacío) para un cliente antiguo con pedidos recientes.
+  // Se completa solo, una vez, igual que hace el buscador de Pedidos —
+  // pero SOLO si el panel se puede llegar a ver (histClientePodriaVerse).
+  // Sin este chequeo, escribir un cliente en CUALQUIER pantalla (celular
+  // incluido, donde el panel no existe nunca) traía todo el historial
+  // viejo para nada.
+  if (nombre && histClientePodriaVerse()) asegurarHistorialCompleto();
   const peds = pedidosDelCliente(nombre);
 
   // Sin cliente escrito, o cliente nuevo sin historial: el panel no
