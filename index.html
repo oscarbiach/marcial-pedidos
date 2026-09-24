@@ -153,6 +153,34 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   cursor:pointer; transition:transform .15s ease-out, box-shadow .2s ease;
 }
 .order-card:active { transform:scale(.99); }
+/* Arrastrar (solo PC, ver pedidoDragStart): el lugar de origen queda
+   como un hueco vacío (no transparente) mientras la copia "levantada"
+   (.drag-ghost) sigue al cursor — la idea es que se sienta como
+   agarrar la tarjeta de verdad, no como si se desvaneciera. */
+.order-card[draggable="true"] { cursor:grab; }
+.order-card.dragging {
+  background:var(--lgray); box-shadow:none; border:2px dashed var(--border);
+}
+.order-card.dragging > * { visibility:hidden; }
+/* La copia que sigue al cursor (ver setDragImage en pedidoDragStart):
+   más sombra y un giro apenas perceptible, como si se hubiera levantado
+   de la lista de verdad. */
+.drag-ghost {
+  transform:rotate(2deg) scale(1.03);
+  box-shadow:0 16px 32px -8px rgba(29,32,48,.4);
+}
+.order-card.moviendo { opacity:.6; pointer-events:none; }
+/* Zona donde se puede soltar: solo Para hoy/mañana/Sin fecha reciben
+   este resaltado (ver pedidoSectionHtml). */
+.order-list.dz-over { outline:2px dashed var(--blue); outline-offset:6px; border-radius:14px; }
+.dz-vacia-header, .dz-vacia { display:none; }
+body.arrastrando-pedido .dz-vacia-header { display:flex; }
+body.arrastrando-pedido .dz-vacia {
+  display:flex; grid-column:1/-1; align-items:center; justify-content:center;
+  min-height:64px; border:2px dashed var(--border); border-radius:14px;
+  color:var(--gray); font-size:13px;
+}
+body.arrastrando-pedido .dz-vacia.dz-over { border-color:var(--blue); color:var(--blue); outline:none; }
 /* Franja de color arriba de la tarjeta: reemplaza el borde izquierdo de
    antes. Un div propio (no ::before) para que el overflow:hidden del
    padre la recorte prolijo contra las esquinas redondeadas. */
@@ -363,12 +391,42 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   background:#fff; font-size:20px; cursor:pointer;
   box-shadow:0 3px 12px rgba(0,0,0,.22);
   display:flex; align-items:center; justify-content:center;
+  transition:transform .15s, width .15s, height .15s;
 }
 #papeleraFab:hover { background:var(--lred); border-color:var(--red); }
 #papeleraFab .pap-count {
   position:absolute; top:-5px; right:-5px;
   background:var(--red); color:#fff; border-radius:10px;
   font-size:11px; font-weight:700; padding:1px 6px; display:none;
+}
+/* Mientras se arrastra un pedido, el blanco crece: más fácil de acertar
+   y deja claro, antes de llegar, que ahí se puede soltar. */
+body.arrastrando-pedido #papeleraFab {
+  width:58px; height:58px; border-color:var(--red);
+  box-shadow:0 4px 16px rgba(0,0,0,.28);
+}
+/* El relleno va en un aro propio (recortado en círculo) separado del
+   botón: así el botón puede quedar en overflow:visible y la etiqueta de
+   texto de al lado no se corta. Arrastrar y sostener ~900ms manda el
+   pedido a la papelera; soltar antes no hace nada — es lo que evita un
+   borrado sin querer. */
+.pap-fill-wrap { position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:-1; }
+.pap-fill-wrap .pap-hold { position:absolute; left:0; bottom:0; width:100%; height:0%; background:var(--red); opacity:.9; }
+#papeleraFab.dz-hover { transform:scale(1.1); }
+#papeleraFab.dz-hover .pap-fill-wrap .pap-hold { height:100%; transition:height var(--papelera-hold-ms,900ms) linear; }
+.pap-label {
+  position:absolute; right:100%; top:50%; margin-right:12px;
+  transform:translateY(-50%) translateX(6px);
+  background:var(--red); color:#fff; padding:7px 12px; border-radius:9px;
+  font-size:12.5px; font-weight:700; white-space:nowrap;
+  opacity:0; pointer-events:none; transition:opacity .15s, transform .15s;
+  box-shadow:0 3px 10px rgba(0,0,0,.2);
+}
+#papeleraFab.dz-hover .pap-label { opacity:1; transform:translateY(-50%) translateX(0); }
+@media (prefers-reduced-motion:reduce) {
+  body.arrastrando-pedido #papeleraFab, #papeleraFab.dz-hover { transform:none; transition:none; }
+  #papeleraFab.dz-hover .pap-fill-wrap .pap-hold { transition:none; }
+  .pap-label { transition:none; }
 }
 
 /* Fecha y hora se eligen solo con el widget (no se tipean). El botón
@@ -1539,7 +1597,14 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         </div>
         <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
-        <button id="papeleraFab" class="pc-only" title="Papelera de pedidos" onclick="openPapelera()">
+        <button id="papeleraFab" class="pc-only" title="Papelera de pedidos"
+                onclick="openPapelera()"
+                ondragover="papeleraDragOver(event)"
+                ondragenter="papeleraDragEnter(event)"
+                ondragleave="papeleraDragLeave(event)"
+                ondrop="papeleraDrop(event)">
+          <span class="pap-fill-wrap"><span class="pap-hold"></span></span>
+          <span class="pap-label">Mantené para eliminar</span>
           🗑<span class="pap-count" id="papeleraCount"></span>
         </button>
       </div>
@@ -2312,6 +2377,44 @@ function mostrarApp() {
   medirAltoUtil();
   renderPedidos();
   setTab(activeTab);
+  iniciarRealtimePedidos();
+}
+
+// ── Realtime: enterarse solo de que algo cambió ──
+// No se intenta mezclar a mano la fila que llega por websocket con
+// state.pedidos (join con productos, cola local, etc. lo hacen más
+// frágil que útil): un cambio de cualquier tipo en la tabla dispara el
+// mismo refresco de siempre, respetando sus mismos resguardos
+// (refrescarSiCorresponde no toca nada si hay una hoja de reparto o un
+// "Despachar varios" a mitad de camino). Varios cambios seguidos
+// (despachar varios, por ejemplo) se juntan en un solo refresco.
+let pedidosChannel = null;
+let realtimeDebounce = null;
+
+function iniciarRealtimePedidos() {
+  if (pedidosChannel) return;
+  pedidosChannel = sb.channel('pedidos-cambios')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+      clearTimeout(realtimeDebounce);
+      realtimeDebounce = setTimeout(refrescarPorRealtime, 700);
+    })
+    .subscribe();
+}
+
+// Si el aviso llega con la pestaña en segundo plano, refrescarSiCorresponde
+// no hace nada (a propósito: no vale la pena para nadie que no está
+// mirando). Pero acá nadie va a volver a avisar solo — sin esto, el
+// cambio se perdía para siempre hasta el refresco de 30s o el próximo
+// evento. Se deja anotado y el propio "volver a la pestaña" de más abajo
+// lo consume.
+let pendienteRealtimeRefresh = false;
+
+function refrescarPorRealtime() {
+  if (!state.pin) return;
+  if (activeTab === 'reparto' && repSel.length) return;
+  if (despActivo) return;
+  if (document.hidden) { pendienteRealtimeRefresh = true; return; }
+  reload();
 }
 
 function marcarRefrescando(on) {
@@ -2648,7 +2751,9 @@ setInterval(() => {
 // volver del almuerzo) es el momento en que es más probable haberse
 // perdido algo. Acá alcanza con 20 segundos de antigüedad.
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) refrescarSiCorresponde(20000);
+  if (document.hidden) return;
+  if (pendienteRealtimeRefresh) { pendienteRealtimeRefresh = false; reload(); return; }
+  refrescarSiCorresponde(20000);
 });
 window.addEventListener('focus', () => refrescarSiCorresponde(20000));
 window.addEventListener('online', () => refrescarSiCorresponde(20000));
@@ -3844,10 +3949,18 @@ function pedidoCardHtml(p) {
 
   const d = despHtml(p);
 
+  // Arrastrar para cambiar de grupo (fecha de entrega) o mandar a la
+  // papelera: solo pedidos Pendientes ya confirmados por el servidor, y
+  // no mientras se está eligiendo qué despachar (ahí el toque tilda).
+  const arrastrable = p.estado === 'Pendiente' && !despActivo && !sinConfirmar;
+  const dragAttrs = arrastrable
+    ? ` draggable="true" ondragstart="pedidoDragStart(event,'${p.id}')" ondragend="pedidoDragEnd(event)"`
+    : '';
+
   return `
     <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
          data-pid="${p.id}"
-         onclick="${d.onclick}">
+         onclick="${d.onclick}"${dragAttrs}>
       <div class="oc-edge"></div>
       <div class="oc-top">
         ${d.check}
@@ -3896,11 +4009,28 @@ function listaPorEntrega(list) {
 // dentro de cada tarjeta, como dato secundario — ver cargaLabel). Es uno
 // de los grupos de pendientes: en PC vive como columna propia dentro de
 // .pend-grid (ver CSS), en celular se apila igual que siempre.
-function pedidoSectionHtml(titulo, list) {
-  if (!list.length) return '';
+// zona: 'hoy' | 'manana' | 'sinfecha' cuando el grupo acepta que se
+// suelte ahí un pedido arrastrado (ver moverEntregaPorArrastre). Los
+// demás grupos (Atrasados, Más adelante, Despachados, Cancelados) no
+// reciben zona y no se pueden usar como destino.
+function pedidoSectionHtml(titulo, list, zona) {
+  const conDrop = zona && !esMobile();
+  if (!list.length) {
+    // Un grupo vacío se esconde para no hacer ruido — salvo que sea un
+    // destino válido y haya un arrastre en curso: ahí aparece como
+    // "soltar acá" (ver .dz-vacia, solo visible con body.arrastrando-pedido).
+    if (!conDrop) return '';
+    return `<div class="pend-group">
+      <div class="section-header dz-vacia-header"><h3>${titulo}</h3></div>
+      <div class="order-list dz-vacia" id="dz-${zona}" ondragover="dzDragOver(event)" ondrop="dzDrop(event,'${zona}')">
+        <div class="dz-vacia-msg">Soltar acá</div>
+      </div>
+    </div>`;
+  }
+  const dropAttrs = conDrop ? ` id="dz-${zona}" ondragover="dzDragOver(event)" ondrop="dzDrop(event,'${zona}')"` : '';
   return `<div class="pend-group">
     <div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>
-    <div class="order-list">${list.map(pedidoCardHtml).join('')}</div>
+    <div class="order-list"${dropAttrs}>${list.map(pedidoCardHtml).join('')}</div>
   </div>`;
 }
 
@@ -3921,6 +4051,187 @@ function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaG
     html += `<div class="order-list prog-list">${inner}</div>`;
   }
   return comoColumna ? `<div class="pend-group">${html}</div>` : html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ARRASTRAR UN PEDIDO (solo PC)
+//  Cambiar de grupo de entrega (Hoy/Mañana/Sin fecha) o mandar a la
+//  papelera, sin abrir el detalle. Nunca hacia/desde Despachado o
+//  Cancelado, ni desde/hacia Atrasados o Más adelante como destino: el
+//  botón "soltar" no reemplaza al detalle para esos casos.
+// ═══════════════════════════════════════════════════════════════
+let dragPedidoId = null;
+const PAPELERA_HOLD_MS = 900;
+
+let dragGhostEl = null;
+
+function pedidoDragStart(e, id) {
+  dragPedidoId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  // Firefox no arranca el arrastre si no se le pone algo acá.
+  try { e.dataTransfer.setData('text/plain', id); } catch (err) { /* da igual */ }
+
+  // Imagen propia de arrastre: una copia "levantada" (sombra fuerte,
+  // apenas girada) que sigue al cursor, en vez de la foto plana que
+  // arma el navegador solo — para que se sienta como agarrar la
+  // tarjeta de verdad, no como si algo se desvaneciera.
+  const original = e.currentTarget;
+  const r = original.getBoundingClientRect();
+  const clon = original.cloneNode(true);
+  clon.style.cssText = `position:fixed; top:-9999px; left:-9999px; width:${r.width}px; margin:0; pointer-events:none;`;
+  clon.classList.add('drag-ghost');
+  document.body.appendChild(clon);
+  dragGhostEl = clon;
+  try { e.dataTransfer.setDragImage(clon, e.clientX - r.left, e.clientY - r.top); } catch (err) { /* da igual */ }
+  // El navegador ya sacó la "foto" antes de que termine este evento:
+  // recién ahí se puede sacar el clon sin que la imagen de arrastre
+  // quede en blanco.
+  setTimeout(() => { if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; } }, 0);
+
+  document.body.classList.add('arrastrando-pedido');
+  original.classList.add('dragging');
+}
+
+function pedidoDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.body.classList.remove('arrastrando-pedido');
+  dragPedidoId = null;
+  if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; }
+  limpiarHoverZonas();
+  pararHoldPapelera();
+}
+
+function limpiarHoverZonas() {
+  document.querySelectorAll('.dz-over').forEach(el => el.classList.remove('dz-over'));
+}
+
+// dragover se dispara muchas veces por segundo: solo se toca el DOM
+// cuando la zona resaltada realmente cambia, para no parpadear.
+function dzDragOver(e) {
+  if (!dragPedidoId) return;
+  e.preventDefault();
+  if (!e.currentTarget.classList.contains('dz-over')) {
+    limpiarHoverZonas();
+    e.currentTarget.classList.add('dz-over');
+  }
+}
+
+function dzDrop(e, zona) {
+  e.preventDefault();
+  limpiarHoverZonas();
+  const id = dragPedidoId;
+  if (id) moverEntregaPorArrastre(id, zona);
+}
+
+// ── Historial de movimientos por arrastre ──
+// Ni Supabase ni la app guardan la fecha de entrega anterior de un
+// pedido: si algo se mueve sin querer probando, no hay forma de
+// recuperarla de la base. Esto es la red mínima: queda anotado en este
+// navegador (no se sube a ningún lado) para poder reconstruir a mano
+// qué se tocó. Ver el historial desde la consola del navegador con
+// verHistorialArrastre().
+const ARRASTRE_HISTORIAL_KEY = 'dm_arrastre_historial';
+const ARRASTRE_HISTORIAL_MAX = 300;
+
+function registrarMovimientoArrastre(entrada) {
+  let lista = [];
+  try { lista = JSON.parse(localStorage.getItem(ARRASTRE_HISTORIAL_KEY) || '[]'); } catch (e) { lista = []; }
+  lista.push({ ...entrada, cuando: new Date().toISOString(), quien: state.who || '' });
+  if (lista.length > ARRASTRE_HISTORIAL_MAX) lista = lista.slice(-ARRASTRE_HISTORIAL_MAX);
+  try { localStorage.setItem(ARRASTRE_HISTORIAL_KEY, JSON.stringify(lista)); } catch (e) { /* sin espacio en el celular: sigue igual, solo no queda anotado */ }
+  console.log('[arrastre]', entrada);
+}
+
+function verHistorialArrastre() {
+  let lista = [];
+  try { lista = JSON.parse(localStorage.getItem(ARRASTRE_HISTORIAL_KEY) || '[]'); } catch (e) { lista = []; }
+  console.table(lista);
+  return lista;
+}
+
+// Misma llamada que ya usa "Editar pedido" (editar_pedido en Supabase):
+// se manda el pedido tal cual está, solo con la fecha de entrega nueva.
+// El backend ya frena esto solo si el pedido dejó de estar Pendiente.
+function moverEntregaPorArrastre(id, zona) {
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p || p.estado !== 'Pendiente') return;
+  const nuevaFecha = zona === 'hoy' ? state.today : zona === 'manana' ? sumarDias(state.today, 1) : '';
+  if ((p.fechaEntrega || '') === nuevaFecha) return;   // soltado en su propio grupo
+  registrarMovimientoArrastre({
+    accion: 'entrega', id: p.id, cliente: p.cliente,
+    fechaAnterior: p.fechaEntrega || null, fechaNueva: nuevaFecha || null,
+  });
+  const card = document.querySelector(`.order-card[data-pid="${id}"]`);
+  if (card) { flipPendiente = { id, rect: card.getBoundingClientRect() }; card.style.pointerEvents = 'none'; }
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('✓ Entrega movida'); reload(); }
+      else { toast('Error: ' + (r.error || 'No se pudo mover')); flipPendiente = null; if (card) card.style.pointerEvents = ''; }
+    })
+    .withFailureHandler(e => { toast('Error: ' + e.message); flipPendiente = null; if (card) card.style.pointerEvents = ''; })
+    .updatePedido({ id: p.id, cliente: p.cliente, direccion: p.direccion,
+                    fechaEntrega: nuevaFecha, notas: p.notas, items: p.items, retiro: p.retiro });
+}
+
+// ── Papelera por arrastre: hay que sostenerlo un ratito ──
+// dragenter/dragleave se disparan también al pasar por los hijos del
+// botón (el contador): se cuenta profundidad en vez de un booleano
+// simple, si no el temporizador se cancela solo al pasar por encima del
+// numerito.
+let papeleraDragDepth = 0;
+let papeleraHoldTimer = null;
+
+function papeleraDragOver(e) { if (dragPedidoId) e.preventDefault(); }
+
+function papeleraDragEnter(e) {
+  if (!dragPedidoId) return;
+  e.preventDefault();
+  papeleraDragDepth++;
+  if (papeleraDragDepth !== 1) return;
+  const fab = document.getElementById('papeleraFab');
+  fab.style.setProperty('--papelera-hold-ms', PAPELERA_HOLD_MS + 'ms');
+  fab.classList.add('dz-hover');
+  const id = dragPedidoId;
+  papeleraHoldTimer = setTimeout(() => pedidoAPapeleraPorArrastre(id), PAPELERA_HOLD_MS);
+}
+
+function papeleraDragLeave(e) {
+  if (!dragPedidoId) return;
+  papeleraDragDepth = Math.max(0, papeleraDragDepth - 1);
+  if (papeleraDragDepth === 0) pararHoldPapelera();
+}
+
+function papeleraDrop(e) {
+  e.preventDefault();
+  // La baja ya se hizo sola al cumplirse la espera; soltar antes de
+  // tiempo no hace nada — es justo lo que evita un borrado sin querer.
+}
+
+function pararHoldPapelera() {
+  clearTimeout(papeleraHoldTimer);
+  papeleraHoldTimer = null;
+  papeleraDragDepth = 0;
+  const fab = document.getElementById('papeleraFab');
+  if (fab) fab.classList.remove('dz-hover');
+}
+
+function pedidoAPapeleraPorArrastre(id) {
+  pararHoldPapelera();
+  if (dragPedidoId !== id) return;   // se soltó/canceló antes de cumplirse la espera
+  const p = state.pedidos.find(x => x.id === id);
+  registrarMovimientoArrastre({
+    accion: 'papelera', id, cliente: p ? p.cliente : '(no encontrado)',
+    fechaEntrega: p ? (p.fechaEntrega || null) : null,
+  });
+  const card = document.querySelector(`.order-card[data-pid="${id}"]`);
+  if (card) card.classList.add('moviendo');
+  google.script.run
+    .withSuccessHandler(r => {
+      if (r.ok) { toast('🗑 Pedido a la papelera'); reload(); }
+      else { toast('Error: ' + (r.error || 'No se pudo eliminar')); if (card) card.classList.remove('moviendo'); }
+    })
+    .withFailureHandler(e => { toast('Error: ' + e.message); if (card) card.classList.remove('moviendo'); })
+    .deletePedido(id, state.who);
 }
 
 // Cierre del día: reemplaza al control contra WhatsApp. Dice, sin que
@@ -3981,12 +4292,13 @@ function renderPedidos() {
   let cuerpo = resumenDelDiaHtml();
   // Los 5 grupos de pendientes van en un bloque propio (en PC se acomodan
   // en columnas — ver .pend-grid en el CSS; en celular se apilan igual
-  // que siempre, uno abajo del otro).
+  // que siempre, uno abajo del otro). Hoy/Mañana/Sin fecha aceptan que se
+  // suelte ahí un pedido arrastrado (zona, ver pedidoSectionHtml).
   let pendCuerpo = '';
   pendCuerpo += pedidoSectionHtml('Atrasados', atrasados);
-  pendCuerpo += pedidoSectionHtml('Para hoy', hoyG);
-  pendCuerpo += pedidoSectionHtml('Para mañana', mananaG);
-  pendCuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha);
+  pendCuerpo += pedidoSectionHtml('Para hoy', hoyG, 'hoy');
+  pendCuerpo += pedidoSectionHtml('Para mañana', mananaG, 'manana');
+  pendCuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha, 'sinfecha');
   pendCuerpo += pedidoPliegueHtml(masAdelante, {
     claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
     abierto: q ? true : showProgramados,
@@ -4023,6 +4335,37 @@ function renderPedidos() {
   // Los datos del historial salen de state.pedidos: si la lista cambio,
   // el panel del costado tiene que cambiar con ella.
   actualizarHistCliente();
+  aplicarFlipPendiente();
+}
+
+// ── Que la tarjeta se VEA moverse de un grupo a otro (FLIP) ──
+// La lista entera se vuelve a armar de cero (innerHTML), así que sin
+// esto la tarjeta "desaparece" de un lado y "aparece" en el otro. Se
+// guarda dónde estaba en la pantalla justo antes de pedir el cambio
+// (moverEntregaPorArrastre) y, apenas se vuelve a dibujar la lista, se
+// la arranca ya en esa posición vieja y se la suelta con una transición
+// hacia su lugar nuevo — la única diferencia real es visual, la tarjeta
+// es una de nuevas.
+let flipPendiente = null;   // { id, rect } de la tarjeta que se está moviendo
+
+function aplicarFlipPendiente() {
+  if (!flipPendiente) return;
+  const { id, rect } = flipPendiente;
+  flipPendiente = null;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const el = document.querySelector(`.order-card[data-pid="${id}"]`);
+  if (!el) return;
+  const nuevo = el.getBoundingClientRect();
+  const dx = rect.left - nuevo.left, dy = rect.top - nuevo.top;
+  if (!dx && !dy) return;
+  el.style.transition = 'none';
+  el.style.transform = `translate(${dx}px, ${dy}px)`;
+  el.getBoundingClientRect();   // fuerza el reflow antes de animar, si no salta directo al final
+  requestAnimationFrame(() => {
+    el.style.transition = 'transform .32s cubic-bezier(.22,.8,.22,1)';
+    el.style.transform = '';
+  });
+  el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
 }
 
 // ── Stock comprometido (panel violeta, solo PC): total por producto de
@@ -4830,24 +5173,25 @@ function daysSince(dateStr) {
   return Math.floor((t - d) / 86400000);
 }
 
-// Resta N días de calendario a una fecha 'YYYY-MM-DD' y devuelve el
-// resultado en el mismo formato. A propósito NO es un período móvil de
+// Suma o resta N días de calendario a una fecha 'YYYY-MM-DD' y devuelve
+// el resultado en el mismo formato. A propósito NO es un período móvil de
 // horas (nada de Date.now() ni relojes de dispositivo): siempre a partir
-// de una fecha ya calculada (hoyArg() o state.today), para que el corte
-// del historial reciente no dependa de a qué hora del día se mire.
+// de una fecha ya calculada (hoyArg() o state.today).
 //
 // OJO con toISOString() acá: convierte a UTC, y con un dispositivo en un
 // huso horario adelantado a UTC (al este, ej. Europa) la medianoche local
 // cae en el día anterior en UTC — el resultado quedaría corrido un día.
 // Por eso se arma el string a mano con los getters LOCALES (los mismos
 // que ya movió setDate), sin pasar por UTC en ningún momento.
-function restarDias(fechaStr, n) {
-  const d = new Date(fechaStr + 'T00:00:00');
-  d.setDate(d.getDate() - n);
+function sumarDias(fechaStr, n) {
+  const d = new Date((fechaStr || '') + 'T00:00:00');
+  d.setDate(d.getDate() + n);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
+
+function restarDias(fechaStr, n) { return sumarDias(fechaStr, -n); }
 
 // El corte de "reciente" para Despachados/Cancelados: hoy y los 6 días
 // de calendario anteriores (7 días en total). Se usa tanto al pedir los
