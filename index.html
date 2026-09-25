@@ -153,22 +153,41 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
   cursor:pointer; transition:transform .15s ease-out, box-shadow .2s ease;
 }
 .order-card:active { transform:scale(.99); }
-/* Arrastrar (solo PC, ver pedidoDragStart): el lugar de origen queda
-   como un hueco vacío (no transparente) mientras la copia "levantada"
-   (.drag-ghost) sigue al cursor — la idea es que se sienta como
-   agarrar la tarjeta de verdad, no como si se desvaneciera. */
-.order-card[draggable="true"] { cursor:grab; }
+/* Arrastrar (solo PC, ver pedidoPointerDown): gesto propio con el mouse,
+   no drag-and-drop nativo del navegador — así se puede animar la tarjeta
+   agarrada de verdad (opacidad completa, vibración) en vez de depender
+   de la foto fija que arma el sistema operativo con setDragImage. El
+   lugar de origen queda como un hueco vacío (no transparente) mientras
+   la copia flotante (.drag-ghost) sigue al cursor. */
+.order-card.arrastrable { cursor:grab; }
 .order-card.dragging {
   background:var(--lgray); box-shadow:none; border:2px dashed var(--border);
 }
 .order-card.dragging > * { visibility:hidden; }
-/* La copia que sigue al cursor (ver setDragImage en pedidoDragStart):
-   más sombra y un giro apenas perceptible, como si se hubiera levantado
-   de la lista de verdad. */
-.drag-ghost {
-  transform:rotate(2deg) scale(1.03);
-  box-shadow:0 16px 32px -8px rgba(29,32,48,.4);
+/* La tarjeta flotante que sigue al cursor (ver iniciarArrastreVisual):
+   .drag-ghost-pos es el ancla de posición (transform:translate por JS en
+   cada mousemove); .drag-ghost es la tarjeta clonada en sí, con opacidad
+   completa (nada de transparencia) y una vibración muy leve mientras se
+   sostiene, para que se sienta agarrada de verdad. */
+.drag-ghost-pos {
+  position:fixed; left:0; top:0; z-index:300; pointer-events:none; will-change:transform;
 }
+.drag-ghost {
+  box-shadow:0 16px 32px -8px rgba(29,32,48,.4);
+  animation:arrastre-vibra 1.4s ease-in-out infinite;
+  cursor:grabbing;
+}
+@keyframes arrastre-vibra {
+  0%, 100% { transform:scale(1.02) rotate(0deg); }
+  25%      { transform:scale(1.02) rotate(.5deg); }
+  75%      { transform:scale(1.02) rotate(-.5deg); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .drag-ghost { animation:none; transform:scale(1.02); }
+}
+/* Mientras se arrastra, nada de seleccionar texto de paso por mover el
+   mouse rápido sobre la lista. */
+body.arrastrando-pedido { user-select:none; }
 .order-card.moviendo { opacity:.6; pointer-events:none; }
 /* Zona donde se puede soltar: solo Para hoy/mañana/Sin fecha reciben
    este resaltado (ver pedidoSectionHtml). */
@@ -1358,11 +1377,15 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 }
 
 /* Observación del pedido, visible en la tarjeta/bloque sin abrir el
-   detalle. Tono neutro (gris, letra normal): tiene que leerse fácil sin
-   competir con el cliente ni con la fecha de entrega. */
+   detalle. Tono rojizo discreto (texto oscuro, fondo apenas teñido) para
+   que llame la atención sin gritar: a propósito NO es el mismo rojo
+   sólido de Cancelado/error (.sp-Cancelado, .dia-check.malo son fondo
+   sólido --lred; acá es --red en 6% de opacidad) para que no se lea como
+   "esto se canceló" ni como una alarma — es una nota a tener en cuenta,
+   no un estado del pedido. */
 .ped-notas {
-  font-size:13px; line-height:1.45; color:var(--text);
-  background:var(--lgray); border-radius:10px; padding:8px 10px; margin:8px 0 0;
+  font-size:13px; line-height:1.45; color:var(--red-ink);
+  background:rgba(192,57,43,.07); border-radius:10px; padding:8px 10px; margin:8px 0 0;
 }
 .ped-notas .pn-txt, b.pn-txt { white-space:pre-wrap; word-break:break-word; }
 .ped-notas .pn-ver {
@@ -1598,11 +1621,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos"
-                onclick="openPapelera()"
-                ondragover="papeleraDragOver(event)"
-                ondragenter="papeleraDragEnter(event)"
-                ondragleave="papeleraDragLeave(event)"
-                ondrop="papeleraDrop(event)">
+                onclick="openPapelera()">
           <span class="pap-fill-wrap"><span class="pap-hold"></span></span>
           <span class="pap-label">Mantené para eliminar</span>
           🗑<span class="pap-count" id="papeleraCount"></span>
@@ -2413,6 +2432,10 @@ function refrescarPorRealtime() {
   if (!state.pin) return;
   if (activeTab === 'reparto' && repSel.length) return;
   if (despActivo) return;
+  // Con un pedido agarrado, redibujar la lista de golpe le rompe la
+  // tarjeta al usuario a mitad de camino (ver hayArrastreActivo). Se
+  // pierde este aviso puntual; el próximo refresco natural lo compensa.
+  if (hayArrastreActivo()) return;
   if (document.hidden) { pendienteRealtimeRefresh = true; return; }
   reload();
 }
@@ -2738,6 +2761,8 @@ function refrescarSiCorresponde(minEdadMs) {
   if (activeTab === 'reparto' && repSel.length) return;
   // Lo mismo eligiendo qué despachar en Pedidos.
   if (despActivo) return;
+  // Lo mismo con un pedido agarrado (ver hayArrastreActivo).
+  if (hayArrastreActivo()) return;
   if (Date.now() - ultimoRefresh < (minEdadMs || REFRESCO_MS)) return;
   reload();
 }
@@ -3952,13 +3977,12 @@ function pedidoCardHtml(p) {
   // Arrastrar para cambiar de grupo (fecha de entrega) o mandar a la
   // papelera: solo pedidos Pendientes ya confirmados por el servidor, y
   // no mientras se está eligiendo qué despachar (ahí el toque tilda).
+  // Gesto propio (mousedown), no drag-and-drop nativo — ver pedidoPointerDown.
   const arrastrable = p.estado === 'Pendiente' && !despActivo && !sinConfirmar;
-  const dragAttrs = arrastrable
-    ? ` draggable="true" ondragstart="pedidoDragStart(event,'${p.id}')" ondragend="pedidoDragEnd(event)"`
-    : '';
+  const dragAttrs = arrastrable ? ` onmousedown="pedidoPointerDown(event,'${p.id}')"` : '';
 
   return `
-    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${d.cls}"
+    <div class="order-card ${p.estado}${p.retiro ? ' retiro' : ''}${esReposicion(p) ? ' es-repo' : ''}${sinConfirmar ? ' en-cola' : ''}${arrastrable ? ' arrastrable' : ''}${d.cls}"
          data-pid="${p.id}"
          onclick="${d.onclick}"${dragAttrs}>
       <div class="oc-edge"></div>
@@ -4022,12 +4046,12 @@ function pedidoSectionHtml(titulo, list, zona) {
     if (!conDrop) return '';
     return `<div class="pend-group">
       <div class="section-header dz-vacia-header"><h3>${titulo}</h3></div>
-      <div class="order-list dz-vacia" id="dz-${zona}" ondragover="dzDragOver(event)" ondrop="dzDrop(event,'${zona}')">
+      <div class="order-list dz-vacia" id="dz-${zona}">
         <div class="dz-vacia-msg">Soltar acá</div>
       </div>
     </div>`;
   }
-  const dropAttrs = conDrop ? ` id="dz-${zona}" ondragover="dzDragOver(event)" ondrop="dzDrop(event,'${zona}')"` : '';
+  const dropAttrs = conDrop ? ` id="dz-${zona}"` : '';
   return `<div class="pend-group">
     <div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>
     <div class="order-list"${dropAttrs}>${list.map(pedidoCardHtml).join('')}</div>
@@ -4059,68 +4083,263 @@ function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaG
 //  papelera, sin abrir el detalle. Nunca hacia/desde Despachado o
 //  Cancelado, ni desde/hacia Atrasados o Más adelante como destino: el
 //  botón "soltar" no reemplaza al detalle para esos casos.
+//
+//  Gesto propio con el mouse (mousedown/mousemove/mouseup), NO
+//  drag-and-drop nativo del navegador (HTML5 DnD). Antes se usaba
+//  dataTransfer.setDragImage con un clon: esa "imagen de arrastre" la
+//  pinta el sistema operativo, no la página — es una foto fija que no
+//  se puede animar (nada de opacidad, nada de vibración), y no deja
+//  combinar bien la rueda del mouse ni un desplazamiento automático
+//  propio cerca de los bordes. Con un gesto propio la tarjeta flotante
+//  es un div real en la página: se puede tener opacidad completa,
+//  sombra y una vibración sutil, y la rueda del mouse sigue andando
+//  sola (no hay ninguna operación de drag nativa capturando nada).
 // ═══════════════════════════════════════════════════════════════
-let dragPedidoId = null;
 const PAPELERA_HOLD_MS = 900;
+const ARRASTRE_UMBRAL_PX = 6;     // hasta acá, es un click normal (abre el detalle)
+const AUTOSCROLL_ZONA_PX = 90;    // franja cerca del borde donde arranca el desplazamiento
+const AUTOSCROLL_PX_POR_FRAME = 16;
 
-let dragGhostEl = null;
+// Estado del arrastre en curso, o null si no hay ninguno. "moved" separa
+// un simple click (mousedown+mouseup sin moverse: nunca se llega a armar
+// nada de esto) de un arrastre de verdad.
+let arrastre = null;
 
-function pedidoDragStart(e, id) {
-  dragPedidoId = id;
-  e.dataTransfer.effectAllowed = 'move';
-  // Firefox no arranca el arrastre si no se le pone algo acá.
-  try { e.dataTransfer.setData('text/plain', id); } catch (err) { /* da igual */ }
+// Otras partes de la app (Realtime, el refresco de 30s) preguntan esto
+// antes de redibujar la lista: si hay un arrastre en curso, un
+// renderPedidos() de golpe destruye la tarjeta que el usuario tiene
+// agarrada (innerHTML se arma de cero) y puede terminar
+// "reapareciendo" en su lugar viejo mientras la copia flotante sigue en
+// el aire. Más simple frenar el refresco un instante que perseguir esa
+// carrera — el próximo refresco natural (30s, foco, o el siguiente
+// aviso de Realtime) lo compensa solo.
+function hayArrastreActivo() { return !!arrastre; }
 
-  // Imagen propia de arrastre: una copia "levantada" (sombra fuerte,
-  // apenas girada) que sigue al cursor, en vez de la foto plana que
-  // arma el navegador solo — para que se sienta como agarrar la
-  // tarjeta de verdad, no como si algo se desvaneciera.
-  const original = e.currentTarget;
-  const r = original.getBoundingClientRect();
-  const clon = original.cloneNode(true);
-  clon.style.cssText = `position:fixed; top:-9999px; left:-9999px; width:${r.width}px; margin:0; pointer-events:none;`;
-  clon.classList.add('drag-ghost');
-  document.body.appendChild(clon);
-  dragGhostEl = clon;
-  try { e.dataTransfer.setDragImage(clon, e.clientX - r.left, e.clientY - r.top); } catch (err) { /* da igual */ }
-  // El navegador ya sacó la "foto" antes de que termine este evento:
-  // recién ahí se puede sacar el clon sin que la imagen de arrastre
-  // quede en blanco.
-  setTimeout(() => { if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; } }, 0);
+function pedidoPointerDown(e, id) {
+  if (e.button !== 0) return;                          // solo click izquierdo
+  if (despActivo) return;                               // en modo despacho, el toque tilda
+  // Nunca robarle el gesto a un link, un botón o "Ver más": ahí el
+  // mousedown sigue de largo como si esto no existiera.
+  if (e.target.closest('a, button, .pn-ver, .dir-link')) return;
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p || p.estado !== 'Pendiente') return;
+  const sinConfirmar = p.enCola || p.errorCola;
+  if (sinConfirmar) return;
 
+  arrastre = {
+    id, p, el: e.currentTarget,
+    startX: e.clientX, startY: e.clientY,
+    offsetX: 0, offsetY: 0,
+    moved: false, ghost: null,
+    zonaHoverEl: null, papeleraHover: false, papeleraTimer: null,
+    autoScrollDir: 0, autoScrollVel: 0, autoScrollRAF: null,
+    lastClientX: e.clientX, lastClientY: e.clientY,
+  };
+  document.addEventListener('mousemove', onArrastreMove);
+  document.addEventListener('mouseup', onArrastreUp);
+  document.addEventListener('keydown', onArrastreKeydown);
+  window.addEventListener('blur', cancelarArrastre);
+  window.addEventListener('scroll', onArrastreScroll, { passive: true });
+}
+
+function onArrastreMove(e) {
+  if (!arrastre) return;
+  arrastre.lastClientX = e.clientX;
+  arrastre.lastClientY = e.clientY;
+  if (!arrastre.moved) {
+    const dx = e.clientX - arrastre.startX, dy = e.clientY - arrastre.startY;
+    if (Math.hypot(dx, dy) < ARRASTRE_UMBRAL_PX) return;
+    iniciarArrastreVisual();
+  }
+  posicionarGhost(e.clientX, e.clientY);
+  actualizarHoverEnPunto(e.clientX, e.clientY);
+  actualizarAutoScroll(e.clientY);
+}
+
+// Un scroll puede llegar por la rueda del mouse o por el desplazamiento
+// automático (ver tickAutoScroll): en los dos casos el cursor no se
+// movió, pero lo que hay debajo en la pantalla sí — hay que volver a
+// mirar qué zona quedó bajo el cursor.
+function onArrastreScroll() {
+  if (!arrastre || !arrastre.moved) return;
+  actualizarHoverEnPunto(arrastre.lastClientX, arrastre.lastClientY);
+}
+
+function onArrastreKeydown(e) {
+  if (e.key === 'Escape') cancelarArrastre();
+}
+
+// La tarjeta agarrada se ve completa y opaca (nada de transparencia): el
+// lugar de origen se convierte en el hueco (mismo estilo que ya había),
+// y una copia clonada aparte sigue al cursor con su propia sombra y
+// vibración — ver .drag-ghost en el CSS.
+function iniciarArrastreVisual() {
+  arrastre.moved = true;
   document.body.classList.add('arrastrando-pedido');
-  original.classList.add('dragging');
+  arrastre.el.classList.add('dragging');
+
+  const r = arrastre.el.getBoundingClientRect();
+  arrastre.offsetX = arrastre.startX - r.left;
+  arrastre.offsetY = arrastre.startY - r.top;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'drag-ghost-pos';
+  const clon = arrastre.el.cloneNode(true);
+  clon.classList.remove('dragging', 'arrastrable');
+  clon.classList.add('drag-ghost');
+  clon.style.width = r.width + 'px';
+  wrap.appendChild(clon);
+  document.body.appendChild(wrap);
+  arrastre.ghost = wrap;
+
+  posicionarGhost(arrastre.startX, arrastre.startY);
 }
 
-function pedidoDragEnd(e) {
-  e.currentTarget.classList.remove('dragging');
-  document.body.classList.remove('arrastrando-pedido');
-  dragPedidoId = null;
-  if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; }
-  limpiarHoverZonas();
-  pararHoldPapelera();
+function posicionarGhost(clientX, clientY) {
+  if (!arrastre || !arrastre.ghost) return;
+  const x = clientX - arrastre.offsetX, y = clientY - arrastre.offsetY;
+  arrastre.ghost.style.transform = `translate(${x}px, ${y}px)`;
 }
 
-function limpiarHoverZonas() {
-  document.querySelectorAll('.dz-over').forEach(el => el.classList.remove('dz-over'));
+// elementFromPoint ve a través del ghost (tiene pointer-events:none), así
+// que siempre encuentra lo que hay debajo en la página de verdad.
+function actualizarHoverEnPunto(clientX, clientY) {
+  if (!arrastre) return;
+  const el = document.elementFromPoint(clientX, clientY);
+  const dz = el && el.closest ? el.closest('.order-list[id^="dz-"]') : null;
+  if (dz !== arrastre.zonaHoverEl) {
+    if (arrastre.zonaHoverEl) arrastre.zonaHoverEl.classList.remove('dz-over');
+    arrastre.zonaHoverEl = dz || null;
+    if (dz) dz.classList.add('dz-over');
+  }
+  const enPapelera = !!(el && el.closest && el.closest('#papeleraFab'));
+  if (enPapelera && !arrastre.papeleraHover) iniciarHoldPapelera();
+  else if (!enPapelera && arrastre.papeleraHover) cancelarHoldPapelera();
 }
 
-// dragover se dispara muchas veces por segundo: solo se toca el DOM
-// cuando la zona resaltada realmente cambia, para no parpadear.
-function dzDragOver(e) {
-  if (!dragPedidoId) return;
-  e.preventDefault();
-  if (!e.currentTarget.classList.contains('dz-over')) {
-    limpiarHoverZonas();
-    e.currentTarget.classList.add('dz-over');
+// Cerca del borde superior o inferior VISIBLE (respeta el encabezado
+// fijo arriba a través de su propio alto), la página se desplaza sola,
+// más rápido cuanto más cerca del borde está el cursor. Sigue mientras
+// el cursor quede quieto ahí (requestAnimationFrame no depende de que
+// el mouse se mueva) y se frena solo al alejarse, soltar o cancelar.
+function actualizarAutoScroll(clientY) {
+  if (!arrastre) return;
+  const header = document.querySelector('header');
+  const topLimite = header ? header.getBoundingClientRect().bottom : 0;
+  const botLimite = window.innerHeight;
+  let dir = 0, intensidad = 0;
+  if (clientY < topLimite + AUTOSCROLL_ZONA_PX) {
+    dir = -1;
+    intensidad = Math.min(1, (topLimite + AUTOSCROLL_ZONA_PX - clientY) / AUTOSCROLL_ZONA_PX);
+  } else if (clientY > botLimite - AUTOSCROLL_ZONA_PX) {
+    dir = 1;
+    intensidad = Math.min(1, (clientY - (botLimite - AUTOSCROLL_ZONA_PX)) / AUTOSCROLL_ZONA_PX);
+  }
+  arrastre.autoScrollDir = dir;
+  arrastre.autoScrollVel = dir * intensidad * AUTOSCROLL_PX_POR_FRAME;
+  if (dir && !arrastre.autoScrollRAF) tickAutoScroll();
+}
+
+function tickAutoScroll() {
+  if (!arrastre || !arrastre.autoScrollDir) { if (arrastre) arrastre.autoScrollRAF = null; return; }
+  window.scrollBy(0, arrastre.autoScrollVel);   // el navegador ya frena solo en los límites de la página
+  arrastre.autoScrollRAF = requestAnimationFrame(tickAutoScroll);
+}
+
+// ── Papelera por arrastre: hay que sostenerlo un ratito ──
+// Antes esto salía de dragenter/dragleave nativos; ahora se decide con
+// el mismo elementFromPoint de arriba, sondeado en cada mousemove/scroll.
+function iniciarHoldPapelera() {
+  arrastre.papeleraHover = true;
+  const fab = document.getElementById('papeleraFab');
+  fab.style.setProperty('--papelera-hold-ms', PAPELERA_HOLD_MS + 'ms');
+  fab.classList.add('dz-hover');
+  const id = arrastre.id;
+  arrastre.papeleraTimer = setTimeout(() => {
+    // Se cumplió el tiempo sosteniéndolo: termina el gesto ACÁ (el mouse
+    // puede seguir apretado) y recién después manda a la papelera, para
+    // no dejar la tarjeta flotante viva de más.
+    limpiarListenersArrastre();
+    limpiarVisualArrastre();
+    marcarArrastreTerminado();
+    arrastre = null;
+    pedidoAPapeleraPorArrastre(id);
+  }, PAPELERA_HOLD_MS);
+}
+
+function cancelarHoldPapelera() {
+  if (!arrastre) return;
+  arrastre.papeleraHover = false;
+  clearTimeout(arrastre.papeleraTimer);
+  arrastre.papeleraTimer = null;
+  const fab = document.getElementById('papeleraFab');
+  if (fab) fab.classList.remove('dz-hover');
+}
+
+function onArrastreUp(e) {
+  if (!arrastre) return;
+  const moved = arrastre.moved;
+  const zonaEl = arrastre.zonaHoverEl;
+  const id = arrastre.id;
+  const sobrePapelera = arrastre.papeleraHover;
+  limpiarListenersArrastre();
+  limpiarVisualArrastre();
+  arrastre = null;
+  if (!moved) return;                 // fue un click normal: que abra el detalle como siempre
+  marcarArrastreTerminado();
+  // La papelera ya se resuelve sola al cumplirse el tiempo (arriba); si
+  // se suelta antes de tiempo sobre ella, no hace nada — es justo lo
+  // que evita un borrado sin querer.
+  if (sobrePapelera) return;
+  if (zonaEl) {
+    const zona = zonaEl.id.replace(/^dz-/, '');
+    moverEntregaPorArrastre(id, zona);
   }
 }
 
-function dzDrop(e, zona) {
+// Después de un arrastre de verdad, el navegador todavía dispara un
+// "click" sobre lo que haya quedado bajo el mouse — sin esto, soltar
+// arriba de otra tarjeta abriría su detalle de pura casualidad.
+let arrastreReciénTerminado = false;
+function marcarArrastreTerminado() {
+  arrastreReciénTerminado = true;
+  setTimeout(() => { arrastreReciénTerminado = false; }, 0);
+}
+document.addEventListener('click', (e) => {
+  if (!arrastreReciénTerminado) return;
+  arrastreReciénTerminado = false;
+  e.stopPropagation();
   e.preventDefault();
-  limpiarHoverZonas();
-  const id = dragPedidoId;
-  if (id) moverEntregaPorArrastre(id, zona);
+}, true);
+
+function cancelarArrastre() {
+  if (!arrastre) return;
+  limpiarListenersArrastre();
+  limpiarVisualArrastre();
+  arrastre = null;
+  // Cancelar (Escape, perder el foco de la ventana) nunca guarda nada:
+  // la tarjeta vuelve a su lugar y no se llama a moverEntregaPorArrastre
+  // ni a la papelera.
+}
+
+function limpiarListenersArrastre() {
+  document.removeEventListener('mousemove', onArrastreMove);
+  document.removeEventListener('mouseup', onArrastreUp);
+  document.removeEventListener('keydown', onArrastreKeydown);
+  window.removeEventListener('blur', cancelarArrastre);
+  window.removeEventListener('scroll', onArrastreScroll);
+}
+
+function limpiarVisualArrastre() {
+  if (!arrastre) return;
+  if (arrastre.autoScrollRAF) cancelAnimationFrame(arrastre.autoScrollRAF);
+  if (arrastre.papeleraTimer) clearTimeout(arrastre.papeleraTimer);
+  if (arrastre.ghost) arrastre.ghost.remove();
+  if (arrastre.zonaHoverEl) arrastre.zonaHoverEl.classList.remove('dz-over');
+  const fab = document.getElementById('papeleraFab');
+  if (fab) fab.classList.remove('dz-hover');
+  document.body.classList.remove('arrastrando-pedido');
+  if (arrastre.el) arrastre.el.classList.remove('dragging');
 }
 
 // ── Historial de movimientos por arrastre ──
@@ -4173,51 +4392,7 @@ function moverEntregaPorArrastre(id, zona) {
                     fechaEntrega: nuevaFecha, notas: p.notas, items: p.items, retiro: p.retiro });
 }
 
-// ── Papelera por arrastre: hay que sostenerlo un ratito ──
-// dragenter/dragleave se disparan también al pasar por los hijos del
-// botón (el contador): se cuenta profundidad en vez de un booleano
-// simple, si no el temporizador se cancela solo al pasar por encima del
-// numerito.
-let papeleraDragDepth = 0;
-let papeleraHoldTimer = null;
-
-function papeleraDragOver(e) { if (dragPedidoId) e.preventDefault(); }
-
-function papeleraDragEnter(e) {
-  if (!dragPedidoId) return;
-  e.preventDefault();
-  papeleraDragDepth++;
-  if (papeleraDragDepth !== 1) return;
-  const fab = document.getElementById('papeleraFab');
-  fab.style.setProperty('--papelera-hold-ms', PAPELERA_HOLD_MS + 'ms');
-  fab.classList.add('dz-hover');
-  const id = dragPedidoId;
-  papeleraHoldTimer = setTimeout(() => pedidoAPapeleraPorArrastre(id), PAPELERA_HOLD_MS);
-}
-
-function papeleraDragLeave(e) {
-  if (!dragPedidoId) return;
-  papeleraDragDepth = Math.max(0, papeleraDragDepth - 1);
-  if (papeleraDragDepth === 0) pararHoldPapelera();
-}
-
-function papeleraDrop(e) {
-  e.preventDefault();
-  // La baja ya se hizo sola al cumplirse la espera; soltar antes de
-  // tiempo no hace nada — es justo lo que evita un borrado sin querer.
-}
-
-function pararHoldPapelera() {
-  clearTimeout(papeleraHoldTimer);
-  papeleraHoldTimer = null;
-  papeleraDragDepth = 0;
-  const fab = document.getElementById('papeleraFab');
-  if (fab) fab.classList.remove('dz-hover');
-}
-
 function pedidoAPapeleraPorArrastre(id) {
-  pararHoldPapelera();
-  if (dragPedidoId !== id) return;   // se soltó/canceló antes de cumplirse la espera
   const p = state.pedidos.find(x => x.id === id);
   registrarMovimientoArrastre({
     accion: 'papelera', id, cliente: p ? p.cliente : '(no encontrado)',
