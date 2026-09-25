@@ -2437,6 +2437,15 @@ function refrescarPorRealtime() {
   // pierde este aviso puntual; el próximo refresco natural lo compensa.
   if (hayArrastreActivo()) return;
   if (document.hidden) { pendienteRealtimeRefresh = true; return; }
+  // Supabase le manda este mismo aviso también a quien escribió la fila
+  // (Realtime no distingue el origen): si el cambio fue un arrastre
+  // propio, ya se hizo un reload() al confirmarlo hace instantes y ESE
+  // aviso es su propio eco. Redibujar de nuevo acá corta a mitad de
+  // camino la transición FLIP que recién arrancó (dura FLIP_MS) y la
+  // tarjeta "salta" en vez de deslizarse. El próximo aviso de Realtime o
+  // el refresco periódico igual traen cualquier cambio real que se haya
+  // perdido en esta ventana corta.
+  if (Date.now() - ultimoRefresh < FLIP_MS + 180) return;
   reload();
 }
 
@@ -4533,6 +4542,7 @@ function renderPedidos() {
 // hacia su lugar nuevo — la única diferencia real es visual, la tarjeta
 // es una de nuevas.
 let flipPendiente = null;   // { id, rect } de la tarjeta que se está moviendo
+const FLIP_MS = 320;   // duración de la transición; ver refrescarPorRealtime
 
 function aplicarFlipPendiente() {
   if (!flipPendiente) return;
@@ -4548,7 +4558,7 @@ function aplicarFlipPendiente() {
   el.style.transform = `translate(${dx}px, ${dy}px)`;
   el.getBoundingClientRect();   // fuerza el reflow antes de animar, si no salta directo al final
   requestAnimationFrame(() => {
-    el.style.transition = 'transform .32s cubic-bezier(.22,.8,.22,1)';
+    el.style.transition = `transform ${FLIP_MS}ms cubic-bezier(.22,.8,.22,1)`;
     el.style.transform = '';
   });
   el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
