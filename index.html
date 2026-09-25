@@ -4278,10 +4278,21 @@ function cancelarHoldPapelera() {
 
 function onArrastreUp(e) {
   if (!arrastre) return;
+  if (e.button !== 0) return;         // solo el botón izquierdo suelta el pedido; un click
+                                       // derecho/central de paso mientras el izquierdo sigue
+                                       // apretado no debe confirmar ni cancelar nada
   const moved = arrastre.moved;
-  const zonaEl = arrastre.zonaHoverEl;
   const id = arrastre.id;
   const sobrePapelera = arrastre.papeleraHover;
+  // El destino se recalcula ACÁ, con las coordenadas reales de soltar,
+  // en vez de confiar en zonaHoverEl (que se actualiza con el último
+  // mousemove/scroll): si un reload que ya estaba en curso desde antes
+  // del arrastre termina en medio del gesto, renderPedidos() reemplaza
+  // las zonas y ese elemento guardado queda apuntando a un grupo que ya
+  // no está en la página. document.elementFromPoint mira la página tal
+  // como está en este instante, así nunca se guarda un destino viejo.
+  const elSoltado = moved ? document.elementFromPoint(e.clientX, e.clientY) : null;
+  const zonaEl = elSoltado && elSoltado.closest ? elSoltado.closest('.order-list[id^="dz-"]') : null;
   limpiarListenersArrastre();
   limpiarVisualArrastre();
   arrastre = null;
