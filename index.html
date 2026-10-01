@@ -12,13 +12,14 @@
      apple-mobile-web-app-capable es lo que hace que arranque sin la barra
      del navegador; sin eso queda como un simple acceso directo. -->
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#1F3B6E">
+<meta name="theme-color" content="#FFFFFF">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192-any.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- black-translucent: el navy del header sube hasta arriba de todo,
      detrás del reloj y la batería. Lo compensa el padding de safe-area. -->
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Marcial">
 <style>
 :root {
@@ -1467,6 +1468,10 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 }
 @media(max-width:767.98px) { #installBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
 </style>
+<link rel="stylesheet" href="marca/tokens.css">
+<link rel="stylesheet" href="marca/marcial.css">
+<link rel="stylesheet" href="marca/pedidos.css">
+<script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
      (que es justo cuando se carga un pedido en el campo). Version fija. -->
@@ -1477,7 +1482,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <!-- Loading screen -->
 <div id="loading">
   <div class="spinner"></div>
-  <h2>Distribuidora Marcial</h2>
+  <h2 class="load-marca"><img src="marca/logo/logo-blanco.svg" alt="Marcial Distribuidora" width="182" height="110"></h2>
   <p>Cargando datos…</p>
 </div>
 
@@ -1488,23 +1493,23 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <div id="whoPick">
       <div style="text-align:center;padding:16px 0 8px;">
-        <div style="font-size:36px;margin-bottom:8px;">👤</div>
+        <div class="who-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg></div>
         <h2 style="font-size:18px;margin-bottom:4px;">¿Quién sos?</h2>
         <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Para registrar quién carga cada pedido</p>
       </div>
-      <button class="menu-btn" onclick="pickWho('Joaquin')">👤 Joaquin</button>
-      <button class="menu-btn" onclick="pickWho('Oscar')">👤 Oscar</button>
-      <button class="menu-btn" onclick="pickWho('Thiago')">👤 Thiago</button>
-      <button class="menu-btn" onclick="pickWho('Mateo')">👤 Mateo</button>
-      <button class="menu-btn" onclick="pickWho('Charly')">👤 Charly</button>
+      <button class="menu-btn" onclick="pickWho('Joaquin')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Joaquin</button>
+      <button class="menu-btn" onclick="pickWho('Oscar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Oscar</button>
+      <button class="menu-btn" onclick="pickWho('Thiago')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Thiago</button>
+      <button class="menu-btn" onclick="pickWho('Mateo')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Mateo</button>
+      <button class="menu-btn" onclick="pickWho('Charly')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Charly</button>
       <!-- Siempre disponible: sirve para instalársela a un compañero
            aunque el cartel de abajo ya no esté apareciendo. -->
-      <button class="link-instalar" onclick="abrirInstalar()">📲 Cómo instalar la app</button>
+      <button class="link-instalar" onclick="abrirInstalar()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-smartphone"/></svg>Cómo instalar la app</button>
     </div>
 
     <div id="whoPin" style="display:none">
       <div style="text-align:center;padding:16px 0 8px;">
-        <div style="font-size:36px;margin-bottom:8px;">🔒</div>
+        <div class="who-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-lock"/></svg></div>
         <h2 style="font-size:18px;margin-bottom:4px;">Hola, <span id="whoPinName"></span></h2>
         <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Escribí tu PIN para entrar</p>
       </div>
@@ -1514,7 +1519,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         onkeydown="if(event.key==='Enter')submitPin()">
       <div id="pinError"></div>
       <button class="btn btn-primary" id="pinBtn" style="margin-top:12px" onclick="submitPin()">Entrar</button>
-      <button class="btn btn-secondary" onclick="backToWhoPick()">← No soy yo</button>
+      <button class="btn btn-secondary" onclick="backToWhoPick()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-arrow-left"/></svg>No soy yo</button>
     </div>
   </div>
 </div>
@@ -1522,13 +1527,13 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <!-- App shell -->
 <div id="appShell" style="display:none">
   <header>
-    <span>📦</span>
+    <span class="m-marca hdr-marca" role="img" aria-label="Marcial Distribuidora"><img src="marca/logo/logo-horizontal.svg" alt="" width="196" height="36"></span>
     <h1 id="appTitle">Cargar Pedido</h1>
     <div id="refreshDot" title="Actualizando…"></div>
     <nav id="pcNav" class="pc-only">
-      <button data-tab="cargar" class="on" onclick="goTab('cargar')">➕ Cargar</button>
-      <button data-tab="pedidos" onclick="goTab('pedidos')">🛒 Pedidos</button>
-      <button data-tab="reparto" onclick="goTab('reparto')">🚚 Reparto</button>
+      <button data-tab="cargar" class="on" onclick="goTab('cargar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Cargar</button>
+      <button data-tab="pedidos" onclick="goTab('pedidos')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg>Pedidos</button>
+      <button data-tab="reparto" onclick="goTab('reparto')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg>Reparto</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1538,7 +1543,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="visitar" onclick="goTab('visitar')">📍 Visitar</button>
       -->
     </nav>
-    <button id="whoBtn" onclick="openWhoModal()">👤 —</button>
+    <button id="whoBtn" onclick="openWhoModal()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
   </header>
 
   <main>
@@ -1558,11 +1563,11 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         <div class="items-section">
           <h4>Productos del pedido</h4>
           <div id="cargarItemRows"></div>
-          <button class="add-item-btn" onclick="agregarProducto('cargar')">＋ Agregar producto</button>
+          <button class="add-item-btn" onclick="agregarProducto('cargar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Agregar producto</button>
         </div>
         <div class="form-extras-row">
-          <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')">📅 Entrega, dirección y observación ▾</button>
-          <label class="retiro-mini"><input type="checkbox" id="n_retiro"> 🛻 RETIRO</label>
+          <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
+          <label class="retiro-mini"><input type="checkbox" id="n_retiro"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
         </div>
         <div class="extras-body" id="n_extras">
           <div class="row2">
@@ -1600,23 +1605,23 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
                va primero y a todo el ancho, para que se note apenas se
                entra a Pedidos desde el celular. -->
           <div class="ac-wrap pedido-search mobile-only" style="width:100%">
-            <input type="text" class="search-input" placeholder="🔍 Buscar por cliente o producto…"
+            <input type="text" class="search-input" placeholder="Buscar por cliente o producto…"
               autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="search"
               oninput="onSearchInput(this)" onblur="setTimeout(()=>closeSearchAc(this),200)">
-            <button class="search-clear" onclick="clearSearch()">✕</button>
+            <button class="search-clear" aria-label="Borrar búsqueda" onclick="clearSearch()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
             <div class="ac-list"></div>
           </div>
           <div class="ac-wrap pedido-search pc-only" style="flex:1;min-width:0">
-            <input type="text" class="search-input" placeholder="🔍 Buscar por cliente o producto…"
+            <input type="text" class="search-input" placeholder="Buscar por cliente o producto…"
               autocomplete="off" oninput="onSearchInput(this)"
               onblur="setTimeout(()=>closeSearchAc(this),200)">
-            <button class="search-clear" onclick="clearSearch()">✕</button>
+            <button class="search-clear" aria-label="Borrar búsqueda" onclick="clearSearch()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
             <div class="ac-list"></div>
           </div>
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
-            <span class="rb-ico">↻</span><span class="rb-txt">Actualizar</span>
+            <span class="rb-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-refresh-cw"/></svg></span><span class="rb-txt">Actualizar</span>
           </button>
-          <button class="desp-btn" id="despBtn" onclick="entrarDespacho()">✓ Despachar varios</button>
+          <button class="desp-btn" id="despBtn" onclick="entrarDespacho()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-package-check"/></svg>Despachar varios</button>
         </div>
         <div id="frescura" class="frescura"></div>
         <div id="pedidosList"></div>
@@ -1624,32 +1629,32 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
                 onclick="openPapelera()">
           <span class="pap-fill-wrap"><span class="pap-hold"></span></span>
           <span class="pap-label">Mantené para eliminar</span>
-          🗑<span class="pap-count" id="papeleraCount"></span>
+          <svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-trash-2"/></svg><span class="pap-count" id="papeleraCount"></span>
         </button>
       </div>
       <!-- Panel flotante (solo PC): lo ya comprometido en pedidos
            pendientes. En PC angosta se abre/cierra con el botón 🟣. -->
       <aside id="compPanel">
-        <h4>🟣 Stock comprometido</h4>
+        <h4><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg> Stock comprometido</h4>
         <p class="comp-note">Cantidades ya comprometidas en pedidos pendientes: esto NO se puede seguir ofreciendo.</p>
         <div id="compList"></div>
       </aside>
-      <button id="compFab" class="pc-only" title="Stock comprometido" onclick="toggleCompPanel()">🟣</button>
+      <button id="compFab" class="pc-only" title="Stock comprometido" aria-label="Stock comprometido" onclick="toggleCompPanel()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></button>
     </div>
 
     <!-- HOJA DE REPARTO -->
     <div id="tab-reparto" class="tab-panel">
       <div class="form-card rep-head">
-        <h4>🚚 Hoja de reparto</h4>
+        <h4><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg> Hoja de reparto</h4>
         <p>Elegí los pedidos que vas a cargar en la camioneta. Abajo se arma
            solo el total de cada producto para subir, y lo podés copiar y
            mandar por WhatsApp.</p>
         <div class="rep-acciones">
-          <button class="rep-mini" onclick="repElegirHoy()">📌 Los de hoy</button>
-          <button class="rep-mini" onclick="repElegirTodos()">✓ Todos</button>
-          <button class="rep-mini" onclick="repLimpiar()">✕ Limpiar</button>
+          <button class="rep-mini" onclick="repElegirHoy()"><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-pin"/></svg>Los de hoy</button>
+          <button class="rep-mini" onclick="repElegirTodos()"><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-check"/></svg>Todos</button>
+          <button class="rep-mini" onclick="repLimpiar()"><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg>Limpiar</button>
         </div>
-        <p class="rep-nota">🛻 Los pedidos marcados como RETIRO no aparecen: los pasa a buscar el cliente.</p>
+        <p class="rep-nota"><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> Los pedidos marcados como RETIRO no aparecen: los pasa a buscar el cliente.</p>
       </div>
 
       <div id="repAviso"></div>
@@ -1665,9 +1670,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
   <!-- Navegación inferior (solo mobile) -->
   <nav id="bottomNav" class="mobile-only">
-    <button data-tab="cargar" class="bn-item on" onclick="goTab('cargar')"><span>➕</span>Cargar</button>
-    <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span>🛒</span>Pedidos</button>
-    <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span>🚚</span>Reparto</button>
+    <button data-tab="cargar" class="bn-item on" onclick="goTab('cargar')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg></span>Cargar</button>
+    <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg></span>Pedidos</button>
+    <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg></span>Reparto</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -1682,8 +1687,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-header">
-      <h2>✏️ Editar Pedido</h2>
-      <button class="close-btn" onclick="closeModal('pedidoModal')">✕</button>
+      <h2><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-square-pen"/></svg> Editar Pedido</h2>
+      <button class="close-btn" onclick="closeModal('pedidoModal')" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="p_editId">
@@ -1700,11 +1705,11 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <div class="items-section">
         <h4>Productos del pedido</h4>
         <div id="pedItemRows"></div>
-        <button class="add-item-btn" onclick="agregarProducto('ped')">＋ Agregar producto</button>
+        <button class="add-item-btn" onclick="agregarProducto('ped')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Agregar producto</button>
       </div>
       <div class="form-extras-row">
-        <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')">📅 Entrega, dirección y observación ▾</button>
-        <label class="retiro-mini"><input type="checkbox" id="p_retiro"> 🛻 RETIRO</label>
+        <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
+        <label class="retiro-mini"><input type="checkbox" id="p_retiro"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
       </div>
       <div class="extras-body" id="p_extras">
         <div class="row2">
@@ -1735,7 +1740,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <div class="modal-handle"></div>
     <div class="modal-header">
       <h2 id="detailTitle">Detalle</h2>
-      <button class="close-btn" onclick="closeModal('detailModal')">✕</button>
+      <button class="close-btn" onclick="closeModal('detailModal')" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body" id="detailBody"></div>
   </div>
@@ -1749,7 +1754,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <div class="modal-handle"></div>
     <div class="modal-header">
       <h2 id="despChkTitulo">Despacho</h2>
-      <button class="close-btn" id="despChkCerrar" onclick="cancelarChecklistDespacho()">✕</button>
+      <button class="close-btn" id="despChkCerrar" onclick="cancelarChecklistDespacho()" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body">
       <p class="chk-ayuda">Marcá qué salió completo y qué quedó incompleto.</p>
@@ -1767,8 +1772,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-header">
-      <h2>🗑 Papelera de pedidos</h2>
-      <button class="close-btn" onclick="closeModal('papeleraModal')">✕</button>
+      <h2><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-trash-2"/></svg> Papelera de pedidos</h2>
+      <button class="close-btn" onclick="closeModal('papeleraModal')" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body" id="papeleraBody"></div>
   </div>
@@ -1779,8 +1784,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-header">
-      <h2>📲 Instalar la app</h2>
-      <button class="close-btn" onclick="closeModal('instalarModal')">✕</button>
+      <h2><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-smartphone"/></svg> Instalar la app</h2>
+      <button class="close-btn" onclick="closeModal('instalarModal')" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body" id="instalarBody"></div>
   </div>
@@ -1791,13 +1796,13 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
      teclado propio para que el del sistema no tape nada. -->
 <div id="picker">
   <div class="pk-head">
-    <button class="pk-x" onclick="pickerAtras()"><span id="pkAtras">✕</span></button>
+    <button class="pk-x" onclick="pickerAtras()"><span id="pkAtras"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></span></button>
     <div class="pk-titulo" id="pkTitulo">Agregar producto</div>
   </div>
 
   <!-- Pantalla 1: elegir producto -->
   <div id="pkPaso1" class="pk-cuerpo">
-    <input type="text" id="pkBuscar" class="pk-buscar" placeholder="🔍 Buscar producto…"
+    <input type="text" id="pkBuscar" class="pk-buscar" placeholder="Buscar producto…"
       autocomplete="off" oninput="pickerFiltrar()">
     <div id="pkLista" class="pk-lista"></div>
   </div>
@@ -1834,18 +1839,18 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <div id="repBar">
   <div id="repInfo"></div>
   <div class="rep-bar-btns">
-    <button class="rep-maps" id="repMapsBtn" onclick="repAbrirRuta()" title="Abrir el recorrido en Google Maps">🚚 Maps</button>
-    <button class="rep-copiar" id="repCopiarBtn" onclick="repCopiarYGuardar()">📋 Copiar</button>
+    <button class="rep-maps" id="repMapsBtn" onclick="repAbrirRuta()" title="Abrir el recorrido en Google Maps"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-map-pin"/></svg>Maps</button>
+    <button class="rep-copiar" id="repCopiarBtn" onclick="repCopiarYGuardar()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-copy"/></svg>Copiar</button>
   </div>
-  <button class="rep-x" onclick="repLimpiar()" title="Limpiar la selección">✕</button>
+  <button class="rep-x" onclick="repLimpiar()" title="Limpiar la selección" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
 </div>
 
 <!-- Barra de "despachar varios" (pestaña Pedidos): cuántos van elegidos y
      el botón que los marca a todos de una. -->
 <div id="despBar">
   <div id="despInfo"></div>
-  <button class="rep-copiar" id="despOkBtn" onclick="despConfirmar()">✓ Marcar despachados</button>
-  <button class="rep-x" onclick="salirDespacho()" title="Salir sin despachar">✕</button>
+  <button class="rep-copiar" id="despOkBtn" onclick="despConfirmar()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-check"/></svg>Marcar despachados</button>
+  <button class="rep-x" onclick="salirDespacho()" title="Salir sin despachar" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
 </div>
 
 <!-- Aviso de pedidos todavía sin confirmar en el servidor -->
@@ -1855,7 +1860,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <div id="installBar">
   <div id="installText"></div>
   <button class="ib-btn" id="installBtn" style="display:none">Instalar</button>
-  <button class="ib-x" onclick="dismissInstall()" title="Recordármelo en una semana">✕</button>
+  <button class="ib-x" onclick="dismissInstall()" title="Recordármelo en una semana" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
 </div>
 
 <!-- Toast -->
@@ -2470,7 +2475,7 @@ window.addEventListener('load', async () => {
     state.who = savedWho;
     state.pin = 'ok';   // sentinela de "sesión iniciada" (el PIN real no se guarda)
     pendingWho = savedWho;
-    document.getElementById('whoBtn').textContent = '👤 ' + savedWho;
+    document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(savedWho) + '</span>';
     // Si hay copia guardada, la app abre YA con los últimos datos y se
     // actualiza de fondo. Si no (primera vez), espera al servidor.
     const cache = leerCache();
@@ -2550,7 +2555,7 @@ async function submitPin() {
   state.who = r.quien || pendingWho;
   state.pin = 'ok';   // sentinela de "sesión iniciada"
   localStorage.setItem('dm_ped_who', state.who);
-  document.getElementById('whoBtn').textContent = '👤 ' + state.who;
+  document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(state.who) + '</span>';
   document.getElementById('whoModal').classList.remove('open');
   document.getElementById('loading').style.display = 'flex';
   loadData();
@@ -2737,7 +2742,7 @@ function pintarFrescura() {
   // Varios fallos seguidos: no es un tropezón, hay algo cortado.
   if (fallosSeguidos >= 2) {
     el.className = 'frescura ver rota';
-    el.innerHTML = '<span>⚠ No se puede conectar con el servidor. Lo que ves ' +
+    el.innerHTML = '<span>' + mIco('triangle-alert', 'ico-sm') + ' No se puede conectar con el servidor. Lo que ves ' +
       (min === null ? 'puede estar viejo' : 'es de hace ' + textoMinutos(min)) +
       '.</span>' + boton;
     return;
@@ -2746,12 +2751,12 @@ function pintarFrescura() {
 
   if (Date.now() - ultimoRefresh >= VIEJO_MS) {
     el.className = 'frescura ver vieja';
-    el.innerHTML = '<span>⚠ Estos pedidos son de hace ' + textoMinutos(min) +
+    el.innerHTML = '<span>' + mIco('triangle-alert', 'ico-sm') + ' Estos pedidos son de hace ' + textoMinutos(min) +
       '. Puede haber cargado alguien más.</span>' + boton;
     return;
   }
   el.className = 'frescura ver';
-  el.innerHTML = '<span>✓ Actualizado ' + (min < 1 ? 'recién' : 'hace ' + textoMinutos(min)) + '</span>';
+  el.innerHTML = '<span>' + mIco('check', 'ico-sm') + ' Actualizado ' + (min < 1 ? 'recién' : 'hace ' + textoMinutos(min)) + '</span>';
 }
 
 // El cartel se repinta solo aunque no pase nada: si nadie toca nada, el
@@ -2873,8 +2878,8 @@ function etiquetaExtras(prefix) {
 }
 function setExtrasOpen(prefix, open) {
   document.getElementById(prefix + '_extras').classList.toggle('open', open);
-  document.getElementById(prefix + '_extrasBtn').textContent =
-    '📅 ' + etiquetaExtras(prefix) + ' ' + (open ? '▴' : '▾');
+  document.getElementById(prefix + '_extrasBtn').innerHTML =
+    mIco('calendar-days') + '<span>' + etiquetaExtras(prefix) + '</span>' + mIco(open ? 'chevron-up' : 'chevron-down', 'ico-sm');
   actualizarChipExtras(prefix);
 }
 
@@ -2895,7 +2900,7 @@ function actualizarChipExtras(prefix) {
     if (fecha) partes.push(fmtDiaMes(fecha));
     if (dir) partes.push('dirección');
     if (nota) partes.push('obs.');
-    btn.textContent = '📅 ' + partes.join(' · ') + ' ▾';
+    btn.innerHTML = mIco('calendar-days') + '<span>' + partes.join(' · ') + '</span>' + mIco('chevron-down', 'ico-sm');
   }
 }
 
@@ -3011,7 +3016,7 @@ function pickerPaso(n) {
   document.getElementById('pkPaso1').style.display = n === 1 ? 'flex' : 'none';
   document.getElementById('pkPaso2').style.display = n === 2 ? 'flex' : 'none';
   document.getElementById('pkTitulo').textContent = n === 1 ? 'Agregar producto' : pkProd;
-  document.getElementById('pkAtras').textContent = n === 1 ? '✕' : '←';
+  document.getElementById('pkAtras').innerHTML = mIco(n === 1 ? 'x' : 'arrow-left');
   if (n === 2) pickerPintarCantidad();
 }
 
@@ -3090,10 +3095,10 @@ function pickerPintarCantidad() {
   const ex = [];
   if (info && info.fetea) {
     ex.push(`<label><input type="checkbox" ${pkFetear ? 'checked' : ''}
-      onchange="pkFetear=this.checked;pickerPintarCantidad()"> 🔪 Para fetear (se anota en kg)</label>`);
+      onchange="pkFetear=this.checked;pickerPintarCantidad()"> ${mIco('scissors', 'ico-sm')} Para fetear (se anota en kg)</label>`);
     if (pkFetear && isPanceta(pkProd)) {
       ex.push(`<label><input type="checkbox" ${pkSinCuero ? 'checked' : ''}
-        onchange="pkSinCuero=this.checked"> 🚫 Sin cuero</label>`);
+        onchange="pkSinCuero=this.checked"> ${mIco('ban', 'ico-sm')} Sin cuero</label>`);
     }
   }
   if (!pkFetear && info && info.u === 'caja' && info.box > 0) {
@@ -3147,7 +3152,7 @@ function actualizarResumenFila(row) {
   };
   res.innerHTML = `<span class="ir-q">${itemLabelCorto(it)}</span>
     <span class="ir-n">${esc(prod || 'Sin producto')}${itemTags(it)}</span>
-    <button class="ir-x" onclick="event.stopPropagation();removeRow('${row.id}')">✕</button>`;
+    <button class="ir-x" onclick="event.stopPropagation();removeRow('${row.id}')" aria-label="Quitar producto">${mIco('x')}</button>`;
   res.onclick = () => abrirPicker(pkDestino, row);
 }
 
@@ -3259,7 +3264,7 @@ function actualizarAvisoCola() {
   if (!n) { el.classList.remove('show'); return; }
   el.innerHTML = colaOcupada
     ? `<div class="spinner-mini"></div><span>Enviando ${n} pedido${n !== 1 ? 's' : ''}…</span>`
-    : `<span>⚠ ${n} pedido${n !== 1 ? 's' : ''} sin enviar</span>
+    : `<span>${mIco('triangle-alert', 'ico-sm')} ${n} pedido${n !== 1 ? 's' : ''} sin enviar</span>
        <button class="cola-btn" onclick="procesarCola()">Reintentar</button>`;
   el.classList.add('show');
 }
@@ -3340,7 +3345,7 @@ function dirLinkHtml(direccion, clase) {
   if (!d) return '';
   return `<a class="${clase || 'dir-link'}" href="${urlMapa(d)}"
     target="_blank" rel="noopener" onclick="event.stopPropagation()"
-    title="Cómo llegar">📍<span class="dl-txt">${esc(d)}</span></a>`;
+    title="Cómo llegar">${mIco('map-pin', 'ico-sm')}<span class="dl-txt">${esc(d)}</span></a>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3443,11 +3448,11 @@ function repElegirTodos() {
 function repGrupoDe(p) {
   if (!p.fechaEntrega) return { k:'9', lbl:'Sin fecha de entrega', cls:'' };
   const d = -daysSince(p.fechaEntrega);
-  if (d < 0)   return { k:'0', lbl:'⚠ Atrasados', cls:'urgente' };
-  if (d === 0) return { k:'1', lbl:'📌 Entregar hoy', cls:'hoy' };
-  if (d === 1) return { k:'2', lbl:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega), cls:'' };
+  if (d < 0)   return { k:'0', lbl:mIco('triangle-alert', 'ico-sm') + ' Atrasados', cls:'urgente' };
+  if (d === 0) return { k:'1', lbl:mIco('pin', 'ico-sm') + ' Entregar hoy', cls:'hoy' };
+  if (d === 1) return { k:'2', lbl:mIco('calendar', 'ico-sm') + ' Mañana ' + fmtDiaMes(p.fechaEntrega), cls:'' };
   return { k:'3' + p.fechaEntrega,
-           lbl:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) +
+           lbl:mIco('calendar', 'ico-sm') + ' ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) +
                ' · en ' + d + ' día' + (d !== 1 ? 's' : ''), cls:'' };
 }
 
@@ -3465,16 +3470,16 @@ function repItemHtml(p) {
       <div class="rep-cuerpo">
         <div class="rep-top">
           <span class="rep-cli">${esc(p.cliente)}</span>
-          ${p.quien ? `<span class="rep-quien">👤 ${esc(p.quien)}</span>` : ''}
+          ${p.quien ? `<span class="rep-quien">${mIco('user', 'ico-sm')} ${esc(p.quien)}</span>` : ''}
         </div>
         ${dir
-          ? `<div class="rep-dir">📍 ${esc(dir)}</div>`
-          : '<div class="rep-dir falta">📍 Sin dirección — no entra en el recorrido</div>'}
+          ? `<div class="rep-dir">${mIco('map-pin', 'ico-sm')} ${esc(dir)}</div>`
+          : '<div class="rep-dir falta">' + mIco('map-pin', 'ico-sm') + ' Sin dirección — no entra en el recorrido</div>'}
         <div class="rep-prods">
           ${muestra.map(it => `<div><b>${itemLabelCorto(it)}</b> ${esc(it.prod)}${itemTags(it)}</div>`).join('')}
           ${resto > 0 ? `<div>+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
         </div>
-        ${p.notas ? `<div class="rep-obs">⚠ ${esc(p.notas)}</div>` : ''}
+        ${p.notas ? `<div class="rep-obs">${mIco('triangle-alert', 'ico-sm')} ${esc(p.notas)}</div>` : ''}
       </div>
     </div>`;
 }
@@ -3542,7 +3547,7 @@ function renderRepTotal() {
   const totals = totalsOf(peds);
   el.innerHTML = `
     <div class="rep-total">
-      <h4>📦 Total a cargar en la camioneta</h4>
+      <h4>${mIco('package')} Total a cargar en la camioneta</h4>
       <div class="rt-sub">${peds.length} pedido${peds.length !== 1 ? 's' : ''} · ${totals.length} producto${totals.length !== 1 ? 's' : ''} distinto${totals.length !== 1 ? 's' : ''}</div>
       ${totals.map(t => {
         const tags = [];
@@ -3563,15 +3568,15 @@ function renderRepHistorial() {
   if (!hojas.length) { el.innerHTML = ''; return; }
   el.innerHTML = `
     <div class="rep-hist">
-      <h4>🗂 Hojas guardadas</h4>
+      <h4>${mIco('history')} Hojas guardadas</h4>
       ${hojas.slice(0, 8).map(h => `
         <div class="rep-hoja">
           <div class="rh-txt">
             <b>${fmtDate(h.fecha)} · ${h.cantidad} pedido${h.cantidad !== 1 ? 's' : ''}${h.quien ? ' · ' + esc(h.quien) : ''}</b>
             <span>${esc(h.clientes || '')}</span>
           </div>
-          <button onclick="repCopiarHoja('${h.id}')">📋 Copiar</button>
-          <button class="rh-x" onclick="repEliminarHoja('${h.id}')" title="Eliminar esta hoja">✕</button>
+          <button onclick="repCopiarHoja('${h.id}')">${mIco('copy', 'ico-sm')}Copiar</button>
+          <button class="rh-x" onclick="repEliminarHoja('${h.id}')" title="Eliminar esta hoja" aria-label="Eliminar esta hoja">${mIco('x')}</button>
         </div>`).join('')}
     </div>`;
 }
@@ -3698,7 +3703,7 @@ function repCopiarYGuardar() {
 }
 
 function repMostrarTexto(txt) {
-  document.getElementById('detailTitle').textContent = '📋 Hoja de reparto';
+  document.getElementById('detailTitle').textContent = 'Hoja de reparto';
   document.getElementById('detailBody').innerHTML =
     `<p style="font-size:13px;color:var(--gray);margin-bottom:10px">No se pudo copiar solo. Mantené apretado el texto y copialo.</p>
      <textarea readonly style="width:100%;height:320px;font-size:12px;font-family:monospace;
@@ -3820,12 +3825,12 @@ function entregaInfo(p) {
   if (!p.fechaEntrega) return { d: null, cls:'ent-sinfecha', corto:'Sin fecha', txt:'Sin fecha de entrega' };
   const d = -daysSince(p.fechaEntrega);   // >0 falta, 0 es hoy, <0 se pasó
   if (d < 0)   return { d, cls:'ent-vencida', corto:'ATRASADO · ' + fmtDiaMes(p.fechaEntrega),
-                        txt:'⚠ Se pasó — era ' + fmtDiaMes(p.fechaEntrega) };
-  if (d === 0) return { d, cls:'ent-hoy', corto:'ENTREGA HOY', txt:'📌 ENTREGA HOY' };
-  if (d === 1) return { d, cls:'ent-maniana', corto:'ENTREGA MAÑANA', txt:'📅 Mañana ' + fmtDiaMes(p.fechaEntrega) };
+                        txt:mIco('triangle-alert', 'ico-sm') + ' Se pasó — era ' + fmtDiaMes(p.fechaEntrega) };
+  if (d === 0) return { d, cls:'ent-hoy', corto:'ENTREGA HOY', txt:mIco('pin', 'ico-sm') + ' ENTREGA HOY' };
+  if (d === 1) return { d, cls:'ent-maniana', corto:'ENTREGA MAÑANA', txt:mIco('calendar', 'ico-sm') + ' Mañana ' + fmtDiaMes(p.fechaEntrega) };
   return { d, cls:'ent-futura',
            corto:'Entrega ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega),
-           txt:'📅 ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) + ' · en ' + d + ' días' };
+           txt:mIco('calendar', 'ico-sm') + ' ' + nombreDiaCorto(p.fechaEntrega) + ' ' + fmtDiaMes(p.fechaEntrega) + ' · en ' + d + ' días' };
 }
 
 // "Cargado hoy" / "Cargado ayer" / "Cargado el 18/09" — la fecha de
@@ -3858,7 +3863,7 @@ function repoDetalle(p) {
 // el cliente de nuevo, es lo que quedó pendiente de otro.
 function pedidoRepoHtml(p) {
   if (!esReposicion(p)) return '';
-  return `<div class="repo-aviso">🔁 <b>Repone faltante</b> — ${esc(repoDetalle(p))}</div>`;
+  return `<div class="repo-aviso">${mIco('rotate-ccw', 'ico-sm')} <b>Repone faltante</b> — ${esc(repoDetalle(p))}</div>`;
 }
 
 // ── Observación visible en la tarjeta/bloque, sin abrir el detalle ──
@@ -3914,10 +3919,10 @@ function pedidoBloqueHtml(p) {
 
   const ent = entregaInfo(p);
   let fecha = '', fechaCls = '';
-  if (p.estado === 'Despachado' && p.fechaDespacho) fecha = '✓ Despachado ' + fmtDiaMes(p.fechaDespacho);
-  else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = '✕ Cancelado ' + fmtDiaMes(p.fechaDespacho);
+  if (p.estado === 'Despachado' && p.fechaDespacho) fecha = mIco('check', 'ico-sm') + ' Despachado ' + fmtDiaMes(p.fechaDespacho);
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) fecha = mIco('x', 'ico-sm') + ' Cancelado ' + fmtDiaMes(p.fechaDespacho);
   else if (ent) { fecha = ent.corto; fechaCls = ' ' + ent.cls; }
-  else if (p.fechaEntrega) fecha = '📅 ' + fmtDiaMes(p.fechaEntrega);
+  else if (p.fechaEntrega) fecha = mIco('calendar', 'ico-sm') + ' ' + fmtDiaMes(p.fechaEntrega);
 
   // Se muestran hasta 4 productos: uno más que en la tarjeta, porque acá
   // entran cómodos y evita tener que abrir el detalle en la mayoría.
@@ -3935,10 +3940,10 @@ function pedidoBloqueHtml(p) {
       <div class="blk-top">
         ${d.check}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
-        ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
-        ${esReposicion(p) ? '<span class="repo-tag">🔁 REPOSICIÓN</span>' : ''}
-        ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
-        ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
+        ${p.retiro ? '<span class="retiro-tag">' + mIco('store', 'ico-sm') + ' RETIRO</span>' : ''}
+        ${esReposicion(p) ? '<span class="repo-tag">' + mIco('rotate-ccw', 'ico-sm') + ' REPOSICIÓN</span>' : ''}
+        ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
+        ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
         ${fecha ? `<span class="blk-fecha${fechaCls}">${fecha}</span>` : ''}
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
@@ -3951,7 +3956,7 @@ function pedidoBloqueHtml(p) {
         ${resto > 0 ? `<div class="blk-mas">+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
       </div>
       <div class="blk-pie">
-        ${p.quien ? `<span class="blk-quien">👤 ${esc(p.quien)}</span>` : ''}
+        ${p.quien ? `<span class="blk-quien">${mIco('user', 'ico-sm')} ${esc(p.quien)}</span>` : ''}
         <span>${cargaLabel(p.fecha)}</span>
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
       </div>
@@ -3976,10 +3981,10 @@ function pedidoCardHtml(p) {
   // separada por puntos.
   const entCard = entregaInfo(p);
   let chip = '';
-  if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">✓ Despachado ${fmtDiaMes(p.fechaDespacho)}</span>`;
-  else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">✕ Cancelado ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  if (p.estado === 'Despachado' && p.fechaDespacho) chip = `<span class="oc-chip ok">${mIco('check', 'ico-sm')} Despachado ${fmtDiaMes(p.fechaDespacho)}</span>`;
+  else if (p.estado === 'Cancelado' && p.fechaDespacho) chip = `<span class="oc-chip">${mIco('x', 'ico-sm')} Cancelado ${fmtDiaMes(p.fechaDespacho)}</span>`;
   else if (entCard) chip = `<span class="oc-chip ${entCard.cls}">${entCard.txt}</span>`;
-  else if (p.fechaEntrega) chip = `<span class="oc-chip">📅 ${fmtDiaMes(p.fechaEntrega)}</span>`;
+  else if (p.fechaEntrega) chip = `<span class="oc-chip">${mIco('calendar', 'ico-sm')} ${fmtDiaMes(p.fechaEntrega)}</span>`;
 
   const d = despHtml(p);
 
@@ -4003,10 +4008,10 @@ function pedidoCardHtml(p) {
         </div>
         <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
-          ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
-          ${esReposicion(p) ? '<span class="repo-tag">🔁 REPOSICIÓN</span>' : ''}
-          ${p.enCola ? '<span class="cola-tag">↑ Enviando…</span>' : ''}
-          ${p.errorCola ? '<span class="cola-tag err">⚠ Sin enviar</span>' : ''}
+          ${p.retiro ? '<span class="retiro-tag">' + mIco('store', 'ico-sm') + ' RETIRO</span>' : ''}
+          ${esReposicion(p) ? '<span class="repo-tag">' + mIco('rotate-ccw', 'ico-sm') + ' REPOSICIÓN</span>' : ''}
+          ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
+          ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
           ${chip}
         </div>
       </div>
@@ -4077,7 +4082,7 @@ function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaG
   if (!list.length) return '';
   let html = `<div class="${claseAviso}" onclick="${onclick}()">
     <span>${texto}</span>
-    <span>${abierto ? '▲' : '▼'}</span>
+    <span>${mIco(abierto ? 'chevron-up' : 'chevron-down')}</span>
   </div>`;
   if (abierto) {
     const inner = entregaGrouping ? listaPorEntrega(list) : list.map(pedidoCardHtml).join('');
@@ -4447,11 +4452,11 @@ function resumenDelDiaHtml() {
 
   if (colgados) {
     return `<div class="dia-check malo">
-      <b>⚠ ${colgados} de los ${deHoy.length} pedidos de hoy todavía NO llegaron al servidor</b>
+      <b>${mIco('triangle-alert', 'ico-sm')} ${colgados} de los ${deHoy.length} pedidos de hoy todavía NO llegaron al servidor</b>
       <span>Están guardados en este celular. No cierres la app hasta que salgan.</span>
     </div>`;
   }
-  return `<div class="sync-ok">✓ Todo guardado</div>`;
+  return `<div class="sync-ok">${mIco('circle-check', 'ico-sm')} Todo guardado</div>`;
 }
 
 function renderPedidos() {
@@ -4497,7 +4502,7 @@ function renderPedidos() {
   pendCuerpo += pedidoPliegueHtml(masAdelante, {
     claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
     abierto: q ? true : showProgramados,
-    texto: `📆 <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
+    texto: `${mIco('calendar-clock', 'ico-sm')} <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
   }, true);
   if (pendCuerpo) cuerpo += `<div class="pend-grid">${pendCuerpo}</div>`;
 
@@ -4506,18 +4511,18 @@ function renderPedidos() {
   cuerpo += pedidoPliegueHtml(desp, {
     claseAviso: 'prog-notice', onclick: 'toggleDespachados', entregaGrouping: false,
     abierto: q ? true : showDespachados,
-    texto: `✓ <span class="pn-n">${desp.length}</span> despachado${desp.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
+    texto: `${mIco('circle-check', 'ico-sm')} <span class="pn-n">${desp.length}</span> despachado${desp.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
   });
   cuerpo += pedidoPliegueHtml(canc, {
     claseAviso: 'archived-notice', onclick: 'toggleCancelados', entregaGrouping: false,
     abierto: q ? true : showCancelados,
-    texto: `✕ ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
+    texto: `${mIco('circle-x', 'ico-sm')} ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
   });
 
   if (!cuerpo) {
     cuerpo = q
       ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
-      : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde ➕ Cargar Pedido</p>';
+      : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde <b>Cargar</b>.</p>';
   }
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
   updatePapeleraFab();
@@ -4608,7 +4613,7 @@ function despHtml(p) {
   if (!despElegible(p)) return { cls: '', check: '', onclick: '' };
   const sel = despSel.indexOf(p.id) !== -1;
   return { cls: ' desp-ok' + (sel ? ' desp-sel' : ''),
-           check: `<span class="desp-check">${sel ? '✓' : ''}</span>`,
+           check: `<span class="desp-check">${sel ? mIco('check', 'ico-sm') : ''}</span>`,
            onclick: `despToggle('${p.id}')` };
 }
 
@@ -4732,8 +4737,8 @@ function renderChecklistPaso() {
           <div class="chk-item-cant">Pedido: ${itemLineLabel(it)}</div>
         </div>
         <div class="chk-toggle">
-          <button type="button" class="chk-opt ${r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',true)">✓ Completo</button>
-          <button type="button" class="chk-opt warn ${!r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',false)">⚠ INCOMPLETO</button>
+          <button type="button" class="chk-opt ${r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',true)">${mIco('check', 'ico-sm')}Completo</button>
+          <button type="button" class="chk-opt warn ${!r.completo ? 'on' : ''}" onclick="chkSetCompleto('${it.id}',false)">${mIco('triangle-alert', 'ico-sm')}INCOMPLETO</button>
         </div>
         ${!r.completo ? `
         <div class="chk-incompleto">
@@ -5031,7 +5036,7 @@ function papeleraCardHtml(p) {
         </div>
         <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
-          ${p.retiro ? '<span class="retiro-tag">🛻 RETIRO</span>' : ''}
+          ${p.retiro ? '<span class="retiro-tag">' + mIco('store', 'ico-sm') + ' RETIRO</span>' : ''}
         </div>
       </div>
       <div class="oc-items">
@@ -5050,7 +5055,7 @@ function renderPapelera() {
   document.getElementById('papeleraBody').innerHTML = list.length
     ? `<div class="pap-vaciar">
          <p>Los pedidos eliminados quedan acá hasta que los restaures o vacíes la papelera.</p>
-         <button id="papVaciarBtn" onclick="vaciarPapeleraUi()">🗑 Vaciar papelera (${list.length})</button>
+         <button id="papVaciarBtn" onclick="vaciarPapeleraUi()">${mIco('trash-2')}Vaciar papelera (${list.length})</button>
        </div>`
       + list.map(papeleraCardHtml).join('')
     : '<p style="text-align:center;color:var(--gray);padding:30px">La papelera está vacía.<br>Los pedidos que elimines quedan acá hasta que la vacíes.</p>';
@@ -5145,11 +5150,11 @@ function pedidosFiltrados() {
 // queda invisible y parece un error de la app.
 function filtroTagHtml() {
   if (!searchTipo || !searchQuery.trim()) return '';
-  const ico = searchTipo === 'cliente' ? '👤' : '📦';
+  const ico = mIco(searchTipo === 'cliente' ? 'user' : 'package', 'ico-sm');
   const lbl = searchTipo === 'cliente' ? 'cliente' : 'producto';
   return `<div class="filtro-tag">
     <span>${ico} Solo ${lbl}: <b>${esc(searchQuery.trim())}</b></span>
-    <button class="ft-x" onclick="clearSearch()" title="Quitar el filtro">✕</button>
+    <button class="ft-x" onclick="clearSearch()" title="Quitar el filtro" aria-label="Quitar el filtro">${mIco('x')}</button>
   </div>`;
 }
 
@@ -5312,8 +5317,8 @@ function onSearchInput(input) {
   if (!cli.length && !prods.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
   const hl = s => esc(s).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>');
   list.innerHTML =
-    cli.map(c => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(c.n)}','cliente')">${hl(c.n)}<div class="ac-cat">👤 Cliente</div></div>`).join('') +
-    prods.map(p => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(p.n)}','producto')">${hl(p.n)}<div class="ac-cat">📦 Producto</div></div>`).join('');
+    cli.map(c => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(c.n)}','cliente')">${hl(c.n)}<div class="ac-cat">${mIco('user', 'ico-sm')} Cliente</div></div>`).join('') +
+    prods.map(p => `<div class="ac-item" onmousedown="selectSearch(event,'${escAttr(p.n)}','producto')">${hl(p.n)}<div class="ac-cat">${mIco('package', 'ico-sm')} Producto</div></div>`).join('');
   list.classList.add('open');
 }
 
@@ -5400,7 +5405,7 @@ function cortePedidosRecientes() {
 function openPedidoDetail(id) {
   const p = state.pedidos.find(x => x.id === id);
   if (!p) return;
-  document.getElementById('detailTitle').textContent = '🛒 ' + (p.cliente || id);
+  document.getElementById('detailTitle').textContent = (p.cliente || id);
 
   // Un pedido que todavía está en la cola no tiene ID del servidor: no se
   // puede editar, despachar ni borrar hasta que confirme, porque el
@@ -5409,8 +5414,8 @@ function openPedidoDetail(id) {
 
   let stBtns = '';
   if (!sinConfirmar && p.estado === 'Pendiente') stBtns = `
-    <button class="st-btn act-Despachado" onclick="changePedidoStatus('${p.id}','Despachado')">✓ Marcar Despachado</button>
-    <button class="st-btn act-Cancelado"  onclick="changePedidoStatus('${p.id}','Cancelado')">✕ Cancelar</button>`;
+    <button class="st-btn act-Despachado" onclick="changePedidoStatus('${p.id}','Despachado')">${mIco('check')}Marcar Despachado</button>
+    <button class="st-btn act-Cancelado"  onclick="changePedidoStatus('${p.id}','Cancelado')">${mIco('x')}Cancelar</button>`;
   if (!sinConfirmar && p.estado === 'Despachado') stBtns = `<button class="st-btn act-Pendiente" onclick="changePedidoStatus('${p.id}','Pendiente')">↩ Volver a Pendiente</button>`;
 
   const acciones = sinConfirmar
@@ -5418,7 +5423,7 @@ function openPedidoDetail(id) {
         ? `<div class="detail-section">
              <p style="font-size:13px;color:var(--red);margin-bottom:10px">⚠ Este pedido todavía no se pudo enviar al servidor. Está guardado en el celular y no se pierde.</p>
              <button class="btn btn-outline" onclick="closeModal('detailModal');procesarCola()">↻ Reintentar envío</button>
-             <button class="btn btn-danger" onclick="descartarDeCola('${p.id}')">🗑 Descartar este pedido</button>
+             <button class="btn btn-danger" onclick="descartarDeCola('${p.id}')">${mIco('trash-2')}Descartar este pedido</button>
            </div>`
         : `<div class="detail-section">
              <p style="font-size:13px;color:var(--gray)">↑ Enviándose al servidor… en cuanto confirme vas a poder editarlo o despacharlo.</p>
@@ -5426,9 +5431,9 @@ function openPedidoDetail(id) {
     :
     `${stBtns ? `<div class="detail-section"><h4>Cambiar estado</h4><div class="status-btns">${stBtns}</div></div>` : ''}` +
     (p.estado === 'Pendiente' ? `
-    <button class="btn btn-outline" onclick="openPedidoEdit('${p.id}')">✏️ Editar pedido</button>` : '') +
+    <button class="btn btn-outline" onclick="openPedidoEdit('${p.id}')">${mIco('square-pen')}Editar pedido</button>` : '') +
     (p.estado === 'Pendiente' || p.estado === 'Cancelado' ? `
-    <button class="btn btn-danger" onclick="confirmDeletePedido('${p.id}')">🗑 Eliminar pedido</button>` : '');
+    <button class="btn btn-danger" onclick="confirmDeletePedido('${p.id}')">${mIco('trash-2')}Eliminar pedido</button>` : '');
 
   document.getElementById('detailBody').innerHTML = `
     ${pedidoRepoHtml(p)}
@@ -5438,7 +5443,7 @@ function openPedidoDetail(id) {
       ${p.direccion ? `<div class="detail-item"><span>Dirección</span>${dirLinkHtml(p.direccion, 'dir-link fuerte')}</div>` : ''}
       <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(p.fecha)}</b></div>
       ${p.fechaEntrega ? `<div class="detail-item"><span>Entrega estipulada</span><b>${fmtDate(p.fechaEntrega)}</b></div>` : ''}
-      <div class="detail-item"><span>Entrega</span><b>${p.retiro ? '🛻 RETIRO — pasa a buscar' : '🚚 Reparto'}</b></div>
+      <div class="detail-item"><span>Entrega</span><b>${p.retiro ? mIco('store', 'ico-sm') + ' RETIRO — pasa a buscar' : mIco('truck', 'ico-sm') + ' Reparto'}</b></div>
       ${p.fechaDespacho ? `<div class="detail-item"><span>${p.estado === 'Cancelado' ? 'Cancelado el' : 'Despachado el'}</span><b>${fmtDate(p.fechaDespacho)}</b></div>` : ''}
       <div class="detail-item"><span>Estado</span><span class="status-pill sp-${p.estado}">${p.estado}</span></div>
       ${p.quien ? `<div class="detail-item"><span>Usuario</span><b>${esc(p.quien)}</b></div>` : ''}
@@ -5564,12 +5569,12 @@ function addItemRow(type) {
           onblur="setTimeout(()=>closeAc(this),200)">
         <div class="ac-list"></div>
       </div>
-      <button class="del-btn" onclick="removeRow('${id}')">✕</button>
+      <button class="del-btn" aria-label="Quitar producto" onclick="removeRow('${id}')">${mIco('x')}</button>
     </div>
     <div class="box-hint" style="display:none"></div>
     <label class="fetear-check"><input type="checkbox" class="fetear-input"
-      onchange="updateBoxHint(this.closest('.item-row'))"> 🔪 Para fetear</label>
-    <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> 🚫 Sin cuero (por defecto va con cuero)</label>
+      onchange="updateBoxHint(this.closest('.item-row'))"> ${mIco('scissors', 'ico-sm')} Para fetear</label>
+    <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> ${mIco('ban', 'ico-sm')} Sin cuero (por defecto va con cuero)</label>
   `;
   container.appendChild(div);
 }
@@ -5919,9 +5924,9 @@ function isPanceta(name) { return /panceta/i.test(String(name || '')); }
 // Etiquetas visuales de un ítem: 🔪 FETEAR y, si es panceta feteada,
 // CON CUERO / SIN CUERO. Se usa en tarjetas, detalle y "qué cargar".
 function itemTags(it) {
-  let s = it.fetear ? ' <span class="fetear-tag">🔪 FETEAR</span>' : '';
+  let s = it.fetear ? ' <span class="fetear-tag">' + mIco('scissors', 'ico-sm') + ' FETEAR</span>' : '';
   if (it.fetear && isPanceta(it.prod)) s += it.sinCuero
-    ? ' <span class="cuero-tag nc">🚫 SIN CUERO</span>'
+    ? ' <span class="cuero-tag nc">' + mIco('ban', 'ico-sm') + ' SIN CUERO</span>'
     : ' <span class="cuero-tag">CON CUERO</span>';
   return s;
 }
@@ -6066,11 +6071,11 @@ function checkInstallBar() {
   if (hasta && Date.now() < hasta) { bar.classList.remove('show'); return; }
 
   if (deferredInstall) {
-    txt.innerHTML = '<b>📲 Instalá la app</b>Para tenerla siempre a mano.';
+    txt.innerHTML = '<b>' + mIco('smartphone') + ' Instalá la app</b>Para tenerla siempre a mano.';
     btn.textContent = 'Instalar';
     btn.onclick = doInstall;
   } else {
-    txt.innerHTML = '<b>📲 Instalá la app</b>' +
+    txt.innerHTML = '<b>' + mIco('smartphone') + ' Instalá la app</b>' +
       (isIOS() ? 'En iPhone se hace con dos toques.' : 'Para abrirla sin el navegador.');
     btn.textContent = 'Cómo';
     btn.onclick = abrirInstalar;
@@ -6104,7 +6109,7 @@ function abrirInstalar() {
       `<p class="ins-txt">Te queda el ícono en la pantalla y abre a pantalla completa, sin barra del navegador.</p>`;
   } else if (deferredInstall) {
     html = `<p class="ins-txt">Este navegador puede instalarla de una.</p>
-      <button class="btn btn-primary" onclick="doInstall()">📲 Instalar ahora</button>`;
+      <button class="btn btn-primary" onclick="doInstall()">${mIco('smartphone')}Instalar ahora</button>`;
   } else if (esFirefox()) {
     html = `<p class="ins-txt">⚠️ Firefox no permite instalar aplicaciones web.</p>` +
       `<p class="ins-txt">Abrí <b>oscarbiach.github.io/marcial-pedidos</b> con <b>Chrome</b> o <b>Edge</b> y desde ahí vas a poder instalarla.</p>`;

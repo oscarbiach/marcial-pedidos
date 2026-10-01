@@ -1,0 +1,76 @@
+/* Marcial Distribuidora — tokens de identidad visual.
+   Único archivo con valores crudos: todo lo demás usa var(--m-*).
+   Portable: sirve igual para la app de pedidos, los módulos de Ventas
+   y el catálogo de productos. Guía: coordinacion/IDENTIDAD-VISUAL.md */
+
+@font-face {
+  font-family: "Manrope";
+  src: url("fuentes/manrope-latin-var.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Marca: azul marino del camión, escalonado */
+  --m-marino-950: #081629;
+  --m-marino-900: #0B1C33;
+  --m-marino-800: #102842;
+  --m-marino-700: #163459;
+  --m-marino-600: #1F4675;
+  --m-azul-500: #2F63A3;
+  --m-azul-400: #5B87BF;
+  --m-azul-300: #93B2D9;
+  --m-azul-200: #C5D6EC;
+  --m-azul-100: #E3ECF7;
+  --m-azul-50:  #F1F5FB;
+
+  /* Neutros fríos (tinte azul, nunca gris puro) */
+  --m-fondo:      #F2F5F9;
+  --m-superficie: #FFFFFF;
+  --m-superficie-2: #F7F9FC;
+  --m-superficie-3: #EDF1F6;
+  --m-linea:   #E2E8F0;
+  --m-linea-2: #CFD8E3;
+  --m-tinta:   #0F2238;
+  --m-tinta-2: #44546B;
+  --m-tinta-3: #5E6E84;
+  --m-sobre-marino:   #FFFFFF;
+  --m-sobre-marino-2: #A9B8CC;
+
+  /* Estados: fondo suave + tinta oscura (AA sobre su propio fondo) */
+  --m-ok-fondo: #E2F4EA;   --m-ok-tinta: #17613E;   --m-ok: #1A7F4B;
+  --m-aviso-fondo: #FDF1D3; --m-aviso-tinta: #87560A; --m-aviso: #E0A526;
+  --m-info-fondo: #E3ECF8; --m-info-tinta: #1E5597; --m-info: #3B78C4;
+  --m-error-fondo: #FBE7E9; --m-error-tinta: #A12637; --m-error: #B42338;
+
+  /* Franja de PROTOTIPO: ámbar para que sea imposible no verla */
+  --m-prueba-fondo: #F6C548; --m-prueba-tinta: #2B2000;
+
+  /* Tipografía: una sola familia, escala 1.2, cifras tabulares en datos */
+  --m-fuente: "Manrope", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --m-t-xs: 12px; --m-t-sm: 13px; --m-t-md: 14px; --m-t-lg: 16px;
+  --m-t-xl: 19px; --m-t-2xl: 23px; --m-t-3xl: 28px; --m-t-4xl: 34px;
+
+  /* Espaciado (base 4) */
+  --m-e-1: 4px; --m-e-2: 8px; --m-e-3: 12px; --m-e-4: 16px;
+  --m-e-5: 20px; --m-e-6: 24px; --m-e-8: 32px; --m-e-10: 40px;
+
+  /* Formas */
+  --m-r-sm: 8px; --m-r-md: 10px; --m-r-lg: 16px; --m-r-xl: 20px; --m-r-pill: 999px;
+
+  /* Profundidad: sombras suaves con desplazamiento, teñidas de marino */
+  --m-sombra-1: 0 1px 2px rgba(14, 34, 64, .05), 0 1px 1px rgba(14, 34, 64, .03);
+  --m-sombra-2: 0 1px 2px rgba(14, 34, 64, .04), 0 6px 18px -6px rgba(14, 34, 64, .12);
+  --m-sombra-3: 0 2px 6px rgba(14, 34, 64, .06), 0 18px 40px -12px rgba(14, 34, 64, .24);
+
+  /* Movimiento: salida exponencial, corto */
+  --m-ease: cubic-bezier(.16, 1, .3, 1);
+  --m-dur-1: 120ms; --m-dur-2: 200ms; --m-dur-3: 320ms;
+
+  --m-foco: 0 0 0 3px rgba(47, 99, 163, .35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --m-dur-1: 0ms; --m-dur-2: 0ms; --m-dur-3: 0ms; }
+}

@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v38';
+const CACHE = 'dm-pedidos-v39';
 
 const SHELL = [
   './',
@@ -19,7 +19,15 @@ const SHELL = [
   './icons/icon-512.png',
   './icons/icon-192-any.png',
   './icons/icon-512-any.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './marca/tokens.css',
+  './marca/marcial.css',
+  './marca/pedidos.css',
+  './marca/marca.js',
+  './marca/iconos.svg',
+  './marca/fuentes/manrope-latin-var.woff2',
+  './marca/logo/logo-horizontal.svg',
+  './marca/logo/logo-blanco.svg'
 ];
 
 self.addEventListener('install', e => {
