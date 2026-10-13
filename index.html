@@ -1471,6 +1471,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="marca/tokens.css">
 <link rel="stylesheet" href="marca/marcial.css">
 <link rel="stylesheet" href="marca/pedidos.css">
+<link rel="stylesheet" href="seguimiento-clientes.css">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1534,6 +1535,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="cargar" class="on" onclick="goTab('cargar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Cargar</button>
       <button data-tab="pedidos" onclick="goTab('pedidos')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg>Pedidos</button>
       <button data-tab="reparto" onclick="goTab('reparto')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg>Reparto</button>
+      <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1666,6 +1668,11 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <div id="repHistorial"></div>
     </div>
 
+    <!-- CLIENTES (seguimiento): cada cuánto pide cada cliente, qué días, qué productos y qué observaciones. Solo lectura. Ver seguimiento-clientes-ui.js -->
+    <div id="tab-clientes" class="tab-panel">
+      <div id="sc-raiz" class="sc"></div>
+    </div>
+
   </main>
 
   <!-- Navegación inferior (solo mobile) -->
@@ -1673,6 +1680,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="cargar" class="bn-item on" onclick="goTab('cargar')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg></span>Cargar</button>
     <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg></span>Pedidos</button>
     <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg></span>Reparto</button>
+    <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -1866,6 +1874,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="seguimiento-clientes.js"></script>
+<script src="seguimiento-clientes-ui.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  API — habla con Supabase
@@ -2476,6 +2486,7 @@ window.addEventListener('load', async () => {
     state.pin = 'ok';   // sentinela de "sesión iniciada" (el PIN real no se guarda)
     pendingWho = savedWho;
     document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(savedWho) + '</span>';
+    if (window.SegUI) SegUI.aplicarAcceso();
     // Si hay copia guardada, la app abre YA con los últimos datos y se
     // actualiza de fondo. Si no (primera vez), espera al servidor.
     const cache = leerCache();
@@ -2556,6 +2567,7 @@ async function submitPin() {
   state.pin = 'ok';   // sentinela de "sesión iniciada"
   localStorage.setItem('dm_ped_who', state.who);
   document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(state.who) + '</span>';
+  if (window.SegUI) SegUI.aplicarAcceso();
   document.getElementById('whoModal').classList.remove('open');
   document.getElementById('loading').style.display = 'flex';
   loadData();
@@ -2580,6 +2592,7 @@ function loadData(silencioso) {
       state = { ...state, ...data };
       stateGeneracion++;
       reencuadrarHistorialTrasRefresco();
+      if (window.SegUI) SegUI.alRefrescar();
       ultimoRefresh = Date.now();
       fallosSeguidos = 0;
       refrescando = false;
@@ -2674,6 +2687,7 @@ function reload(manual) {
       marcarRefrescando(false);
       restaurarCola();
       renderPedidos();
+      if (window.SegUI) SegUI.alRefrescar();
       pintarFrescura();
       soltarBoton();
       refrescando = false;
@@ -2800,9 +2814,11 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes' };
 
 function setTab(tab) {
+  // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
+  if (tab === 'clientes' && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
   activeTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -2810,6 +2826,8 @@ function setTab(tab) {
   // Pedidos usa todo el ancho en PC; las otras pestañas (y los modales,
   // que tienen su propio ancho fijo aparte) quedan tal cual estaban.
   document.body.classList.toggle('pedidos-ancho', tab === 'pedidos');
+  // Clientes (seguimiento) también usa el ancho útil en PC: lista | ficha.
+  document.body.classList.toggle('seg-ancho', tab === 'clientes');
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
     .forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   // Al entrar a Pedidos, si lo que hay en pantalla ya tiene más de medio
@@ -2826,6 +2844,8 @@ function setTab(tab) {
     if (state.pin && !repSel.length && Date.now() - ultimoRefresh > 45000) reload();
     renderReparto();
   }
+  // Clientes (seguimiento): pide el historial completo la primera vez (o si es viejo) y dibuja.
+  if (tab === 'clientes' && window.SegUI) SegUI.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();

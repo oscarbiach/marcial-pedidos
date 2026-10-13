@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v39';
+const CACHE = 'dm-pedidos-v40';
 
 const SHELL = [
   './',
@@ -27,7 +27,10 @@ const SHELL = [
   './marca/iconos.svg',
   './marca/fuentes/manrope-latin-var.woff2',
   './marca/logo/logo-horizontal.svg',
-  './marca/logo/logo-blanco.svg'
+  './marca/logo/logo-blanco.svg',
+  './seguimiento-clientes.js',
+  './seguimiento-clientes-ui.js',
+  './seguimiento-clientes.css'
 ];
 
 self.addEventListener('install', e => {
