@@ -15,7 +15,11 @@
    Forma de cada pedido (la de mapPedido_ en index.html):
      { id, fecha (carga), fechaDespacho, cliente, estado, notas, items: [{ prod, qty }], eliminado_en? }
    Cambios del 13/10/2026 (pedido del usuario): no hay pedidos fijos; "dejó de llevar" = compró el producto 2 o más veces y después hizo
-   al menos 2 pedidos sin pedirlo; se suma el plazo entre el día que pidió y el día que se le entregó (campo `plazo`). */
+   al menos 2 pedidos sin pedirlo; se suma el plazo entre el día que pidió y el día que se le entregó (campo `plazo`).
+   IDEA-10/11/12 (propuesta de ChatGPT, 13/10/2026): sobre el cálculo automático (que NO cambia) se aplica en una capa aparte, y solo si se
+   la pasan por opciones: `decisiones` (a un cliente se lo mueve a «Atender» o «Recuperación», o se lo pausa; el cálculo automático queda
+   guardado en `auto`) y `reglas` (producto retirado, producto reemplazado, excepción de un cliente: filtran los avisos «dejó de llevar»
+   ANTES de recortarlos). Sin decisiones ni reglas el resultado es el de siempre. Ver `calcular`. */
 (function (raiz) {
   'use strict';
 
@@ -25,6 +29,9 @@
     // usuario, 13/10). Charly pasa a llamarse Juan Marcos: están los dos para que el cambio de nombre no le saque el acceso. Es solo de interfaz:
     // no protege los datos (la base deja leer los pedidos a cualquier sesión con PIN válido).
     usuarios: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
+    // Quién puede mover, pausar y resolver avisos (por ahora los mismos que ven la pestaña; propuesta a validar con el usuario). Solo de interfaz:
+    // el permiso real lo da la base (tabla seg_editores, ver supabase/14-seguimiento-decisiones.sql).
+    editores: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
     // Cuentas que no son clientes: de prueba o muestra (eventuales, no hay ritmo de compra que seguir; decisión del usuario 13/10).
     // Se comparan sin mayúsculas ni tildes: coincide el nombre completo o el comienzo + espacio.
     excluir: ['negro - prueba', 'muestras', 'tomas cliente nuevo'],
@@ -51,12 +58,18 @@
     plazoConstante: 0.6,      // el plazo es "constante" si al menos el 60 % de los pedidos tuvo el mismo
     plazoUltimos: 8,          // cuántos pedidos recientes se muestran (día que pidió → día que se entregó)
     productosMax: 5,
+    dejoMax: 2,               // cuántos avisos «dejó de llevar» se muestran por fila (se recortan DESPUÉS de filtrar los ya explicados)
     fechasFicha: 12,          // cuántas fechas de pedido se muestran en la línea de tiempo de la ficha
   };
 
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const BLOQUES = ['alta', 'semana', 'recuperacion', 'unica', 'notocar'];
+  const BLOQUES = ['atender', 'alta', 'semana', 'recuperacion', 'unica', 'notocar', 'pausa'];
+  // Decisiones manuales (IDEA-10/11): destinos a los que se puede mover un cliente, y los motivos rápidos (sin escribir un párrafo).
+  const TIPOS_DECISION = ['atender', 'recuperacion', 'pausa'];
+  const MOTIVOS = { revisar_relacion: 'Revisar relación', pedido_postergado: 'Pedido postergado', cierre_temporal: 'Cierre temporal', otro: 'Otro' };
+  // Reglas de producto (IDEA-12): «ya no lo vendemos», «tiene reemplazo» (globales) y «no aplica a este cliente» (individual).
+  const TIPOS_REGLA = ['retirado', 'reemplazo', 'excepcion'];
 
   const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -79,6 +92,84 @@
   const cuenta = p => p && !p.eliminado_en && p.estado !== 'Cancelado' && p.cliente && String(p.cliente).trim() && p.fecha;
   const diaCarga = p => String(p.fecha).slice(0, 10);
   const diaRef = (p, hoy) => { const d = p.fechaDespacho ? String(p.fechaDespacho).slice(0, 10) : ''; return d && d <= hoy ? d : diaCarga(p); };
+
+  // ── Reglas de producto (IDEA-12) ──
+  // Cada regla: { id, tipo: 'retirado' | 'reemplazo' | 'excepcion', producto, sustituto?, clave? (cliente, solo excepción), desde, revision?, motivo?, nota?,
+  //               productoNombre?, sustitutoNombre?, creado?, vigente? }. Se identifican por el nombre normalizado del producto (el pedido no trae id de producto).
+  // «Retirado» y «reemplazo» son globales; «excepción» es de un cliente. No se aplica ninguna regla con fecha futura. El reemplazo es direccional
+  // (A→B no es B→A ni A→C); se rechazan las autorreferencias, los ciclos y un segundo reemplazo para el mismo producto (queda a la vista en `reglas.invalidas`).
+  function prepararReglas(reglas, hoy) {
+    const lista = [], invalidas = [], globales = new Map(), excepciones = new Map(), sust = new Map();
+    const orden = (reglas || []).filter(r => r && r.vigente !== false && TIPOS_REGLA.includes(r.tipo))
+      .map(r => Object.assign({}, r, { A: norm(nombreProducto(r.producto)), B: r.sustituto ? norm(nombreProducto(r.sustituto)) : '', desde: String(r.desde || '').slice(0, 10) || hoy }))
+      .sort((a, b) => String(a.creado || a.desde).localeCompare(String(b.creado || b.desde)) || String(a.id).localeCompare(String(b.id)));
+    const rechazo = (r, por) => { invalidas.push({ regla: r, por }); };
+    orden.forEach(r => {
+      if (!r.A) return rechazo(r, 'sin producto');
+      if (r.tipo === 'excepcion') {
+        if (!r.clave) return rechazo(r, 'una excepción necesita un cliente');
+        excepciones.set(r.clave + '|' + r.A, r); lista.push(r); return;
+      }
+      if (r.tipo === 'reemplazo') {
+        if (!r.B) return rechazo(r, 'sin producto de reemplazo');
+        if (r.B === r.A) return rechazo(r, 'un producto no puede reemplazarse a sí mismo');
+        for (let t = r.B, i = 0; t && i < 50; t = sust.get(t), i++) if (t === r.A) return rechazo(r, 'el reemplazo forma un ciclo');
+        if (sust.has(r.A)) return rechazo(r, 'ese producto ya tiene otro reemplazo (hay que elegir uno)');
+        sust.set(r.A, r.B);
+      }
+      const previa = globales.get(r.A);
+      if (!(previa && previa.tipo === 'reemplazo' && r.tipo === 'retirado')) globales.set(r.A, r);   // un reemplazo explícito no lo pisa un «retirado» a secas
+      lista.push(r);
+    });
+    return { lista, invalidas, globales, excepciones };
+  }
+  const nombreRegla = (r, cual) => (cual === 'B' ? (r.sustitutoNombre || r.sustituto) : (r.productoNombre || r.producto));
+  // Avisos «dejó de llevar» de UN cliente. Orden de resolución: producto retirado o reemplazado (global) → excepción de este cliente → detección automática.
+  // Se evalúan TODAS las candidatas y recién después se recorta (si no, una retirada podría tapar una tercera alerta válida).
+  function avisosProductos(productos, prods, claveCliente, R, hoy, U) {
+    const avisos = [], contexto = [];
+    productos.forEach(q => {
+      const g = R.globales.get(q.clave);
+      if (g && g.desde <= hoy) {
+        const habito = q.veces >= U.dejoVecesMin && q.hace <= U.ventanaDias;
+        if (g.tipo === 'reemplazo') {
+          const nuevo = [...new Set((prods.get(g.B) || { fechas: [] }).fechas)].sort().find(d => d > q.ultima && d >= g.desde);
+          if (nuevo) contexto.push({ tipo: 'cambio', de: q.nombre, a: nombreRegla(g, 'B'), fecha: nuevo, regla: g.id });
+          else if (habito) contexto.push({ tipo: 'alternativa', de: q.nombre, a: nombreRegla(g, 'B'), disponibilidad: 'sin confirmar', regla: g.id });
+        } else if (habito || q.dejo) contexto.push({ tipo: 'retirado', de: q.nombre, regla: g.id });
+        q.aviso = g.tipo;
+        return;
+      }
+      if (!q.dejo) return;
+      const ex = R.excepciones.get(claveCliente + '|' + q.clave);
+      // La excepción se cierra sola si volvió a comprar el producto después de ella: un abandono posterior se detecta de nuevo.
+      if (ex && ex.desde <= hoy && !(q.ultima > ex.desde)) {
+        contexto.push({ tipo: 'excepcion', de: q.nombre, motivo: ex.motivo || '', nota: ex.nota || '', revisar: !!ex.revision && ex.revision <= hoy, regla: ex.id });
+        q.aviso = 'excepcion';
+        return;
+      }
+      avisos.push(q);
+    });
+    avisos.sort((a, b) => b.veces - a.veces || a.nombre.localeCompare(b.nombre, 'es'));
+    return { avisos, contexto };
+  }
+  // ── Decisiones manuales (IDEA-10/11) ──
+  // Cada decisión: { id, clave (cliente), tipo: 'atender' | 'recuperacion' | 'pausa', motivo?, nota?, revision? (solo pausa), desde (día de la decisión),
+  //                  pedidosConocidos: [ids de pedidos que ya existían], autor?, creado?, version?, vigente? }. Una sola vigente por cliente.
+  function prepararDecisiones(decisiones) {
+    const m = new Map();
+    (decisiones || []).filter(d => d && d.vigente !== false && TIPOS_DECISION.includes(d.tipo) && d.clave).forEach(d => {
+      const previa = m.get(d.clave);
+      if (!previa || String(d.creado || '') >= String(previa.creado || '')) m.set(d.clave, d);
+    });
+    return m;
+  }
+  function razonManual(m) {
+    const mot = m.motivoTxt ? ` (${m.motivoTxt.toLowerCase()})` : '';
+    if (m.tipo === 'atender') return `lo marcaron para atender${mot}`;
+    if (m.tipo === 'recuperacion') return `lo pasaron a recuperación${mot}`;
+    return m.revision ? `está en pausa${mot}; se revisa el ${fmtCorta(m.revision)}` : `está en pausa${mot} hasta que lo retomemos`;
+  }
 
   function calcular(pedidos, hoy, opciones) {
     const C = Object.assign({}, CONFIG, (opciones && opciones.config) || {});
@@ -120,6 +211,7 @@
       base.push(x);
     });
     const medianaCartera = mediana(brechas) || U.intervaloCartera;
+    const R = prepararReglas(opciones && opciones.reglas, hoy), decs = prepararDecisiones(opciones && opciones.decisiones);
 
     // 3. Métricas y bloque de cada cliente
     const clientes = base.map(x => {
@@ -145,15 +237,18 @@
           const q = prods.get(norm(nom)) || { nombre: nom, fechas: [] }; q.fechas.push(p._ref); prods.set(norm(nom), q);
         });
       });
-      const productos = [...prods.values()].map(q => {
+      const productos = [...prods.entries()].map(([clave, q]) => {
         const fs = [...new Set(q.fechas)].sort(), ultimaVez = fs[fs.length - 1];
         const hace = diffDias(hoy, ultimaVez);
         const despues = x.fechas.filter(d => d > ultimaVez).length;   // pedidos del cliente posteriores a la última vez que lo llevó
         const dejo = fs.length >= U.dejoVecesMin && despues >= U.dejoPedidosDespues;
-        return { nombre: q.nombre, veces: fs.length, ultima: ultimaVez, hace, dejo };
+        return { nombre: q.nombre, clave, veces: fs.length, ultima: ultimaVez, hace, dejo, fechas: fs };
       }).sort((a, b) => b.veces - a.veces || a.nombre.localeCompare(b.nombre, 'es'));
       const lleva = productos.filter(q => !q.dejo).slice(0, U.productosMax).map(q => q.nombre);
-      const dejoDe = productos.filter(q => q.dejo).sort((a, b) => b.veces - a.veces).slice(0, 2);
+      // `dejo` es la detección automática; `dejoDeTodos` ya sacó los productos retirados/reemplazados y las excepciones de este cliente, y recién
+      // `dejoDe` recorta a los que se muestran en la fila.
+      const av = avisosProductos(productos, prods, x.clave, R, hoy, U);
+      const dejoDeTodos = av.avisos, dejoDe = dejoDeTodos.slice(0, U.dejoMax), cambiosProductos = av.contexto;
 
       // Última observación (nota de un pedido)
       const conNota = [...x.pedidos].reverse().find(p => String(p.notas || '').trim());
@@ -176,6 +271,21 @@
       else if (diasHab.includes(diaSemana(hoy))) { bloque = 'alta'; razon = `ya cumplió ${ritmoDe}${cuando}`; }
       else { bloque = 'semana'; razon = veces <= 1 ? `ya cumplió ${ritmoDe} y no pidió desde el lunes` : `pasó ${vecesTxt} veces ${ritmoDe} y no pidió desde el lunes`; }
 
+      // Decisión manual vigente (IDEA-10/11): cambia DÓNDE se trabaja al cliente, no sus números. El cálculo automático queda en `auto`.
+      const auto = { bloque, motivo, razon };
+      let manual = null;
+      const dm = decs.get(x.clave);
+      if (dm) {
+        const conocidos = new Set((dm.pedidosConocidos || []).map(String));
+        // «Nuevo pedido»: uno válido que no existía al decidir y se cargó desde ese día (una importación vieja o un despacho tardío no cuentan).
+        const nuevos = x.pedidos.filter(p => !conocidos.has(String(p.id)) && diaCarga(p) >= String(dm.desde || '').slice(0, 10));
+        manual = { id: dm.id, tipo: dm.tipo, motivo: dm.motivo || '', motivoTxt: MOTIVOS[dm.motivo] || '', nota: dm.nota || '', revision: dm.tipo === 'pausa' ? String(dm.revision || '').slice(0, 10) : '',
+          desde: String(dm.desde || '').slice(0, 10), autor: dm.autor || '', creado: dm.creado || '', version: dm.version || 1,
+          nuevosPedidos: nuevos.length, ultimoNuevo: nuevos.length ? nuevos[nuevos.length - 1]._ref : '', conocidos: (dm.pedidosConocidos || []).map(String) };
+        manual.revisar = manual.tipo === 'pausa' && !!manual.revision && manual.revision <= hoy;
+        bloque = dm.tipo; motivo = ''; razon = razonManual(manual);
+      }
+
       // Plazo entre el día que pidió (carga) y el día que se le entregó (despacho), sin contar domingos. Solo pedidos ya despachados.
       const plazos = x.pedidos.filter(p => p.fechaDespacho && String(p.fechaDespacho).slice(0, 10) <= hoy && String(p.fechaDespacho).slice(0, 10) >= diaCarga(p) && diaCarga(p) >= desde)
         .map(p => ({ carga: diaCarga(p), entrega: String(p.fechaDespacho).slice(0, 10) })).map(o => Object.assign(o, { dias: diasHabiles(o.carga, o.entrega) }))
@@ -193,7 +303,8 @@
 
       return {
         clave: x.clave, nombre: x.nombre, n, poco, ultimo, dias, intervalo, intervaloPropio, atraso, diasHab, bloque, motivo,
-        hoyEsSuDia: diasHab.includes(diaSemana(hoy)), lleva, dejoDe, productos, observacion,
+        hoyEsSuDia: diasHab.includes(diaSemana(hoy)), lleva, dejoDe, dejoDeTodos, cambiosProductos, productos, observacion,
+        auto, manual, pedidoIds: x.pedidos.map(p => String(p.id)),
         diaUltimo: fechaLarga(ultimo), primer: x.fechas[0],
         // Solo para mostrar (no cambian ningún bloque): razón del bloque, confianza del ritmo y datos de la ficha
         razon, refTipo, ultimoDespacho: despachoDe.has(ultimo), fechasRecientes, nFechas: x.fechas.length, nIntervalos: x.gaps.length,
@@ -203,15 +314,20 @@
 
     // 4. Bloques ordenados
     const orden = {
+      atender: (a, b) => b.atraso - a.atraso || b.dias - a.dias,
       alta: (a, b) => b.atraso - a.atraso || b.dias - a.dias,
       semana: (a, b) => b.atraso - a.atraso || b.dias - a.dias,
       recuperacion: (a, b) => a.dias - b.dias,          // los que cortaron hace menos se recuperan mejor: primero
       unica: (a, b) => a.dias - b.dias,
       notocar: (a, b) => a.nombre.localeCompare(b.nombre, 'es'),
+      pausa: (a, b) => (b.manual.revisar ? 1 : 0) - (a.manual.revisar ? 1 : 0) || (a.manual.revision || '9999').localeCompare(b.manual.revision || '9999') || a.nombre.localeCompare(b.nombre, 'es'),
     };
     const bloques = {}; BLOQUES.forEach(b => { bloques[b] = clientes.filter(c => c.bloque === b).sort(orden[b]); });
     const noTocar = { inactivo: 0, semana: 0, ciclo: 0 }; bloques.notocar.forEach(c => { noTocar[c.motivo]++; });
-    return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar };
+    const pausa = { total: bloques.pausa.length, revisar: bloques.pausa.filter(c => c.manual.revisar).length };
+    const claves = new Set(clientes.map(c => c.clave));
+    const sinCliente = [...decs.keys()].filter(k => !claves.has(k));   // decisiones de clientes que ya no figuran (no se pierden: solo no se muestran)
+    return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar, pausa, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
   }
 
   // Textos para la lista ("hace 12 días · suele cada 7")
@@ -228,7 +344,10 @@
   const ritmoTxt = c => (c.intervaloPropio ? cadaTxt(c) : 'referencia de la cartera: ' + cadaTxt(c).replace('suele ', ''));
   const lineaTexto = (c, i) => `${i + 1}. ${c.nombre} — ${diasTxt(c.dias)} (${ritmoTxt(c)})`;
 
-  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, norm, calcular, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto,
+  // Clientes que hoy tienen el aviso «dejó de llevar» de un producto (para mostrar el alcance ANTES de confirmar una regla global).
+  const alcanceAviso = (calc, claveProducto) => calc.clientes.filter(c => c.dejoDeTodos.some(q => q.clave === claveProducto)).map(c => ({ clave: c.clave, nombre: c.nombre }));
+
+  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto,
     fechas: { ymd, aFecha, sumarDias, diffDias, lunesDe, diaSemana, fmtCorta, fechaLarga } };
   raiz.SegClientes = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
