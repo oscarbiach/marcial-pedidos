@@ -131,11 +131,12 @@
     productos.forEach(q => {
       const g = R.globales.get(q.clave);
       if (g && g.desde <= hoy) {
-        const habito = q.veces >= U.dejoVecesMin && q.hace <= U.ventanaDias;
+        const compro = q.hace <= U.ventanaDias, habito = q.veces >= U.dejoVecesMin && compro;
         if (g.tipo === 'reemplazo') {
+          // «Hay otro producto parecido»: no dice que sean lo mismo. Si ya compró el otro después de la última vez: «ya pasó»; si no: «todavía no compró» (y se le puede ofrecer).
           const nuevo = [...new Set((prods.get(g.B) || { fechas: [] }).fechas)].sort().find(d => d > q.ultima && d >= g.desde);
-          if (nuevo) contexto.push({ tipo: 'cambio', de: q.nombre, a: nombreRegla(g, 'B'), fecha: nuevo, regla: g.id });
-          else if (habito) contexto.push({ tipo: 'alternativa', de: q.nombre, a: nombreRegla(g, 'B'), disponibilidad: 'sin confirmar', regla: g.id });
+          if (nuevo) contexto.push({ tipo: 'cambio', de: q.nombre, a: nombreRegla(g, 'B'), fecha: nuevo, veces: q.veces, hace: q.hace, regla: g.id });
+          else if (compro) contexto.push({ tipo: 'alternativa', de: q.nombre, a: nombreRegla(g, 'B'), disponibilidad: 'sin confirmar', veces: q.veces, hace: q.hace, regla: g.id });
         } else if (habito || q.dejo) contexto.push({ tipo: 'retirado', de: q.nombre, regla: g.id });
         q.aviso = g.tipo;
         return;
@@ -212,6 +213,7 @@
     });
     const medianaCartera = mediana(brechas) || U.intervaloCartera;
     const R = prepararReglas(opciones && opciones.reglas, hoy), decs = prepararDecisiones(opciones && opciones.decisiones);
+    const cierresPendientes = [];   // «Atender» y «Recuperación» que ya cumplieron su objetivo (pidió de nuevo): hay que cerrarlas en el guardado
 
     // 3. Métricas y bloque de cada cliente
     const clientes = base.map(x => {
@@ -273,7 +275,7 @@
 
       // Decisión manual vigente (IDEA-10/11): cambia DÓNDE se trabaja al cliente, no sus números. El cálculo automático queda en `auto`.
       const auto = { bloque, motivo, razon };
-      let manual = null;
+      let manual = null, volvioSolo = null;
       const dm = decs.get(x.clave);
       if (dm) {
         const conocidos = new Set((dm.pedidosConocidos || []).map(String));
@@ -283,7 +285,14 @@
           desde: String(dm.desde || '').slice(0, 10), autor: dm.autor || '', creado: dm.creado || '', version: dm.version || 1,
           nuevosPedidos: nuevos.length, ultimoNuevo: nuevos.length ? nuevos[nuevos.length - 1]._ref : '', conocidos: (dm.pedidosConocidos || []).map(String) };
         manual.revisar = manual.tipo === 'pausa' && !!manual.revision && manual.revision <= hoy;
-        bloque = dm.tipo; motivo = ''; razon = razonManual(manual);
+        if (dm.tipo !== 'pausa' && nuevos.length) {
+          // Pidió de nuevo después de pasarlo a Atender o Recuperación: ya no hace falta, vuelve solo a donde lo ubica el cálculo (decisión del usuario, 13/10).
+          // La pausa NO se levanta por un pedido nuevo. `cierresPendientes` le pide a la pantalla que deje cerrada la decisión (para que un pedido que se cancele
+          // después no la reviva) y `volvioSolo` explica por qué ya no figura como manual.
+          volvioSolo = { tipo: dm.tipo, desde: manual.desde, fecha: manual.ultimoNuevo, motivoTxt: manual.motivoTxt };
+          cierresPendientes.push({ id: dm.id, clave: x.clave, nombre: x.nombre, tipo: dm.tipo, fecha: manual.ultimoNuevo });
+          manual = null;
+        } else { bloque = dm.tipo; motivo = ''; razon = razonManual(manual); }
       }
 
       // Plazo entre el día que pidió (carga) y el día que se le entregó (despacho), sin contar domingos. Solo pedidos ya despachados.
@@ -304,7 +313,7 @@
       return {
         clave: x.clave, nombre: x.nombre, n, poco, ultimo, dias, intervalo, intervaloPropio, atraso, diasHab, bloque, motivo,
         hoyEsSuDia: diasHab.includes(diaSemana(hoy)), lleva, dejoDe, dejoDeTodos, cambiosProductos, productos, observacion,
-        auto, manual, pedidoIds: x.pedidos.map(p => String(p.id)),
+        auto, manual, volvioSolo, pedidoIds: x.pedidos.map(p => String(p.id)),
         diaUltimo: fechaLarga(ultimo), primer: x.fechas[0],
         // Solo para mostrar (no cambian ningún bloque): razón del bloque, confianza del ritmo y datos de la ficha
         razon, refTipo, ultimoDespacho: despachoDe.has(ultimo), fechasRecientes, nFechas: x.fechas.length, nIntervalos: x.gaps.length,
@@ -327,7 +336,7 @@
     const pausa = { total: bloques.pausa.length, revisar: bloques.pausa.filter(c => c.manual.revisar).length };
     const claves = new Set(clientes.map(c => c.clave));
     const sinCliente = [...decs.keys()].filter(k => !claves.has(k));   // decisiones de clientes que ya no figuran (no se pierden: solo no se muestran)
-    return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar, pausa, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
+    return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar, pausa, cierresPendientes, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
   }
 
   // Textos para la lista ("hace 12 días · suele cada 7")

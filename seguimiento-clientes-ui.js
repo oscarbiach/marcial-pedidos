@@ -22,7 +22,7 @@
   const E = {
     q: '', vista: 'hoy', filtroPausa: 'todas', sel: null, fichaAbierta: false, scrollLista: 0, ritmo: new Set(), historial: null, cargando: false, error: false, ts: 0, calc: null, huella: '',
     datos: { estado: 'pendiente', decisiones: [], reglas: [], ts: 0, ultimoOk: 0, cargando: false, error: false, mensaje: '' },
-    dlg: null, aviso: null, deshacer: null, arr: null, ocupado: false, renderPendiente: false,
+    dlg: null, aviso: null, deshacer: null, arr: null, ocupado: false, renderPendiente: false, cerrados: new Set(),
   };
   const $ = id => document.getElementById(id);
   // state y activeTab son `let` de index.html: no cuelgan de window, se leen directo (con typeof por si todavía no existen).
@@ -132,6 +132,25 @@
     render();
   }
 
+  // «Atender» y «Recuperación» vuelven solos a automático cuando el cliente pide de nuevo (decisión del usuario, 13/10). El motor ya lo muestra así;
+  // acá se deja cerrada la decisión en el guardado (así un pedido que se cancele después no la revive) y se avisa qué clientes volvieron.
+  async function cerrarAutomaticos(lista) {
+    const al = almacenActual(), pend = lista.filter(x => !E.cerrados.has(x.id));
+    if (!al || !pend.length || !puedeEditar() || E.ocupado) return;
+    pend.forEach(x => E.cerrados.add(x.id));
+    const hechos = [];
+    for (const x of pend) {
+      let r; try { r = await al.cerrarDecision({ clave: x.clave, nombre: x.nombre, espera: x.id, cierre: 'pedido_nuevo' }); } catch (e) { r = { ok: false }; }
+      if (r.ok && !r.yaEstaba) hechos.push(x); else if (!r.ok && !r.conflicto) E.cerrados.delete(x.id);   // si falló por otra cosa se reintenta en el próximo refresco
+    }
+    if (!hechos.length) return;
+    const dest = x => (x.tipo === 'atender' ? 'Atender' : 'Recuperación');
+    E.aviso = { tono: 'info', html: hechos.length === 1
+      ? `<b>${esc(hechos[0].nombre)}</b> pidió de nuevo (${esc(corta(hechos[0].fecha))}): volvió solo a automático (estaba en ${esc(dest(hechos[0]))}).`
+      : `<b>${hechos.length} clientes</b> pidieron de nuevo y volvieron solos a automático: ${esc(hechos.map(x => `${x.nombre} (${dest(x)})`).join(', '))}.` };
+    await cargarDatos(true);
+  }
+
   // ── Textos ──
   const ico = (n, c) => (window.mIco ? mIco(n, c) : '');
   const fechaTitulo = () => { const d = F.aFecha(hoy()); const dia = S.DIAS[d.getDay()]; return `${dia[0].toUpperCase() + dia.slice(1)} ${d.getDate()} de ${['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][d.getMonth()]}`; };
@@ -169,7 +188,7 @@
   function subFila(c, bloque) {
     const t = [], m = c.manual;
     if (m && m.tipo === 'pausa') t.push(esc(m.revisar ? `Revisión vencida (${corta(m.revision)})` : m.revision ? `Se revisa el ${corta(m.revision)}` : 'Sin fecha de revisión'));
-    if (m && m.nuevosPedidos) t.push(`<span class="sc-ok">${esc(m.tipo === 'pausa' ? 'Nuevo pedido durante la pausa' : 'Pidió de nuevo después de moverlo')}</span>`);
+    if (m && m.tipo === 'pausa' && m.nuevosPedidos) t.push('<span class="sc-ok">Nuevo pedido durante la pausa</span>');
     if (bloque === 'recuperacion' && c.lleva.length) t.push(esc('Llevaba: ' + c.lleva.slice(0, 3).join(', ')));
     else if (c.dejoDe.length) t.push(`<span class="sc-warn"><b>Dejó de llevar:</b> ${esc(c.dejoDe.map(d => d.nombre).join(', '))}</span>`);
     const av = avisoRitmo(c); if (av) t.push(`<span class="sc-warn">${esc(av)}</span>`);
@@ -280,18 +299,24 @@
       ${c.lleva.length ? `<p class="sc-lbl">Suele llevar</p>${lista(c.lleva, 'package')}` : '<p class="sc-vacio">Todavía sin productos registrados.</p>'}
       ${avisos}${cambiosProductos(c)}</section>`;
   }
-  // Lo que ya se explicó: producto retirado, reemplazo, excepción. Es contexto (no una pérdida) y se puede deshacer.
+  // Lo que ya se explicó: producto retirado, otro producto parecido, excepción. Es contexto y se puede deshacer.
+  // «Hay otro producto parecido» NO dice que sean lo mismo: se anota si el cliente ya pasó al otro y, si todavía no lo compró, se deja una nota visible para ofrecérselo.
   function cambiosProductos(c) {
     const cs = c.cambiosProductos; if (!cs.length) return '';
     const edit = puedeEditar();
     const deshacer = x => (edit && x.regla ? `<button type="button" class="sc-link" data-sc="reactivar" data-k="${at(c.clave)}" data-r="${at(x.regla)}" data-t="${at(x.tipo)}">Reactivar aviso</button>` : '');
+    const llevaba = x => `${x.veces === 1 ? 'una vez' : `${x.veces} veces`}; la última, hace ${x.hace} días`;
+    const alternativas = cs.filter(x => x.tipo === 'alternativa'), resto = cs.filter(x => x.tipo !== 'alternativa');
+    const nota = alternativas.length
+      ? `<div class="sc-nota sc-t-info">${ico('package', 'ico-sm')}<div class="sc-avisos"><ul>${alternativas.map(x => `<li><span><b>Compraba ${esc(x.de)}</b> <span class="sc-muted">(${esc(llevaba(x))})</span> y todavía no compró <b>${esc(x.a)}</b>. Se le puede ofrecer. <span class="sc-muted">Disponibilidad sin confirmar.</span></span>${deshacer(x)}</li>`).join('')}</ul></div></div>`
+      : '';
     const linea = x => {
-      if (x.tipo === 'cambio') return `<li><span><b>Cambió de ${esc(x.de)} a ${esc(x.a)}</b> <span class="sc-muted">(desde el ${esc(corta(x.fecha))}). Es un cambio, no una pérdida.</span></span>${deshacer(x)}</li>`;
-      if (x.tipo === 'alternativa') return `<li><span><b>Ofrecer alternativa a ${esc(x.de)}:</b> ${esc(x.a)} <span class="sc-muted">(disponibilidad sin confirmar)</span></span>${deshacer(x)}</li>`;
+      if (x.tipo === 'cambio') return `<li><span><b>Ya pasó de ${esc(x.de)} a ${esc(x.a)}</b> <span class="sc-muted">(lo compró desde el ${esc(corta(x.fecha))}; del anterior llevaba ${esc(llevaba(x))})</span></span>${deshacer(x)}</li>`;
       if (x.tipo === 'retirado') return `<li><span><b>${esc(x.de)}:</b> ya no se vende <span class="sc-muted">(aviso resuelto para todos los clientes)</span></span>${deshacer(x)}</li>`;
       return `<li><span><b>${esc(x.de)}:</b> no aplica a este cliente${x.motivo ? ` <span class="sc-muted">(${esc(x.motivo)})</span>` : ''}${x.revisar ? ' <span class="sc-warn">· revisión vencida</span>' : ''}</span>${deshacer(x)}</li>`;
     };
-    return `<details class="sc-cambios"${E.cambiosAbierto ? ' open' : ''}><summary>${ico('tag', 'ico-sm')}Cambios de productos (${cs.length})${ico('chevron-down', 'ico-sm sc-chev')}</summary><ul class="sc-cambios-l">${cs.map(linea).join('')}</ul></details>`;
+    const detalle = resto.length ? `<details class="sc-cambios"${E.cambiosAbierto ? ' open' : ''}><summary>${ico('tag', 'ico-sm')}Cambios de productos (${resto.length})${ico('chevron-down', 'ico-sm sc-chev')}</summary><ul class="sc-cambios-l">${resto.map(linea).join('')}</ul></details>` : '';
+    return nota + detalle;
   }
 
   // Estado del seguimiento de este cliente y las acciones para cambiarlo (solo con permiso de editar y con la base lista).
@@ -307,14 +332,13 @@
     lineas.push(`<span class="sc-muted">Desde el ${esc(corta(m.desde))}${m.autor ? ` · lo marcó ${esc(m.autor)}` : ''}</span>`);
     if (m.tipo === 'pausa') lineas.push(m.revisar ? `<b>Venció la fecha de revisión (${esc(corta(m.revision))}):</b> decidí si se retoma o se extiende.` : m.revision ? `Se revisa el ${esc(corta(m.revision))}. La fecha es para revisar, no lo reactiva sola.` : 'Sin fecha: sigue en pausa hasta que se retome.');
     lineas.push(`<span class="sc-muted">Sin esto, el cálculo lo ubicaría en: ${esc(c.auto.bloque === 'notocar' ? ESTADOS_AL_DIA[c.auto.motivo][0] : TITULOS[c.auto.bloque][0])}.</span>`);
-    const aviso = m.nuevosPedidos
-      ? nota(m.tipo === 'pausa' ? 'info' : 'aviso', 'circle-alert', m.tipo === 'pausa'
-        ? `<b>Nuevo pedido durante la pausa</b> (el último, el ${esc(corta(m.ultimoNuevo))}). La pausa sigue hasta que la retomes.`
-        : `<b>Hizo un pedido nuevo después de moverlo</b> (el último, el ${esc(corta(m.ultimoNuevo))}). ¿Querés volver a automático?`)
+    // Atender y Recuperación vuelven solos a automático si pide de nuevo (no llegan acá); la pausa no se levanta sola.
+    const aviso = m.tipo === 'pausa' && m.nuevosPedidos
+      ? nota('info', 'circle-alert', `<b>Nuevo pedido durante la pausa</b> (el último, el ${esc(corta(m.ultimoNuevo))}). La pausa sigue hasta que la retomes.`)
       : '';
     const acciones = !edit ? '' : m.tipo === 'pausa'
       ? `<button type="button" class="sc-btn sc-btn--prim" data-sc="cerrar-decision" data-k="${k}" data-c="retomado">${ico('rotate-ccw', 'ico-sm')}Retomar seguimiento</button><button type="button" class="sc-btn" data-sc="destino" data-k="${k}" data-t="pausa">${ico('calendar-days', 'ico-sm')}Extender pausa…</button>${mover}`
-      : `<button type="button" class="sc-btn${m.nuevosPedidos ? ' sc-btn--prim' : ''}" data-sc="cerrar-decision" data-k="${k}" data-c="automatico">${ico('refresh-cw', 'ico-sm')}Volver a automático</button>${mover}`;
+      : `<button type="button" class="sc-btn" data-sc="cerrar-decision" data-k="${k}" data-c="automatico">${ico('refresh-cw', 'ico-sm')}Volver a automático</button>${mover}`;
     return `<section class="sc-manual sc-t-${tn}" aria-label="Seguimiento manual"><div class="sc-manual-cab"><span class="sc-manual-t">${ico(i, 'ico-sm')}Seguimiento manual: ${esc(t.toLowerCase())}</span></div>
       <ul class="sc-manual-l">${lineas.map(l => `<li>${l}</li>`).join('')}</ul>${aviso}${acciones ? `<div class="sc-btns">${acciones}</div>` : ''}</section>`;
   }
@@ -413,6 +437,7 @@
         <aside class="sc-col sc-col--ficha" id="sc-ficha" aria-label="Ficha del cliente">${lateral}</aside>
       </div>`;
     restaurarFoco();
+    if (calc.cierresPendientes.length && !E.dlg && !(E.arr && E.arr.activo)) setTimeout(() => cerrarAutomaticos(calc.cierresPendientes), 0);
   }
 
   function resultados(calc) {
@@ -644,10 +669,10 @@
       <p class="sc-dlg-s"><b>${esc(c.nombre)}</b> lo llevó ${q.veces} veces; la última, hace ${q.hace} días. Resolver el aviso no borra ninguna compra: la historia queda igual.</p>${baja}
       <div class="sc-radios" role="radiogroup" aria-label="Qué pasó con el producto">
         <label class="sc-radio sc-radio--g"><input type="radio" name="regla" value="retirado"><span><b>Ya no lo vendemos</b><small>Para todos los clientes. Solo saca el aviso del seguimiento: no cambia el catálogo ni impide vender lo que quede.</small></span></label>
-        <label class="sc-radio sc-radio--g"><input type="radio" name="regla" value="reemplazo"><span><b>Tiene reemplazo</b><small>Para todos los clientes. Si ya compró el reemplazo se ve como «cambió a…»; si no, como «ofrecer alternativa».</small></span></label>
+        <label class="sc-radio sc-radio--g"><input type="radio" name="regla" value="reemplazo"><span><b>Hay otro producto parecido</b><small>Para todos los clientes. Sirve para ver quién ya pasó al otro y a quién ofrecérselo. No dice que sean lo mismo: quien dejó de comprar sigue sin figurar como que «cambió».</small></span></label>
         <label class="sc-radio sc-radio--g"><input type="radio" name="regla" value="excepcion"><span><b>No aplica a este cliente</b><small>Solo para ${esc(c.nombre)}. Los demás clientes siguen igual.</small></span></label></div>
-      <div class="sc-sub-campos" data-para="reemplazo" hidden><label class="sc-campo"><span>¿Qué producto lo reemplaza?</span><input type="text" name="sustituto" list="sc-dl-prods" autocomplete="off" placeholder="Escribí y elegí de la lista"></label><datalist id="sc-dl-prods">${opciones}</datalist>
-        <p class="sc-dlg-n">Se avisa que la disponibilidad del reemplazo está sin confirmar. No se unen marcas ni presentaciones por parecidas.</p></div>
+      <div class="sc-sub-campos" data-para="reemplazo" hidden><label class="sc-campo"><span>¿Cuál es el otro producto?</span><input type="text" name="sustituto" list="sc-dl-prods" autocomplete="off" placeholder="Escribí y elegí de la lista"></label><datalist id="sc-dl-prods">${opciones}</datalist>
+        <p class="sc-dlg-n">Se avisa que la disponibilidad del otro producto está sin confirmar. No se unen marcas ni presentaciones por parecidas ni se suman sus cantidades.</p></div>
       <div class="sc-sub-campos" data-para="excepcion" hidden><fieldset class="sc-fs"><legend>Motivo <span class="sc-muted">(opcional)</span></legend><div class="sc-chipsels">${chips}</div></fieldset>
         <label class="sc-campo"><span>Nota <span class="sc-muted">(opcional)</span></span><textarea name="nota" rows="2" maxlength="500"></textarea></label>
         <label class="sc-campo"><span>Revisar el <span class="sc-muted">(opcional)</span></span><input type="date" name="revision" class="sc-fecha-in" min="${at(F.sumarDias(hoy(), 1))}"></label>
@@ -670,8 +695,8 @@
     if (tipo === 'reemplazo') {
       const txt = form.querySelector('[name="sustituto"]').value.trim();
       const prod = ((estadoApp() && estadoApp().products) || []).find(x => x.act !== false && S.norm(x.n) === S.norm(txt));
-      if (!prod) return errorDlg('Elegí el producto de reemplazo de la lista del catálogo.');
-      if (claveProd(prod.n) === cp) return errorDlg('Un producto no puede reemplazarse a sí mismo.');
+      if (!prod) return errorDlg('Elegí el otro producto de la lista del catálogo.');
+      if (claveProd(prod.n) === cp) return errorDlg('El otro producto tiene que ser distinto.');
       p.sustituto = prod.n; p.sustitutoNombre = prod.n;
     }
     if (tipo === 'excepcion') {
@@ -682,7 +707,7 @@
     errorDlg(''); ocupar(true);
     const r = await almacenActual().crearRegla(p);
     ocupar(false);
-    if (r.ok) { ocupar(true); await recargar(); ocupar(false); cerrarDlg(); avisoRegla(tipo === 'retirado' ? `${q.nombre}: ya no se vende (aviso resuelto para todos).` : tipo === 'reemplazo' ? `${q.nombre}: reemplazado por ${p.sustituto}.` : `${q.nombre}: no aplica a ${c.nombre}.`, r.id); }
+    if (r.ok) { ocupar(true); await recargar(); ocupar(false); cerrarDlg(); avisoRegla(tipo === 'retirado' ? `${q.nombre}: ya no se vende (aviso resuelto para todos).` : tipo === 'reemplazo' ? `${q.nombre}: se ofrece ${p.sustituto} (aviso resuelto para todos).` : `${q.nombre}: no aplica a ${c.nombre}.`, r.id); }
     else errorDlg(`No se pudo guardar${r.error ? ': ' + r.error : ''}.`);
   }
   // Las reglas se deshacen desde el aviso (reactiva el aviso, que se vuelve a calcular con el historial) o desde «Cambios de productos».

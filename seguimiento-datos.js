@@ -48,7 +48,7 @@
       },
       async cerrarDecision(p) {
         const cierre = p.cierre || 'automatico';
-        if (!['automatico', 'retomado', 'deshecha'].includes(cierre)) return { ok: false, error: 'Cierre desconocido' };
+        if (!['automatico', 'retomado', 'deshecha', 'pedido_nuevo'].includes(cierre)) return { ok: false, error: 'Cierre desconocido' };
         const d = leer(), act = d.decisiones.find(x => x.clave === p.clave && x.vigente);
         if (!act) return { ok: true, yaEstaba: true };
         if (act.id !== o(p.espera)) return { ok: false, conflicto: true, actual: actual(act) };
