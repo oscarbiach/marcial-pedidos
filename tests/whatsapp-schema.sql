@@ -81,3 +81,15 @@ do $$ begin
  if exists(select 1 from whatsapp_contacts where contact_key='fixture-phone:541100000003') then raise exception 'Unexpected contact created'; end if;
  if has_function_privilege('authenticated','public.wa_import_contact_names(text,jsonb)','execute') then raise exception 'Importer exposed to clients'; end if;
 end $$;
+
+\ir ../supabase/migrations/20261014_whatsapp_agenda_import.sql
+set role authenticated;
+select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false);
+do $$ begin
+ begin perform wa_import_agenda_names('fixture-phone','[]');
+ raise exception 'Unauthorized agenda import';
+ exception when insufficient_privilege then null; end;
+end $$;
+select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false);
+select wa_import_agenda_names('fixture-phone','[{"phone":"541100000002","name":"Conservar"}]');
+reset role;

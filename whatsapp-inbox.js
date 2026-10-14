@@ -4,7 +4,7 @@
 'use strict';
 const E={permissions:null,contacts:[],clients:[],selected:null,messages:[],notes:[],
   query:'',client:null,listMore:false,messageMore:false,loading:false,generation:0,
-  sendBusy:false,sendRequest:null,syncBusy:false,syncPaused:false,namesBusy:false,namesPaused:false,namesCursor:null,namesCounts:{processed:0,named:0,matched:0,filled:0}};
+  sendBusy:false,sendRequest:null,syncBusy:false,syncPaused:false,agendaBusy:false,namesBusy:false,namesPaused:false,namesCursor:null,namesCounts:{processed:0,named:0,matched:0,filled:0}};
 const $=id=>document.getElementById(id);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=value=>value?new Date(value).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}):'Sin registro';
@@ -29,7 +29,7 @@ function shell(){
   $('wa-raiz').innerHTML=`<div class="wa-top"><div><h2>Conversaciones con clientes</h2>
     <p>Historial automático de WhatsApp y contexto para el seguimiento.</p></div>
     <div class="wa-actions"><button type="button" id="wa-refresh">Actualizar</button>
-    <button type="button" id="wa-sync" hidden>Importar historial</button><button type="button" id="wa-import-names" hidden>Importar nombres</button></div></div>
+    <button type="button" id="wa-sync" hidden>Importar historial</button><button type="button" id="wa-import-names" hidden>Importar nombres</button><button type="button" id="wa-import-agenda" hidden>Importar agenda del iPhone</button><input type="file" id="wa-agenda-file" accept=".vcf,text/vcard,text/x-vcard" hidden></div></div>
     <p id="wa-status" role="status" aria-live="polite"></p>
     <div id="wa-client-filter" hidden></div>
     <div id="wa-layout" class="wa-layout"><section class="wa-list" aria-label="Contactos">
@@ -46,6 +46,8 @@ function shell(){
   $('wa-more-contacts').addEventListener('click',()=>loadContacts(true).catch(handleError));
   $('wa-sync').addEventListener('click',()=>importHistory());
   $('wa-import-names').addEventListener('click',()=>importNames());
+  $('wa-import-agenda').addEventListener('click',()=>{$('wa-agenda-file').value='';$('wa-agenda-file').click();});
+  $('wa-agenda-file').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importAgenda(file).catch(handleError);});
   $('wa-contacts').addEventListener('click',event=>{
     const b=event.target.closest('[data-wa-contact]');if(b)selectContact(b.dataset.waContact).catch(handleError);
   });
@@ -234,8 +236,37 @@ async function open(client=null){
   E.clients=await readClients();
   $('wa-sync').hidden=!permissions.manage;
   $('wa-import-names').hidden=!permissions.manage;
+  $('wa-import-agenda').hidden=!permissions.manage;
   status('');await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);
+}
+async function importAgenda(file){
+  if(E.agendaBusy || !E.permissions?.manage)return;
+  if(file.size>10*1024*1024)throw new Error('La agenda debe pesar menos de 10 MB.');
+  const parsed=window.WhatsAppAgenda.parse(await file.text());
+  if(!parsed.contacts.length)throw new Error('No se encontraron nombres con teléfonos válidos y sin conflictos.');
+  const phoneId=E.contacts[0]?.phone_number_id;
+  if(!phoneId)throw new Error('Primero importá el historial para tener conversaciones a las que agregar nombres.');
+  E.agendaBusy=true;$('wa-import-agenda').disabled=true;
+  let filled=0,matched=0;
+  try{
+    for(let offset=0;offset<parsed.contacts.length;offset+=100){
+      const {data,error}=await sb.rpc('wa_import_agenda_names',{
+        p_phone_id:phoneId,p_contacts:parsed.contacts.slice(offset,offset+100)});
+      if(error){
+        if(error.code==='PGRST202')throw new Error('Falta instalar el SQL de importación de agenda en Supabase.');
+        throw error;
+      }
+      filled+=Number(data.filled || 0);matched+=Number(data.matched || 0);
+      status('Agenda: '+Math.min(offset+100,parsed.contacts.length)+' de '+parsed.contacts.length+' números revisados. '+filled+' nombres completados.');
+    }
+    await refresh();
+    const selected=contact(),heading=$('wa-thread')?.querySelector('h3');if(selected && heading)heading.textContent=title(selected);
+    status('Agenda importada: '+filled+' nombres completados; '+matched+' números coincidieron con conversaciones.'+
+      (parsed.conflicts?' '+parsed.conflicts+' números con nombres distintos quedaron pendientes.':'')+
+      (parsed.skipped?' '+parsed.skipped+' tarjetas sin nombre o teléfono válido se omitieron.':'')+
+      ' Los nombres existentes se conservaron.');
+  }finally{E.agendaBusy=false;$('wa-import-agenda').disabled=false;}
 }
 async function importNames(){
   if(E.namesBusy){E.namesPaused=true;status('La importación de nombres se pausará al terminar esta página.');return;}
