@@ -67,8 +67,8 @@ begin
   select * from wa_client_order_activity where registry_matches=1
   and (not p_active_only or active)
   and char_length(name_key)>=6
-  and (position(' ' in name_key)>0 or name_key not in
-   ('joaquin','oscar','marcos','carlos','lucas','martin','miguel','daniel','sergio','claudio','sofia','maria','juan','josu','cliente','contacto','negocio','pizzeria','panaderia','rotiseria','cliente nuevo','sin nombre','no agendado','usuario whatsapp'))
+  and position(' ' in name_key)>0 and name_key not in
+   ('joaquin','oscar','marcos','carlos','lucas','martin','miguel','daniel','sergio','claudio','sofia','maria','juan','josu','cliente','contacto','negocio','pizzeria','panaderia','rotiseria','cliente nuevo','sin nombre','no agendado','usuario whatsapp')
  ), unique_contacts as (
   select wa_name_key(display_name) as name_key,min(contact_key) as contact_key
   from whatsapp_contacts where nullif(btrim(display_name),'') is not null
