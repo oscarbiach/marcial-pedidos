@@ -13,13 +13,12 @@ alter table public.whatsapp_contact_aliases enable row level security;
 revoke all on public.whatsapp_contact_aliases from public,anon,authenticated;
 grant all on public.whatsapp_contact_aliases to service_role;
 
-do $$
+create or replace function public.wa_merge_confirmed_contacts(p_old text,p_new text)
+returns void language plpgsql security definer set search_path=public as $
 declare pair record; old_contact public.whatsapp_contacts; new_contact public.whatsapp_contacts;
 begin
- for pair in select * from (values
- ('340539642484757:543424323354','340539642484757:5493424323354'),
- ('340539642484757:541165093635','340539642484757:5491165093635')
- ) as pairs(old_key,new_key)
+ if auth.uid() is not null and not coalesce((select can_manage from whatsapp_access where user_id=auth.uid()),false) then raise exception 'Management permission required' using errcode='42501'; end if;
+ for pair in select p_old as old_key,p_new as new_key
  loop
   select * into old_contact from public.whatsapp_contacts where contact_key=pair.old_key;
   if not found then continue; end if;
@@ -49,7 +48,9 @@ begin
   where contact_key=pair.new_key;
   delete from public.whatsapp_contacts where contact_key=pair.old_key;
  end loop;
-end $$;
+end $;
+revoke all on function public.wa_merge_confirmed_contacts(text,text) from public,anon;
+grant execute on function public.wa_merge_confirmed_contacts(text,text) to authenticated,service_role;
 
 create or replace function public.wa_ingest_message(p jsonb) returns void language plpgsql security definer set search_path=public
 as $$
@@ -103,7 +104,3 @@ begin
   where contact_key=p->>'contact_key';
 end $$;
 commit;
-
-select phone_number,display_name,inbound_count,outbound_count
-from public.whatsapp_contact_summary
-where contact_key in ('340539642484757:5493424323354','340539642484757:5491165093635');
