@@ -81,3 +81,26 @@ async function main(){
  console.log('Passed: HMAC, batches, Business App echoes, BSUID, status parsing, access, reply window, send idempotency/ambiguity, JS syntax.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
+
+{
+ const assertAgenda=require('node:assert/strict'), vmAgenda=require('node:vm'), fsAgenda=require('node:fs');
+ const sandboxAgenda={window:{},TextEncoder,TextDecoder};
+ vmAgenda.runInNewContext(fsAgenda.readFileSync('whatsapp-agenda.js','utf8'),sandboxAgenda);
+ const parseAgenda=sandboxAgenda.window.WhatsAppAgenda.parse;
+ const sampleAgenda='BEGIN:VCARD\r\nVERSION:3.0\r\nFN:María\\, Pizzería\r\nTEL;TYPE=CELL:+54 9 342 555-0001\r\nEND:VCARD\r\nBEGIN:VCARD\r\nFN:Nombre distinto\r\nTEL:543425550001\r\nEND:VCARD\r\nBEGIN:VCARD\r\nN:Apellido;Nombre;;;\r\nTEL:3425550002\r\nEND:VCARD';
+ const parsedAgenda=parseAgenda(sampleAgenda);
+ assertAgenda.equal(parsedAgenda.cards,3);
+ assertAgenda.equal(parsedAgenda.conflicts,1);
+ assertAgenda.equal(parsedAgenda.contacts.length,1);
+ assertAgenda.equal(parsedAgenda.contacts[0].name,'Nombre Apellido');
+ assertAgenda.equal(parsedAgenda.contacts[0].phone,'543425550002');
+ const foldedAgenda=parseAgenda('BEGIN:VCARD\nFN:Pizzería\n  Marcial\nTEL:+393510000001\nEND:VCARD');
+ assertAgenda.equal(foldedAgenda.contacts[0].name,'Pizzería Marcial');
+ assertAgenda.equal(foldedAgenda.contacts[0].phone,'393510000001');
+ const qpAgenda=parseAgenda('BEGIN:VCARD\nFN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:Mar=C3=AD=\na\nTEL:005493425550003\nEND:VCARD');
+ assertAgenda.equal(qpAgenda.contacts[0].name,'María');
+ assertAgenda.equal(qpAgenda.contacts[0].phone,'5493425550003');
+ assertAgenda.equal(sandboxAgenda.window.WhatsAppAgenda.phoneNumber('3425550001 ext 9'),null);
+ assertAgenda.throws(()=>parseAgenda('not a vCard'));
+ console.log('Passed: vCard names, UTF-8, folding, quoted-printable, phone formats, conflicts.');
+}
