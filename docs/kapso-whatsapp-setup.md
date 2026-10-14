@@ -31,7 +31,7 @@ Consultar en SQL Editor:
 select id, email from auth.users order by email;
 ```
 
-Identificar las cuentas de Oscar, Joaquín y Juan Marcos/Charly por la configuración real del login. No deducirlas solo por semejanzas de texto. Agregar sus UUID confirmados:
+Identificar las cuentas de Oscar, Joaquín y Juan Marcos/Charly por la configuración real del login. Si todos los PIN utilizan una misma cuenta Auth compartida, no habilitar ese UUID para acceso selectivo: primero separar las identidades en la función de login. No deducirlas solo por semejanzas de texto. Agregar sus UUID confirmados:
 
 ```sql
 insert into public.whatsapp_access(user_id, can_send, can_manage)
