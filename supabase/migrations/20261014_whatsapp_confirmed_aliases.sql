@@ -14,9 +14,10 @@ revoke all on public.whatsapp_contact_aliases from public,anon,authenticated;
 grant all on public.whatsapp_contact_aliases to service_role;
 
 create or replace function public.wa_merge_confirmed_contacts(p_old text,p_new text)
-returns void language plpgsql security definer set search_path=public as $
+returns void language plpgsql security definer set search_path=public as $$
 declare pair record; old_contact public.whatsapp_contacts; new_contact public.whatsapp_contacts;
 begin
+ if p_old is null or p_new is null or p_old=p_new then raise exception 'Two different contacts required'; end if;
  if auth.uid() is not null and not coalesce((select can_manage from whatsapp_access where user_id=auth.uid()),false) then raise exception 'Management permission required' using errcode='42501'; end if;
  for pair in select p_old as old_key,p_new as new_key
  loop
@@ -24,6 +25,7 @@ begin
   if not found then continue; end if;
   select * into new_contact from public.whatsapp_contacts where contact_key=pair.new_key;
   if not found then raise exception 'Missing destination contact %',pair.new_key; end if;
+  if old_contact.phone_number_id<>new_contact.phone_number_id then raise exception 'Contacts belong to different numbers'; end if;
   if old_contact.linked_client_name is not null and new_contact.linked_client_name is not null
    and old_contact.linked_client_name<>new_contact.linked_client_name then
    raise exception 'Conflicting customer links for %',pair.old_key;
@@ -48,7 +50,7 @@ begin
   where contact_key=pair.new_key;
   delete from public.whatsapp_contacts where contact_key=pair.old_key;
  end loop;
-end $;
+end $$;
 revoke all on function public.wa_merge_confirmed_contacts(text,text) from public,anon;
 grant execute on function public.wa_merge_confirmed_contacts(text,text) to authenticated,service_role;
 
