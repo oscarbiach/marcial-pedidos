@@ -128,3 +128,11 @@ node tests/whatsapp.test.cjs
 Pruebas sin mensajes reales: firma correcta/alterada, lotes, ecos del celular, BSUID sin teléfono, permisos, ventana de respuesta, envío idempotente, resultado ambiguo y sintaxis.
 
 `tests/whatsapp-schema.sql` es una base descartable de pruebas (PostgreSQL 15), **no se ejecuta en producción**. La acción de GitHub la usa para probar transacciones, RLS, estados fuera de orden, vínculos, notas y mensajes duplicados.
+
+
+## Importar nombres de contactos
+1. Ejecutar supabase/migrations/20261014_whatsapp_contact_names.sql después de la migración de alias.
+2. Actualizar la función kapso-api con supabase/dashboard/kapso-api.ts completo. Mantener Verify JWT activado y los secretos actuales.
+3. En Marcial, como administrador, tocar Importar nombres. Consulta la lista paginada de contactos de Kapso y completa nombres faltantes en conversaciones existentes. No envía mensajes, no crea conversaciones vacías, no modifica vínculos con clientes ni sobrescribe nombres existentes.
+4. Si Kapso no tiene los nombres de la agenda, este proceso no los puede recuperar. Revisar Contacts en Kapso y, si faltan, importar una exportación de agenda del celular con un mecanismo aparte.
+La importación puede pausarse y continuar mientras la página permanece abierta. Si se cierra, se puede iniciar de nuevo; completar nombres es idempotente.
