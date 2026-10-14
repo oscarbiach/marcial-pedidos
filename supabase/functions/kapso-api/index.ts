@@ -85,6 +85,24 @@ Deno.serve(async request=>{
       }catch{ return result(200,{ok:true,message_id:id,warning:'WhatsApp aceptó el envío; el registro local está pendiente del webhook.'}); }
       return result(200,{ok:true,message_id:id,warning:saveError?'Registro de confirmación pendiente.':null});
     }
+    if(body.action==='sync_contacts'){
+      if(!permissions.manage)return result(403,{error:'Tu cuenta no puede importar los nombres.'});
+      if(body.cursor!=null && (typeof body.cursor!=='string' || body.cursor.length>4000))
+        return result(400,{error:'Cursor inválido.'});
+      const query=new URLSearchParams({limit:'100'});
+      if(body.cursor)query.set('after',body.cursor);
+      const page=await provider(base+'/contacts?'+query,key);
+      if(!Array.isArray(page.data))throw new Error('Invalid contact response');
+      const contacts=page.data.map(c=>({
+        phone:typeof c.wa_id==='string'?c.wa_id.replace(/\D/g,''):null,
+        name:[c.display_name,c.profile_name,c.profile?.name].find(n=>typeof n==='string' && n.trim()) || null
+      }));
+      const {data:counts,error}=await db.rpc('wa_import_contact_names',{p_phone_id:phoneId,p_contacts:contacts});
+      if(error)throw new Error('No se pudieron guardar los nombres. Instalá la migración de contactos en Supabase.');
+      const next=page.data.length?(page.paging?.cursors?.after || null):null;
+      if(next && next===body.cursor)throw new Error('Repeated contact pagination cursor');
+      return result(200,{...counts,processed:page.data.length,cursor:next,done:!next});
+    }
     if(body.action==='sync' || body.action==='sync_state'){
       if(!permissions.manage)return result(403,{error:'Tu cuenta no puede importar el historial.'});
       let run;

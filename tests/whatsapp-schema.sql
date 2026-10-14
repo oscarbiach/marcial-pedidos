@@ -67,3 +67,17 @@ if (select count(*) from whatsapp_messages where contact_key='340539642484757:54
 if not exists(select 1 from whatsapp_notes where contact_key='340539642484757:5491100000001' and body='Preservar nota') then raise exception 'Note lost'; end if;
 if (select display_name from whatsapp_contacts where contact_key='340539642484757:5491100000001')<>'Fixture Contact' then raise exception 'Name lost'; end if;
 end $$;
+
+\ir ../supabase/migrations/20261014_whatsapp_contact_names.sql
+insert into whatsapp_contacts(contact_key,phone_number_id,phone_number)
+values('fixture-phone:541100000002','fixture-phone','541100000002');
+select wa_import_contact_names('fixture-phone','[
+ {"phone":"5491100000002","name":"Nombre de agenda"},
+ {"phone":"541100000003","name":"No crear contacto"}
+]');
+select wa_import_contact_names('fixture-phone','[{"phone":"541100000002","name":"No sobrescribir"}]');
+do $$ begin
+ if (select display_name from whatsapp_contacts where contact_key='fixture-phone:541100000002')<>'Nombre de agenda' then raise exception 'Contact name import failed'; end if;
+ if exists(select 1 from whatsapp_contacts where contact_key='fixture-phone:541100000003') then raise exception 'Unexpected contact created'; end if;
+ if has_function_privilege('authenticated','public.wa_import_contact_names(text,jsonb)','execute') then raise exception 'Importer exposed to clients'; end if;
+end $$;

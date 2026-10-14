@@ -4,7 +4,7 @@
 'use strict';
 const E={permissions:null,contacts:[],clients:[],selected:null,messages:[],notes:[],
   query:'',client:null,listMore:false,messageMore:false,loading:false,generation:0,
-  sendBusy:false,sendRequest:null,syncBusy:false,syncPaused:false};
+  sendBusy:false,sendRequest:null,syncBusy:false,syncPaused:false,namesBusy:false,namesPaused:false,namesCursor:null,namesCounts:{processed:0,named:0,matched:0,filled:0}};
 const $=id=>document.getElementById(id);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=value=>value?new Date(value).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}):'Sin registro';
@@ -29,7 +29,7 @@ function shell(){
   $('wa-raiz').innerHTML=`<div class="wa-top"><div><h2>Conversaciones con clientes</h2>
     <p>Historial automático de WhatsApp y contexto para el seguimiento.</p></div>
     <div class="wa-actions"><button type="button" id="wa-refresh">Actualizar</button>
-    <button type="button" id="wa-sync" hidden>Importar historial</button></div></div>
+    <button type="button" id="wa-sync" hidden>Importar historial</button><button type="button" id="wa-import-names" hidden>Importar nombres</button></div></div>
     <p id="wa-status" role="status" aria-live="polite"></p>
     <div id="wa-client-filter" hidden></div>
     <div id="wa-layout" class="wa-layout"><section class="wa-list" aria-label="Contactos">
@@ -45,6 +45,7 @@ function shell(){
   });
   $('wa-more-contacts').addEventListener('click',()=>loadContacts(true).catch(handleError));
   $('wa-sync').addEventListener('click',()=>importHistory());
+  $('wa-import-names').addEventListener('click',()=>importNames());
   $('wa-contacts').addEventListener('click',event=>{
     const b=event.target.closest('[data-wa-contact]');if(b)selectContact(b.dataset.waContact).catch(handleError);
   });
@@ -232,8 +233,35 @@ async function open(client=null){
   if(!permissions.read){status('Tu cuenta todavía no tiene acceso a WhatsApp. El administrador debe habilitarla en Supabase.',true);return;}
   E.clients=await readClients();
   $('wa-sync').hidden=!permissions.manage;
+  $('wa-import-names').hidden=!permissions.manage;
   status('');await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);
+}
+async function importNames(){
+  if(E.namesBusy){E.namesPaused=true;status('La importación de nombres se pausará al terminar esta página.');return;}
+  E.namesBusy=true;E.namesPaused=false;$('wa-import-names').textContent='Pausar nombres';
+  if(!E.namesCursor)E.namesCounts={processed:0,named:0,matched:0,filled:0};
+  let finished=false;
+  try{
+    for(let page=0;page<50 && !E.namesPaused;page++){
+      const data=await api({action:'sync_contacts',cursor:E.namesCursor});
+      E.namesCursor=data.cursor || null;
+      for(const key of ['processed','named','matched','filled'])E.namesCounts[key]+=Number(data[key] || 0);
+      const c=E.namesCounts;
+      status('Contactos revisados: '+c.processed+'. Nombres completados: '+c.filled+'.');
+      if(data.done){
+        finished=true;
+        status('Importación terminada: '+c.filled+' nombres completados de '+c.processed+' contactos revisados.'+
+          (c.named===0?' Kapso no devolvió nombres; necesitaremos importar la agenda del celular.':' Los contactos sin nombre en Kapso siguen pendientes.'));
+        break;
+      }
+      if(page===49)status('Nombres: importación pausada. Tocá Continuar nombres para seguir.');
+    }
+    await refresh();
+    const selected=contact();if(selected && $('wa-thread').querySelector('h3'))
+      $('wa-thread').querySelector('h3').textContent=title(selected);
+  }catch(error){handleError(error);}
+  finally{E.namesBusy=false;$('wa-import-names').textContent=E.namesCursor?'Continuar nombres':'Importar nombres';}
 }
 async function importHistory(){
   if(E.syncBusy){E.syncPaused=true;status('La importación se pausará al terminar esta página.');return;}
