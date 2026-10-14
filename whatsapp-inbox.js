@@ -29,9 +29,10 @@ function shell(){
   $('wa-raiz').innerHTML=`<div class="wa-top"><div><h2>Conversaciones con clientes</h2>
     <p>Historial automático de WhatsApp y contexto para el seguimiento.</p></div>
     <div class="wa-actions"><button type="button" id="wa-refresh">Actualizar</button>
-    <button type="button" id="wa-sync" hidden>Importar historial</button><button type="button" id="wa-import-names" hidden>Importar nombres</button><button type="button" id="wa-import-agenda" hidden>Importar agenda del iPhone</button><input type="file" id="wa-agenda-file" accept=".vcf,text/vcard,text/x-vcard" hidden></div></div>
+    <button type="button" id="wa-sync" hidden>Importar historial</button><button type="button" id="wa-import-names" hidden>Importar nombres</button><button type="button" id="wa-review-clients" hidden>Vincular clientes</button><button type="button" id="wa-import-agenda" hidden>Importar agenda del iPhone</button><input type="file" id="wa-agenda-file" accept=".vcf,text/vcard,text/x-vcard" hidden></div></div>
     <p id="wa-status" role="status" aria-live="polite"></p>
     <div id="wa-client-filter" hidden></div>
+    <section id="wa-review-panel" class="wa-review" hidden></section>
     <div id="wa-layout" class="wa-layout"><section class="wa-list" aria-label="Contactos">
       <label for="wa-search">Buscar contacto, cliente o teléfono</label><input id="wa-search" type="search" autocomplete="off">
       <div id="wa-contacts"></div><button id="wa-more-contacts" type="button" hidden>Cargar más contactos</button>
@@ -46,6 +47,7 @@ function shell(){
   $('wa-more-contacts').addEventListener('click',()=>loadContacts(true).catch(handleError));
   $('wa-sync').addEventListener('click',()=>importHistory());
   $('wa-import-names').addEventListener('click',()=>importNames());
+  $('wa-review-clients').addEventListener('click',()=>window.WhatsAppClientReview.open());
   $('wa-import-agenda').addEventListener('click',()=>{$('wa-agenda-file').value='';$('wa-agenda-file').click();});
   $('wa-agenda-file').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importAgenda(file).catch(handleError);});
   $('wa-contacts').addEventListener('click',event=>{
@@ -221,7 +223,7 @@ async function readClients(){
   }
 }
 async function open(client=null){
-  shell();E.client=client;E.query='';E.selected=null;E.selectedContact=null;E.contacts=[];E.generation++;
+  shell();$('wa-layout').hidden=false;$('wa-review-panel').hidden=true;E.client=client;E.query='';E.selected=null;E.selectedContact=null;E.contacts=[];E.generation++;
   $('wa-thread').innerHTML='<p class="wa-empty">Elegí un contacto para ver la conversación.</p>';
   $('wa-layout').classList.remove('wa-has-selection');renderContacts();$('wa-search').value='';
   const banner=$('wa-client-filter');banner.hidden=!client;
@@ -237,6 +239,7 @@ async function open(client=null){
   $('wa-sync').hidden=!permissions.manage;
   $('wa-import-names').hidden=!permissions.manage;
   $('wa-import-agenda').hidden=!permissions.manage;
+  $('wa-review-clients').hidden=!permissions.manage;
   status('');await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);
 }
@@ -320,5 +323,5 @@ sb.auth.onAuthStateChange(event=>{
     if($('wa-thread'))$('wa-thread').innerHTML='';
   }
 });
-window.WhatsAppUI={open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
+window.WhatsAppUI={refresh:()=>refresh().catch(handleError),open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
 })();
