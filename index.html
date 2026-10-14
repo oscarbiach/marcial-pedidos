@@ -1472,6 +1472,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="marca/marcial.css">
 <link rel="stylesheet" href="marca/pedidos.css">
 <link rel="stylesheet" href="seguimiento-clientes.css">
+<link rel="stylesheet" href="whatsapp-inbox.css">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1536,6 +1537,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="pedidos" onclick="goTab('pedidos')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg>Pedidos</button>
       <button data-tab="reparto" onclick="goTab('reparto')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg>Reparto</button>
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
+      <button data-tab="whatsapp" onclick="goTab('whatsapp')">WhatsApp</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1672,6 +1674,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <div id="tab-clientes" class="tab-panel">
       <div id="sc-raiz" class="sc"></div>
     </div>
+    <div id="tab-whatsapp" class="tab-panel"><div id="wa-raiz" class="wa"></div></div>
 
   </main>
 
@@ -1681,6 +1684,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg></span>Pedidos</button>
     <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg></span>Reparto</button>
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
+    <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span>☏</span>WhatsApp</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -2815,11 +2819,11 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes', whatsapp:'WhatsApp' };
 
 function setTab(tab) {
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
-  if (tab === 'clientes' && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
+  if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
   activeTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -2847,6 +2851,8 @@ function setTab(tab) {
   }
   // Clientes (seguimiento): pide el historial completo la primera vez (o si es viejo) y dibuja.
   if (tab === 'clientes' && window.SegUI) SegUI.abrir();
+  document.body.classList.toggle('wa-ancho', tab === 'whatsapp');
+  if (tab === 'whatsapp' && window.WhatsAppUI) WhatsAppUI.open();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
@@ -6151,5 +6157,6 @@ function abrirInstalar() {
   document.getElementById('instalarModal').classList.add('open');
 }
 </script>
+<script src="whatsapp-inbox.js"></script>
 </body>
 </html>
