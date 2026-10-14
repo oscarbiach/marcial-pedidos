@@ -73,6 +73,21 @@ supabase functions deploy kapso-api
 
 No desplegar otras funciones del proyecto ni modificar `login`.
 
+## Despliegue real confirmado el 14/10/2026
+
+El editor de Supabase muestra el nombre `kapso-webhook`, pero el slug real de su URL es `rapid-handler`.
+El destino activo en Kapso debe ser la URL copiada de esa función:
+`https://deavfpkpibvwccycszku.supabase.co/functions/v1/rapid-handler`.
+
+Se confirmó en la base real:
+- recepción de texto entrante;
+- respuestas desde WhatsApp Business con `direction=outbound` y `origin=business_app`;
+- registro de imágenes/documentos por tipo (content puede ser null).
+
+En esta función real se desactivó Verify JWT y la prueba GET responde `POST only`. El secreto de firma sigue protegiendo las peticiones POST.
+La API de Marcial conserva la ruta `kapso-api` y necesita Verify JWT activo.
+La URL de abajo es la ruta canónica si se crea una función nueva con ese slug; para el despliegue actual usar `rapid-handler`.
+
 ## 5. Registrar el webhook en Kapso
 
 Elegir el webhook de WhatsApp del número de Distribuidora Marcial; **formato/tipo Meta** (no un webhook general de eventos del proyecto).
