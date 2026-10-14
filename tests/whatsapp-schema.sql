@@ -47,3 +47,22 @@ begin perform wa_link_client('p:549','Unknown');raise exception 'Unknown client 
 exception when raise_exception then if sqlerrm='Unknown client accepted' then raise; end if; end;
 end $$;
 reset role;
+
+-- Confirmed Argentina aliases: preserve messages/notes and route future events.
+insert into whatsapp_contacts(contact_key,phone_number_id,phone_number,display_name) values
+('340539642484757:543424323354','340539642484757','543424323354',null),
+('340539642484757:5493424323354','340539642484757','5493424323354','Oscar Bianchi');
+insert into whatsapp_messages(whatsapp_message_id,contact_key,direction,message_type,content,occurred_at)
+values('alias-before','340539642484757:543424323354','inbound','text','Preservar','2026-10-14T12:00:00Z');
+insert into whatsapp_notes(contact_key,body,author_id)
+values('340539642484757:543424323354','Preservar nota','11111111-1111-1111-1111-111111111111');
+\ir ../supabase/migrations/20261014_whatsapp_confirmed_aliases.sql
+\ir ../supabase/migrations/20261014_whatsapp_confirmed_aliases.sql
+select wa_ingest_message('{"contact_key":"340539642484757:543424323354","phone_number_id":"340539642484757","phone_number":"543424323354",
+"whatsapp_message_id":"alias-after","direction":"inbound","message_type":"text","content":"Nuevo","occurred_at":"2026-10-14T13:00:00Z","message_status":"received"}');
+do $$ begin
+if exists(select 1 from whatsapp_contacts where contact_key='340539642484757:543424323354') then raise exception 'Alias recreated'; end if;
+if (select count(*) from whatsapp_messages where contact_key='340539642484757:5493424323354')<>2 then raise exception 'Messages lost'; end if;
+if not exists(select 1 from whatsapp_notes where contact_key='340539642484757:5493424323354' and body='Preservar nota') then raise exception 'Note lost'; end if;
+if (select display_name from whatsapp_contacts where contact_key='340539642484757:5493424323354')<>'Oscar Bianchi' then raise exception 'Name lost'; end if;
+end $$;
