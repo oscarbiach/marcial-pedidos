@@ -113,7 +113,19 @@ function drawThread(){
   };
   $('wa-compose').onsubmit=event=>{event.preventDefault();send().catch(handleError);};
   updateComposer();
+  requestAnimationFrame(sizeThread);
 }
+function sizeThread(){
+  const thread=$('wa-thread');if(!thread || thread.getClientRects().length===0)return;
+  const viewport=window.visualViewport;
+  const bottom=(viewport?.offsetTop || 0)+(viewport?.height || window.innerHeight);
+  const nav=$('bottomNav');
+  const navHeight=nav && getComputedStyle(nav).display!=='none'?nav.getBoundingClientRect().height:0;
+  const top=Math.max(0,thread.getBoundingClientRect().top);
+  thread.style.setProperty('--wa-thread-height',Math.max(280,bottom-top-navHeight-16)+'px');
+}
+window.addEventListener('resize',sizeThread);
+window.visualViewport?.addEventListener('resize',sizeThread);
 function updateComposer(){
   const c=contact();if(!c || !$('wa-send'))return;
   const within=!!c.last_inbound_at && Date.now()-new Date(c.last_inbound_at).getTime()<86400000;
