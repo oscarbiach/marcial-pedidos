@@ -5,7 +5,7 @@ This change adds the secure Supabase receiver and the database tables. It does n
 ## Before enabling
 
 1. Apply `supabase/migrations/20261014_whatsapp_messages.sql` to the Marcial Supabase project.
-2. Deploy `supabase/functions/kapso-webhook/index.ts` as the Edge Function named `kapso-webhook`.
+2. Deploy `supabase/functions/kapso-webhook/index.ts` as the Edge Function named `kapso-webhook`, with **Verify JWT disabled** in the Supabase function settings. Kapso authenticates the request with the HMAC signature; the Supabase gateway must allow the signed webhook to reach the function.
 3. In Supabase Edge Function secrets, keep the existing `KAPSO_API_KEY` and `KAPSO_PHONE_NUMBER_ID`, and add `KAPSO_WEBHOOK_SECRET` after Kapso creates the webhook. Never put credentials in this repository.
 4. In Kapso, add a WhatsApp webhook for the connected number, selecting `whatsapp.message.received` and `whatsapp.message.sent`, destination `https://<SUPABASE_PROJECT_REF>.supabase.co/functions/v1/kapso-webhook`, and a generated signing secret. Copy the same signing secret to Supabase as `KAPSO_WEBHOOK_SECRET`.
 5. Send a test message and verify rows arrive in `whatsapp_contacts` and `whatsapp_messages`.
