@@ -115,11 +115,11 @@ Deno.serve(async request=>{
         if(next && next===run.cursor)throw new Error('Repeated pagination cursor');
         const updated={cursor:next,processed:run.processed+events.length,state:next?'running':'done',
           lock_until:null,updated_at:new Date().toISOString()};
-        const {error:updateError}=await db.from('whatsapp_sync_runs').update(updated).eq('id',run.id);
+        const {error:updateError}=await db.from('whatsapp_sync_runs').update(updated).eq('id',run.id).eq('lock_until',run.lock_until).select('id').single();
         if(updateError)throw new Error('Could not checkpoint history');
         return result(200,{run:{...run,...updated}});
       }catch(error){
-        await db.from('whatsapp_sync_runs').update({lock_until:null}).eq('id',run.id);
+        await db.from('whatsapp_sync_runs').update({lock_until:null}).eq('id',run.id).eq('lock_until',run.lock_until);
         throw error;
       }
     }

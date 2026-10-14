@@ -186,9 +186,9 @@ async function send(){
   try{
     const data=await api({action:'send',...E.sendRequest});
     field.value='';E.sendRequest=null;status(data.warning || 'WhatsApp aceptó el mensaje.');
-    await refresh();
+    await refresh().catch(handleError);
   }catch(error){
-    if(error.data?.state==='uncertain' || !error.data)E.sendRequest.uncertain=true;
+    if(E.sendRequest && (error.data?.state==='uncertain' || !error.data))E.sendRequest.uncertain=true;
     throw error;
   }finally{E.sendBusy=false;updateComposer();}
 }
