@@ -1,0 +1,7 @@
+# Only the webhook bypasses the JWT gateway; HMAC authenticates every delivery.
+[functions.kapso-webhook]
+verify_jwt = false
+
+# Supabase verifies users here; the handler also checks Auth and whatsapp_access.
+[functions.kapso-api]
+verify_jwt = true
