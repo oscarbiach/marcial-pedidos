@@ -104,3 +104,6 @@ main().catch(error=>{console.error(error);process.exitCode=1;});
  assertAgenda.throws(()=>parseAgenda('not a vCard'));
  console.log('Passed: vCard names, UTF-8, folding, quoted-printable, phone formats, conflicts.');
 }
+
+new (require('node:vm').Script)(require('node:fs').readFileSync('whatsapp-client-review.js','utf8'));
+console.log('Passed: client link review JS syntax.');

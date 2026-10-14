@@ -93,3 +93,54 @@ end $$;
 select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false);
 select wa_import_agenda_names('fixture-phone','[{"phone":"541100000002","name":"Conservar"}]');
 reset role;
+
+-- Linking uses the actual pedidos schema fields; this table exists only in the test database.
+create table public.pedidos(
+ id text primary key,cliente text,fecha timestamptz,fecha_despacho timestamptz,estado text,eliminado_en timestamptz
+);
+insert into clientes(nombre,direccion) values
+ ('Pizzería Fixture Uno','Dirección 1'),('Cliente Repetido','Dirección 2'),
+ ('Proveedor No Activo','Dirección 3'),('Juan','Dirección 4'),
+ ('Cliente Solo Cancelado','Dirección 5'),('Cliente Eliminado','Dirección 6');
+insert into pedidos(id,cliente,fecha,estado,eliminado_en) values
+ ('link-order1','Pizzería Fixture Uno',(now() at time zone 'America/Montevideo')::date-2,'Despachado',null),
+ ('link-order2','Cliente Repetido',(now() at time zone 'America/Montevideo')::date-1,'Pendiente',null),
+ ('link-order3','Proveedor No Activo',(now() at time zone 'America/Montevideo')::date-200,'Despachado',null),
+ ('link-order4','Juan',(now() at time zone 'America/Montevideo')::date-3,'Despachado',null),
+ ('link-order5','Cliente Solo Cancelado',(now() at time zone 'America/Montevideo')::date,'Cancelado',null),
+ ('link-order6','Cliente Eliminado',(now() at time zone 'America/Montevideo')::date,'Despachado',now());
+insert into whatsapp_contacts(contact_key,phone_number_id,phone_number,display_name) values
+ ('link:1','link','541100000101','  PIZZERIA   FIXTURE UNO '),
+ ('link:2','link','541100000102','Cliente Repetido'),
+ ('link:3','link','541100000103','Cliente Repetido'),
+ ('link:4','link','541100000104','Proveedor No Activo'),
+ ('link:5','link','541100000105','Juan');
+\ir ../supabase/migrations/20261014_whatsapp_client_links.sql
+set role authenticated;
+select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false);
+do $$ begin
+ begin perform wa_auto_link_exact(true); raise exception 'Unauthorized auto link';
+ exception when insufficient_privilege then null; end;
+ begin perform wa_client_link_review(true,false); raise exception 'Unauthorized review';
+ exception when insufficient_privilege then null; end;
+end $$;
+select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false);
+do $$ declare first_result jsonb; review jsonb; begin
+ first_result:=wa_auto_link_exact(true);
+ if (first_result->>'linked')::integer<>1 then raise exception 'Unexpected exact link count %',first_result; end if;
+ if (select linked_client_name from whatsapp_contacts where contact_key='link:1')<>'Pizzería Fixture Uno' then raise exception 'Exact match missing'; end if;
+ if exists(select 1 from whatsapp_contacts where contact_key in ('link:2','link:3','link:4','link:5') and linked_client_name is not null) then raise exception 'Ambiguous/inactive/short match linked'; end if;
+ if (wa_auto_link_exact(true)->>'linked')::integer<>0 then raise exception 'Auto link not idempotent'; end if;
+ review:=wa_client_link_review(true,false);
+ if review->'client'->>'nombre'<>'Cliente Repetido' then raise exception 'Recent customer not prioritized %',review; end if;
+ if (review->>'remaining')::integer<>2 then raise exception 'Invalid active queue %',review; end if;
+ perform wa_defer_client_link('Cliente Repetido');
+ if wa_client_link_review(true,false)->'client'->>'nombre'<>'Juan' then raise exception 'Deferred customer not skipped'; end if;
+ if wa_client_link_review(false,true)->'client'->>'nombre'<>'Cliente Repetido' then raise exception 'Deferred review missing'; end if;
+ perform wa_review_client_link('Cliente Repetido','link:2');
+ begin perform wa_review_client_link('Juan','link:2');raise exception 'Existing link overwritten';
+ exception when serialization_failure then null; end;
+ if wa_client_link_review(false,true)->'client'<>'null'::jsonb then raise exception 'Linked customer remains deferred'; end if;
+ if has_table_privilege('authenticated','public.whatsapp_client_review','select') then raise exception 'Private queue exposed'; end if;
+end $$;
+reset role;

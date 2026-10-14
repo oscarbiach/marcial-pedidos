@@ -136,3 +136,11 @@ Pruebas sin mensajes reales: firma correcta/alterada, lotes, ecos del celular, B
 3. En Marcial, como administrador, tocar Importar nombres. Consulta la lista paginada de contactos de Kapso y completa nombres faltantes en conversaciones existentes. No envía mensajes, no crea conversaciones vacías, no modifica vínculos con clientes ni sobrescribe nombres existentes.
 4. Si Kapso no tiene los nombres de la agenda, este proceso no los puede recuperar. Revisar Contacts en Kapso y, si faltan, importar una exportación de agenda del celular con un mecanismo aparte.
 La importación puede pausarse y continuar mientras la página permanece abierta. Si se cierra, se puede iniciar de nuevo; completar nombres es idempotente.
+
+
+## Vincular clientes con conversaciones
+Ejecutar supabase/migrations/20261014_whatsapp_client_links.sql. No requiere actualizar Edge Functions.
+En WhatsApp, Oscar/Joaquín pueden tocar Vincular clientes. Al abrir, se vinculan coincidencias exactas y únicas de clientes activos con pedidos. Se ignoran tildes, mayúsculas y espacios; nombres cortos/comunes, duplicados y coincidencias aproximadas requieren revisión.
+Activos: último pedido válido en los últimos 150 días. Se excluyen cancelados, eliminados, futuros y cuentas de prueba/muestra/evento. Se respetan los tres alias históricos ya confirmados en seguimiento.
+La pantalla muestra un cliente, dirección, fecha y cantidad de pedidos y contactos sugeridos. Vincular este número confirma; Dejar pendiente lo guarda en Pospuestos. Se puede buscar por nombre o teléfono. Los vínculos existentes se conservan; para corregirlos se usa Cliente asociado y notas dentro de la conversación.
+El vínculo utiliza el nombre del cliente, como las fichas existentes; no agrega teléfonos a clientes ni altera pedidos. Las coincidencias exactas son coincidencias de nombre, no una verificación externa de identidad.
