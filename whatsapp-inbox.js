@@ -22,6 +22,7 @@ const DB=window.WhatsAppPrueba || {
   vinculos:()=>sb.from('whatsapp_contacts').select('contact_key,linked_client_name,last_inbound_at,last_outbound_at').not('linked_client_name','is',null).limit(5000),
   recordatorios:()=>sb.from('whatsapp_notes').select('contact_key,body,created_at').like('body','Para el próximo pedido: %').order('created_at',{ascending:false}).limit(300),
   api:realApi,
+  media:realMedia,
 };
 
 // ── Fechas ──
@@ -68,6 +69,15 @@ async function realApi(body){
   return data;
 }
 const api=body=>DB.api(body);
+// Archivo de un mensaje (foto, audio, video, documento): lo trae kapso-api con la clave del servidor y lo devuelve como Blob.
+async function realMedia(id){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw new Error('Volvé a ingresar con tu PIN.');
+  const r=await fetch(SB_URL+'/functions/v1/kapso-api',{method:'POST',headers:{'Content-Type':'application/json','apikey':SB_ANON,
+    'Authorization':'Bearer '+session.access_token},body:JSON.stringify({action:'media',message_id:id})});
+  if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error || 'No se pudo traer el archivo.');}
+  return r.blob();
+}
 
 // Estado del cliente vinculado según Clientes (seguimiento). Sin pedir el historial: eso lo hace la ficha.
 function segDe(c,opciones){const S=Seg();return S && c.linked_client_name?S.contexto(c.linked_client_name,opciones):null;}
@@ -285,8 +295,61 @@ function contenidoDe(m,prep){
   const tag=m.message_type!=='text'?(TIPOS[m.message_type] || ['Mensaje','file-text']):null;
   return {tag,texto:prep.ed.has(m.whatsapp_message_id)?prep.ed.get(m.whatsapp_message_id):m.content};
 }
+// ── Fotos, audios, videos y archivos ──
+// Las fotos se cargan solas al aparecer en pantalla; audio, video y archivos, al tocarlos. Lo ya traído queda en memoria
+// mientras la app esté abierta (y en el servidor, guardado para siempre).
+const MEDIA={url:new Map(),pend:new Map(),error:new Map()};
+const TIENE_ARCHIVO=['image','audio','video','document','sticker'];
+const mediaId=m=>{const x=cuerpoDe(m)[m.message_type];return TIENE_ARCHIVO.includes(m.message_type) && x && x.id?m.whatsapp_message_id:null;};
+function archivo(m){
+  const id=mediaId(m);if(!id)return '';
+  const t=m.message_type, url=MEDIA.url.get(id), err=MEDIA.error.get(id), a=escape(id);
+  if(err)return `<span class="wa-archivo wa-archivo--error">${ico('circle-alert','ico-xs')}${escape(err)}</span>`;
+  if(url && (t==='image' || t==='sticker'))return `<button type="button" class="wa-foto${t==='sticker'?' wa-foto--sticker':''}" data-abrir="${a}" title="Ver más grande"><img src="${url}" alt="${t==='sticker'?'Sticker':'Foto'} del chat"></button>`;
+  if(url && t==='audio')return `<audio class="wa-audio" controls preload="metadata" src="${url}"></audio>`;
+  if(url && t==='video')return `<video class="wa-video" controls preload="metadata" src="${url}"></video>`;
+  if(url && t==='document'){const n=(cuerpoDe(m).document || {}).filename || 'archivo';return `<a class="wa-archivo" href="${url}" download="${escape(n)}" target="_blank" rel="noopener">${ico('download','ico-xs')}Abrir ${escape(n)}</a>`;}
+  const cargando=MEDIA.pend.has(id);
+  const txt=cargando?'Trayendo…':t==='audio'?'Escuchar audio':t==='video'?'Ver video':t==='document'?'Abrir archivo':'Ver foto';
+  const icono=t==='audio'?'message-circle':t==='document'?'file-text':'eye';
+  return `<button type="button" class="wa-archivo${t==='image' || t==='sticker'?' wa-archivo--auto':''}" data-media="${a}"${cargando?' disabled':''}>${ico(icono,'ico-xs')}${escape(txt)}</button>`;
+}
+async function traerArchivo(id){
+  if(MEDIA.url.has(id) || MEDIA.pend.has(id))return;
+  const p=DB.media(id).then(blob=>{MEDIA.url.set(id,URL.createObjectURL(blob));MEDIA.error.delete(id);})
+    .catch(e=>{MEDIA.error.set(id,errorText(e));}).finally(()=>{MEDIA.pend.delete(id);redibujarArchivo(id);});
+  MEDIA.pend.set(id,p);redibujarArchivo(id);
+  return p;
+}
+function redibujarArchivo(id){
+  const art=document.querySelector(`#wa-burbujas [data-id="${CSS.escape(id)}"]`), m=E.messages.find(x=>x.whatsapp_message_id===id);
+  if(!art || !m)return;
+  const viejo=art.querySelector('.wa-archivo,.wa-foto,.wa-audio,.wa-video');if(!viejo)return;
+  viejo.outerHTML=archivo(m);
+  const a=art.querySelector('audio,video');if(a && MEDIA.url.has(id) && MEDIA.reproducir===id){MEDIA.reproducir=null;a.play().catch(()=>{});}
+  observarFotos();
+}
+// Fotos: se piden al acercarse a la vista (como mucho 4 a la vez para no saturar).
+let visor=null;
+function observarFotos(){
+  if(!('IntersectionObserver' in window))return;
+  const raiz=$('wa-messages');if(!raiz)return;
+  if(visor && visor.root!==raiz){visor.disconnect();visor=null;}   // el chat se redibujó: el vigilante tiene que mirar el nuevo
+  if(!visor)visor=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){visor.unobserve(e.target);if(MEDIA.pend.size<4)traerArchivo(e.target.dataset.media);else setTimeout(()=>observarFotos(),800);}}),{root:raiz,rootMargin:'200px'});
+  document.querySelectorAll('#wa-burbujas .wa-archivo--auto[data-media]:not([disabled])').forEach(b=>visor.observe(b));
+}
+document.addEventListener('click',event=>{
+  const b=event.target.closest('#wa-burbujas [data-media]');
+  if(b){MEDIA.reproducir=b.dataset.media;traerArchivo(b.dataset.media);return;}
+  const f=event.target.closest('#wa-burbujas [data-abrir]');
+  if(f){const u=MEDIA.url.get(f.dataset.abrir);if(u)window.open(u,'_blank','noopener');}
+});
 function renderMessages(initial=false){
   const pane=$('wa-messages'), lista=$('wa-burbujas');if(!pane || !lista)return;
+  // La actualización cada 10 s no redibuja si no cambió nada (no corta un audio que se está escuchando).
+  const firma=E.selected+'|'+E.messages.map(m=>m.whatsapp_message_id+':'+m.message_status+':'+(m.content||'').length).join(',');
+  if(!initial && !E.prepending && firma===E.firmaMsgs)return;
+  E.firmaMsgs=firma;
   const nearBottom=pane.scrollHeight-pane.scrollTop-pane.clientHeight<100, previousHeight=pane.scrollHeight;
   const prep=preparar(E.messages);
   let ultimoDia='';
@@ -298,12 +361,14 @@ function renderMessages(initial=false){
     const sinArchivo=['image','audio','voice','video','document','sticker'].includes(m.message_type);
     return sep+`<article class="wa-msg ${m.direction==='outbound'?'wa-out':'wa-in'}${borrado?' wa-msg--borrado':''}${m.message_type==='reaction'?' wa-msg--reac':''}" data-id="${escape(id)}">
       ${borrado?`<span class="wa-adjunto wa-adjunto--borrado">${ico('ban','ico-xs')}Lo eliminó del chat</span>`:''}
-      ${tag?`<span class="wa-adjunto${m.message_type==='media_placeholder' || tag===TIPOS.errors?' wa-adjunto--gris':''}"${m.message_type==='media_placeholder'?' title="WhatsApp no comparte las fotos, audios ni archivos de los chats viejos importados"':sinArchivo?' title="Por ahora se abre en WhatsApp Business"':''}>${ico(tag[1],'ico-xs')}${escape(tag[0])}</span>`:''}
+      ${tag && !(sinArchivo && mediaId(m))?`<span class="wa-adjunto${m.message_type==='media_placeholder' || tag===TIPOS.errors?' wa-adjunto--gris':''}"${m.message_type==='media_placeholder'?' title="WhatsApp no comparte las fotos, audios ni archivos de los chats viejos importados"':''}>${ico(tag[1],'ico-xs')}${escape(tag[0])}</span>`:''}
+      ${archivo(m)}
       ${texto?`<p>${m.direction==='inbound'?resaltar(texto):escape(texto)}</p>`:''}
       <span class="wa-msg-pie">${editado || m.message_type==='edit'?'<span class="wa-origen">editado</span>':''}${m.origin==='business_app'?'<span class="wa-origen">desde el celular</span>':''}<time>${escape(hora(m.occurred_at))}</time>${st?`<span class="wa-tilde${m.message_status==='read'?' wa-tilde--leido':''}${m.message_status==='failed'?' wa-tilde--error':''}" title="${escape(st[0])}" aria-label="${escape(st[0])}">${st[1]}</span>`:''}</span>
       ${reac && reac.size?`<span class="wa-reac" aria-label="Reacciones">${[...reac.values()].map(e=>escape(e)).join(' ')}</span>`:''}</article>`;
   }).join('') || '<p class="wa-empty">Todavía no hay mensajes guardados.</p>';
   $('wa-older').hidden=!E.messageMore;
+  observarFotos();
   if(initial || nearBottom)pane.scrollTop=pane.scrollHeight;
   else if(E.prepending){pane.scrollTop+=pane.scrollHeight-previousHeight;E.prepending=false;}
 }

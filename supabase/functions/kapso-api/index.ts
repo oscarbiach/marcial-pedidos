@@ -141,6 +141,35 @@ Deno.serve(async request=>{
         throw error;
       }
     }
+    if(body.action==='media'){
+      // Archivo de un mensaje (foto, audio, video, documento o sticker) para verlo en la app. Se guarda en el almacenamiento
+      // privado «whatsapp-media» la primera vez que alguien lo abre, porque WhatsApp borra los archivos a las pocas semanas.
+      if(typeof body.message_id!=='string' || !body.message_id || body.message_id.length>200)return result(400,{error:'Mensaje inválido.'});
+      const {data:msg,error}=await db.from('whatsapp_messages').select('whatsapp_message_id,contact_key,message_type,raw_payload')
+        .eq('whatsapp_message_id',body.message_id).maybeSingle();
+      if(error)throw new Error('Could not read message');
+      const media=msg && ['image','audio','video','document','sticker'].includes(msg.message_type)?msg.raw_payload?.message?.[msg.message_type]:null;
+      if(!media?.id)return result(404,{error:'Este mensaje no tiene un archivo para mostrar.'});
+      const {data:owner}=await db.from('whatsapp_contacts').select('phone_number_id').eq('contact_key',msg.contact_key).maybeSingle();
+      if(!owner || owner.phone_number_id!==phoneId)return result(404,{error:'Contacto inexistente.'});
+      const mime=(typeof media.mime_type==='string' && media.mime_type.split(';')[0].trim()) || 'application/octet-stream';
+      const fileHeaders={...headers,'Content-Type':mime,'Cache-Control':'private, max-age=86400'};
+      const path=phoneId+'/'+encodeURIComponent(msg.whatsapp_message_id);
+      const stored=await db.storage.from('whatsapp-media').download(path);
+      if(!stored.error && stored.data)return new Response(stored.data,{status:200,headers:fileHeaders});
+      const meta=await provider('meta/whatsapp/v24.0/'+encodeURIComponent(media.id)+'?phone_number_id='+encodeURIComponent(phoneId),key);
+      const target=meta.download_url || meta.downloadUrl || meta.url;
+      if(typeof target!=='string')throw new Error('Kapso did not return a media URL');
+      const kapsoHost=new URL(target).hostname.toLowerCase().endsWith('kapso.ai');
+      // La clave de Kapso se manda solo a Kapso; un enlace de otro sitio ya trae su permiso en la dirección.
+      const file=await fetch(target,{headers:kapsoHost?{'X-API-Key':key}:{},signal:AbortSignal.timeout(25000)});
+      if(!file.ok)return result(410,{error:'WhatsApp ya no tiene este archivo disponible.'});
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      if(bytes.byteLength>25*1024*1024)return result(413,{error:'El archivo es demasiado grande para mostrarlo acá: abrilo en WhatsApp Business.'});
+      const saved=await db.storage.from('whatsapp-media').upload(path,bytes,{contentType:mime,upsert:true});
+      if(saved.error)console.error('Media not cached:',saved.error.message);
+      return new Response(bytes,{status:200,headers:fileHeaders});
+    }
     return result(400,{error:'Acción desconocida.'});
   }catch(error){
     console.error('WhatsApp API failed:',error.message);
