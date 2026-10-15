@@ -425,3 +425,10 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-foto--sticker img{max-width:140px;max-height:140px;background:transparent}
 .wa-audio{display:block;width:min(300px,100%);height:40px;margin:2px 0 6px}
 .wa-video{display:block;max-width:min(360px,100%);max-height:320px;border-radius:10px;margin:2px 0 6px}
+/* «Marcar todo como leído»: al final del menú Importar, separado y más chico para no tocarlo sin querer */
+.wa-mas-menu button[hidden],.wa-mas-sep[hidden]{display:none}
+.wa-mas-sep{height:1px;margin:6px 8px;background:var(--m-linea)}
+.wa-mas-menu .wa-mas-chico{padding:7px 10px}
+.wa-mas-menu .wa-mas-chico b{font-size:12.5px;font-weight:700;color:var(--m-tinta-2)}
+.wa-mas-menu .wa-mas-chico small{font-size:11.5px}
+.wa-mas-menu .wa-mas-chico .ico{width:14px;height:14px;color:var(--m-tinta-3)}

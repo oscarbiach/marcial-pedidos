@@ -110,6 +110,8 @@ function shell(){
           <button type="button" id="wa-sync">${ico('history')}<span><b>Historial de mensajes</b><small>Trae lo guardado en Kapso</small></span></button>
           <button type="button" id="wa-import-names">${ico('users')}<span><b>Nombres de Kapso</b><small>Completa los contactos sin nombre</small></span></button>
           <button type="button" id="wa-import-agenda">${ico('smartphone')}<span><b>Agenda del iPhone</b><small>Archivo .vcf exportado del celular</small></span></button>
+          <div class="wa-mas-sep" role="separator"></div>
+          <button type="button" id="wa-leer-todo" class="wa-mas-chico">${ico('check')}<span><b>Marcar todo como leído</b><small>Pone en cero los «sin leer» de todos los chats</small></span></button>
         </div></details>
       <button type="button" id="wa-refresh" class="wa-btn wa-btn--icono" aria-label="Actualizar conversaciones" title="Actualizar">${ico('refresh-cw')}</button>
       <input type="file" id="wa-agenda-file" accept=".vcf,text/vcard,text/x-vcard" hidden></div></div>
@@ -134,6 +136,7 @@ function shell(){
   $('wa-sync').addEventListener('click',()=>{$('wa-mas').open=false;importHistory();});
   $('wa-import-names').addEventListener('click',()=>{$('wa-mas').open=false;importNames();});
   $('wa-review-clients').addEventListener('click',()=>window.WhatsAppClientReview.open());
+  $('wa-leer-todo').addEventListener('click',()=>{$('wa-mas').open=false;leerTodo().catch(handleError);});
   $('wa-import-agenda').addEventListener('click',()=>{$('wa-mas').open=false;$('wa-agenda-file').value='';$('wa-agenda-file').click();});
   $('wa-agenda-file').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importAgenda(file).catch(handleError);});
   $('wa-contacts').addEventListener('click',event=>{
@@ -648,13 +651,28 @@ async function open(client=null){
   if(error){handleError(error);return;}
   E.permissions=permissions;
   if(!permissions.read){status('Tu cuenta todavía no tiene acceso a WhatsApp. El administrador debe habilitarla en Supabase.',true);return;}
-  $('wa-mas').hidden=!permissions.manage;
+  $('wa-mas').hidden=false;
+  ['wa-sync','wa-import-names','wa-import-agenda'].forEach(id=>{$(id).hidden=!permissions.manage;});
+  document.querySelector('#wa-mas .wa-mas-sep').hidden=!permissions.manage;
   $('wa-review-clients').hidden=!permissions.manage;
   status('');
   cargarVinculos();
   Seg()?.asegurar();   // pide el historial de Clientes (si hace falta) para los estados de la lista y la ficha
   await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);
+}
+// Marca como leídos todos los chats de una vez (con confirmación). Es lo mismo que abrir cada uno: no borra ni cambia mensajes.
+async function leerTodo(){
+  if(E.leyendoTodo)return;
+  const n=E.contacts.filter(c=>Number(c.unread_count)>0).length;
+  if(!confirm(n?`¿Marcar como leídos los ${n} chats con mensajes sin leer?`:'¿Marcar todos los chats como leídos?'))return;
+  E.leyendoTodo=true;$('wa-leer-todo').disabled=true;
+  try{
+    const {data,error}=await DB.rpc('wa_mark_all_seen');
+    if(error){if(error.code==='PGRST202')throw new Error('Falta instalar la función de «marcar todo como leído» en Supabase.');throw error;}
+    await loadContacts();
+    status(Number(data)?`Listo: ${Number(data)} ${Number(data)===1?'chat marcado':'chats marcados'} como leídos.`:'No había chats sin leer.');
+  }finally{E.leyendoTodo=false;$('wa-leer-todo').disabled=false;}
 }
 async function importAgenda(file){
   if(E.agendaBusy || !E.permissions?.manage)return;
