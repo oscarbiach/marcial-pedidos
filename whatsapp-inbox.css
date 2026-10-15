@@ -260,3 +260,149 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-filtros{gap:5px}
 .wa-chip{padding:4px 8px;font-size:12.5px;gap:5px}
 @media(min-width:1280px){.wa-layout{grid-template-columns:350px minmax(0,1fr) 350px}}
+
+/* ═══ Modo oscuro (pedido del usuario, 15/10): la pestaña es un bloque oscuro que contrasta con el fondo claro de la app.
+   Se redefinen los colores de la marca solo dentro de .wa; el resto de la app no cambia. Contrastes de texto ≥ 4,5:1. ═══ */
+.wa{
+  --m-superficie:#12233A;--m-superficie-2:#172B45;--m-superficie-3:#1E3554;
+  --m-linea:#22405F;--m-linea-2:#33557C;
+  --m-tinta:#EEF3FA;--m-tinta-2:#C3CFDF;--m-tinta-3:#98AAC2;
+  --m-marino-700:#DCE7F5;--m-marino-800:#FFFFFF;
+  --m-azul-50:#1B3352;--m-azul-100:rgba(91,135,191,.24);--m-azul-200:#3A5C86;--m-azul-300:#4D74A6;--m-azul-500:#86B4EC;
+  --m-ok-fondo:rgba(46,170,105,.18);--m-ok-tinta:#86E3AE;--m-ok:#3DBE7A;
+  --m-aviso-fondo:rgba(232,170,40,.17);--m-aviso-tinta:#F6CB71;--m-aviso:#E8AA28;
+  --m-error-fondo:rgba(235,80,95,.19);--m-error-tinta:#FFA3AC;--m-error:#F0606E;
+  --m-info-fondo:rgba(80,145,230,.2);--m-info-tinta:#A6CBF8;--m-info:#5B9BE8;
+  --m-sombra-1:0 1px 2px rgba(0,0,0,.3);--m-sombra-3:0 18px 40px -12px rgba(0,0,0,.6);
+  --wa-verde:#25A366;--wa-verde-2:#1E8C57;--wa-burbuja:#1C5A3F;
+  background:#0B1C33;border-radius:22px;padding:18px;color:var(--m-tinta);color-scheme:dark;
+}
+.wa-top{margin-top:0}
+.wa-top h2 .ico{background:var(--wa-verde)}
+.wa-list,.wa-thread,.wa-ficha{box-shadow:none}
+.wa-buscar input,.wa-compose textarea,.wa-nota-form textarea,.wa-review select,.wa-review input{background:var(--m-superficie-2);color:var(--m-tinta);border-color:var(--m-linea-2)}
+.wa-buscar input:focus,.wa-compose textarea:focus,.wa-nota-form textarea:focus{background:var(--m-superficie-3)}
+.wa ::placeholder{color:var(--m-tinta-3);opacity:1}
+.wa-btn{background:var(--m-superficie-2)}
+.wa-btn:hover{background:var(--m-superficie-3);border-color:var(--m-azul-300)}
+.wa-btn--prim{background:#3B78C4;border-color:#3B78C4;color:#fff}
+.wa-btn--prim:hover{background:#2F68B0;border-color:#2F68B0}
+.wa-btn--wa{background:rgba(37,163,102,.12);border-color:rgba(61,190,122,.45);color:#86E3AE}
+.wa-btn--wa:hover{background:rgba(37,163,102,.22);border-color:var(--wa-verde)}
+.wa-btn--verde{background:var(--wa-verde);border-color:var(--wa-verde);color:#fff}
+.wa-btn--verde:hover{background:var(--wa-verde-2);border-color:var(--wa-verde-2)}
+.wa-btn--chico{min-height:32px;padding:5px 11px;font-size:13px;margin-top:8px}
+.wa-chip{background:transparent}
+.wa-chip[aria-pressed="true"]{background:#EEF3FA;border-color:#EEF3FA;color:#0B1C33}
+.wa-chip[aria-pressed="true"] .wa-chip-n{background:#0B1C33;color:#fff}
+.wa-contact.on::before{background:#86B4EC}
+.wa-mas-menu{background:#172B45}
+.wa-messages{background-color:#0E2038;background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1.2px)}
+.wa-msg{background:#1E3554;box-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+.wa-out{background:var(--wa-burbuja);box-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+.wa-msg-pie,.wa-tilde{color:#9FB2C9}.wa-out .wa-msg-pie,.wa-out .wa-tilde{color:#A9D9BE}
+.wa-tilde--leido,.wa-out .wa-tilde--leido{color:#6CC4FF}
+.wa-dia span{background:#1E3554;color:var(--m-tinta-2)}
+.wa-adjunto{background:rgba(255,255,255,.08);color:var(--m-tinta)}
+.wa-prod{background:rgba(246,203,113,.22);color:#FFE6A8;box-shadow:inset 0 -2px 0 #E8AA28}
+.wa-older{background:#1E3554}
+.wa-send:disabled{background:#2A4566;color:#7F93AD}
+.wa-nota{background:rgba(246,203,113,.09);border-color:rgba(246,203,113,.28)}
+.wa-sinvinc{background:var(--m-superficie-2)}
+.wa-interes,.wa-ped{background:var(--m-superficie-2);border-color:var(--m-linea)}
+.wa-av--0{--av-f:rgba(91,135,191,.3);--av-t:#CFE0F6}.wa-av--1{--av-f:rgba(46,170,105,.26);--av-t:#A6EBC3}.wa-av--2{--av-f:rgba(232,170,40,.26);--av-t:#F8D58C}
+.wa-av--3{--av-f:rgba(140,110,220,.3);--av-t:#D4C6FA}.wa-av--4{--av-f:rgba(40,175,160,.26);--av-t:#9FE7DD}.wa-av--5{--av-f:rgba(225,90,150,.26);--av-t:#FBB8D3}.wa-av--6{--av-f:rgba(60,160,230,.26);--av-t:#A9DBFA}
+#wa-status{background:var(--m-info-fondo)}
+@media(max-width:767.98px){.wa{border-radius:16px;padding:12px;margin:0 -4px}}
+
+/* Pastillas nuevas */
+.wa-pill--espera{font-weight:800}
+.wa-cab-pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:1279.98px){.wa-cab-pills .wa-pill:not(.wa-pill--espera){display:none}}
+@media(max-width:767.98px){.wa-cab-pills{display:none}}
+
+/* Ficha: resumen y secciones desplegables */
+.wa-f-res{margin:-4px 0 12px;font-size:13.5px;color:var(--m-tinta-2)}
+.wa-f-res b{color:var(--m-tinta)}
+.wa-btn--bloque{width:100%}
+.wa-ficha>#wa-f-datos>.wa-btn--verde{margin-bottom:12px;min-height:42px;justify-content:center;font-size:15px}
+.wa-sec{border:1px solid var(--m-linea);border-radius:14px;background:var(--m-superficie-2);margin-top:10px;overflow:hidden}
+.wa-sec>summary{display:flex;align-items:center;gap:9px;padding:12px 13px;cursor:pointer;list-style:none;font-weight:800;font-size:14.5px;color:var(--m-tinta);user-select:none}
+.wa-sec>summary::-webkit-details-marker{display:none}
+.wa-sec>summary:hover{background:var(--m-superficie-3)}
+.wa-sec>summary>.ico:first-child{color:var(--m-azul-500)}
+.wa-sec-t{flex:1}
+.wa-sec-n{min-width:24px;padding:0 7px;border-radius:999px;background:var(--tf,var(--m-superficie-3));color:var(--tt,var(--m-tinta-2));font-size:12px;font-weight:800;line-height:22px;text-align:center}
+.wa-sec .wa-chev{color:var(--m-tinta-3);transition:transform var(--m-dur-2) var(--m-ease)}
+.wa-sec[open] .wa-chev{transform:rotate(180deg)}
+.wa-sec-cuerpo{padding:2px 13px 13px}
+.wa-sec .wa-tiles{margin-bottom:10px}
+.wa-sec .wa-notas{margin-top:2px}
+/* Pedidos y «suele llevar»: un producto por renglón, cantidad a la izquierda (como el historial de Cargar Pedido) */
+.wa-ped{padding:10px 11px;border:1px solid var(--m-linea);border-radius:11px}
+.wa-ped+.wa-ped{margin-top:8px}
+.wa-ped-cab{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:13px}
+.wa-ped-cab b{font-size:14px;color:var(--m-tinta);text-transform:capitalize}
+.wa-ped-cab .wa-pill{margin-left:auto}
+.wa-ped-items,.wa-habs{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:5px;align-items:baseline}
+.wa-habs{grid-template-columns:auto minmax(0,1fr) auto}
+.wa-q{font-weight:800;color:var(--m-azul-500);text-align:right;white-space:nowrap;font-size:13.5px}
+.wa-n{font-size:13.5px;color:var(--m-tinta);overflow-wrap:anywhere}
+.wa-v{font-size:11.5px;font-weight:800;color:var(--m-tinta-3)}
+.wa-ped-items .wa-n{padding-bottom:5px;border-bottom:1px dashed var(--m-linea)}
+.wa-ped-items .wa-q{padding-bottom:5px;border-bottom:1px dashed var(--m-linea)}
+.wa-ped-items>:nth-last-child(-n+2){border-bottom:0;padding-bottom:0}
+.wa-chat-det{margin-top:12px}
+.wa-sub{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12.5px;font-weight:800;color:var(--m-tinta-2)}
+.wa-alertas+.wa-chat-det{padding-top:12px;border-top:1px solid var(--m-linea)}
+.wa-hecho{display:flex;align-items:center;gap:6px;margin-top:7px;font-weight:700;font-size:13px}
+.wa-alerta .wa-btn--chico{display:inline-flex}
+.wa-alerta>span{min-width:0}
+
+/* ── Ventana flotante «Nuevo pedido» (whatsapp-carga.js): el formulario de Cargar Pedido, en el medio, con el fondo oscurecido ── */
+.wa-carga-ov{z-index:290;align-items:center!important;padding:16px;background:rgba(6,16,30,.74);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.wa-carga-modal{width:100%;max-width:640px;max-height:min(90vh,900px);border-radius:20px!important;animation:popIn .18s ease;box-shadow:0 30px 70px -20px rgba(0,0,0,.6)}
+.wa-carga-modal .modal-header h2{display:flex;align-items:center;gap:8px;min-width:0}
+.wa-carga-modal .modal-header h2 span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#wa-carga-form .form-card{box-shadow:none;border:0;margin:0;padding:0;max-width:none;background:transparent}
+.wa-carga-sug{margin-bottom:14px;padding:12px;border-radius:12px;background:#EAFAF1;border:1px solid #BFE6CF}
+.wa-carga-sug p{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13.5px;color:#145A32}
+.wa-carga-sug p span{color:#3D6B52}
+.wa-carga-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.wa-carga-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid #1E8449;border-radius:999px;background:#fff;color:#145A32;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer}
+.wa-carga-chip:hover:not(:disabled){background:#D5F2E1}
+.wa-carga-chip.hecho{background:#1E8449;color:#fff;cursor:default}
+.wa-carga-chip:focus-visible{outline:3px solid #2F63A3;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.wa-carga-modal{animation:none}}
+/* Lo anotado desde WhatsApp para el próximo pedido (en Cargar Pedido, con o sin ventana) */
+.wa-recordatorio{margin:4px 0 14px;padding:11px 12px;border-radius:12px;background:#FEF9E7;border:1px solid #F3E2B5;font-size:13.5px;color:#5B3B05}
+.wa-recordatorio[hidden]{display:none}
+.wa-rec-t{display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#87560A}
+.wa-rec{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:6px}
+.wa-rec span{flex:1;min-width:180px;line-height:1.4}
+.wa-rec-btn{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:5px 11px;border:1px solid #D68910;border-radius:9px;background:#fff;color:#87560A;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.wa-rec-btn:disabled{border-color:#1E8449;color:#145A32;cursor:default}
+.wa-rec-btn .ico{width:15px;height:15px}
+/* «Le escribimos …» en Clientes */
+.sc-pill--wa{margin-left:2px}
+/* Ajustes de la segunda vuelta */
+.wa-c-3{flex-wrap:wrap;row-gap:4px}
+.wa-chat-t p{display:flex;align-items:center;gap:8px;flex-wrap:wrap;white-space:normal}
+.wa-chat-tel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wa-cab-pills{justify-content:flex-start}
+@media(max-width:1279.98px){.wa-cab-pills .wa-pill:not(.wa-pill--espera){display:inline-flex}}
+@media(max-width:767.98px){.wa-cab-pills{display:flex}.wa-cab-pills .wa-pill:not(.wa-pill--espera){display:none}.wa-chat-tel{display:none}.wa-top p{display:none}.wa-top h2{font-size:20px}}
+@media(max-width:767.98px){
+  .wa-cab-pills{display:none}
+  .wa-chat-t h3{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
+  .wa-chat-acc{gap:6px}
+  .wa-chat-cab .wa-btn--verde{width:38px;padding:0}
+}
+.wa-sub{display:block}.wa-sub .ico{margin-right:4px}
+
+/* Clientes y WhatsApp: por ahora solo en PC (decisión del usuario, 15/10/2026). En el celular (pantalla angosta y táctil) no aparecen en la barra de abajo;
+   setTab de index.html tampoco deja entrar. Lo hecho para celular queda en el código, sin uso, para cuando se habilite. */
+@media(max-width:767.98px) and (pointer:coarse){#bottomNav [data-tab="clientes"],#bottomNav [data-tab="whatsapp"]{display:none!important}}
+/* Ventana de PC angosta (768–1099 px): con la pestaña WhatsApp la barra de arriba no entraba y el botón del usuario quedaba fuera de la
+   pantalla. En ese rango el menú muestra solo los íconos (el nombre sigue siendo el texto accesible del botón). */
+@media(min-width:768px) and (max-width:1099.98px){#pcNav button{font-size:0;gap:0;padding:0 12px}#pcNav button .ico{width:19px;height:19px}}

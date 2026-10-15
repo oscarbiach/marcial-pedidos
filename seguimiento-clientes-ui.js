@@ -99,7 +99,17 @@
     if (E.abrirCon) { E.vista = 'clientes'; E.sel = E.abrirCon; E.fichaAbierta = true; E.abrirCon = null; }
     if (!E.historial || Date.now() - E.ts > VIEJO_MS) pedirHistorial(); else render();
     cargarDatos();
+    if (window.WhatsAppUI && WhatsAppUI.cargarVinculos) WhatsAppUI.cargarVinculos();   // para «Le escribimos …»
   }
+  // Cuando llegan los datos de WhatsApp se agrega o quita la pastilla en cada fila, sin redibujar la pestaña (no corta un arrastre ni mueve el foco).
+  document.addEventListener('wa:vinculos', () => {
+    if (pestana() !== 'clientes' || !E.calc) return;
+    document.querySelectorAll('#sc-raiz .sc-fila[data-k]').forEach(f => {
+      const c = E.calc.clientes.find(x => x.clave === f.dataset.k); if (!c) return;
+      const nuevo = contactadoPill(c, c.bloque), viejo = f.querySelector('.sc-pill--wa');
+      if (viejo) { if (nuevo) viejo.outerHTML = nuevo; else viejo.remove(); } else if (nuevo) f.querySelector('.sc-fila-1').insertAdjacentHTML('beforeend', nuevo);
+    });
+  });
 
   // ── Decisiones y reglas (IDEA-10/11/12) ──
   let almacen = null;
@@ -233,11 +243,21 @@
     const av = avisoRitmo(c); if (av) t.push(`<span class="sc-warn">${esc(av)}</span>`);
     return t.length ? `<span class="sc-sub">${t.join(' · ')}</span>` : '';
   }
+  // «Le escribimos …»: en los bloques de Para hoy, si se le mandó un WhatsApp después de su último pedido (aunque todavía no haya pedido).
+  // Lo da whatsapp-inbox.js con una lectura liviana de los contactos vinculados; sin acceso a WhatsApp no aparece.
+  const PARA_CONTACTAR = new Set(['atender', 'alta', 'semana', 'recuperacion', 'unica']);
+  function contactadoPill(c, bloque) {
+    const w = window.WhatsAppUI; if (!w || !w.contactado || !PARA_CONTACTAR.has(bloque || c.bloque)) return '';
+    const f = w.contactado(c.nombre, c.ultimo); if (!f) return '';
+    const d = new Date(f), k = F.ymd(d), dias = F.diffDias(hoy(), k);
+    const cuando = dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 6 ? 'el ' + ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][d.getDay()] : 'el ' + corta(k);
+    return `<span class="sc-pill sc-t-info sc-pill--wa" title="Último WhatsApp que le mandamos, después de su último pedido">${ico('message-circle', 'ico-sm')}Le escribimos ${esc(cuando)}</span>`;
+  }
   const asa = c => `<button type="button" class="sc-asa" data-sc="mover" data-k="${at(c.clave)}" aria-haspopup="dialog" aria-label="${at(`Mover a ${c.nombre}…`)}" title="Arrastralo a un destino, o tocá para elegir">${ico('grip-vertical')}</button>`;
   function fila(c, bloque, conEstado) {
     const edit = puedeEditar();
     return `<li class="sc-it${edit ? ' sc-it--edit' : ''}" data-k="${at(c.clave)}"><button type="button" class="sc-fila sc-t-${tono(c)}" data-sc="fila" data-k="${at(c.clave)}"${E.sel === c.clave ? ' aria-current="true"' : ''}>
-        <span class="sc-fila-1"><span class="sc-nom">${esc(c.nombre)}</span>${tagManual(c)}${conEstado ? pill(c) : ''}</span>
+        <span class="sc-fila-1"><span class="sc-nom">${esc(c.nombre)}</span>${tagManual(c)}${conEstado ? pill(c) : ''}${contactadoPill(c, bloque)}</span>
         <span class="sc-mets">${metricas(c)}</span>${subFila(c, bloque)}</button>${edit ? asa(c) : ''}</li>`;
   }
 

@@ -2824,6 +2824,8 @@ const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de
 function setTab(tab) {
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
+  // Por ahora Clientes y WhatsApp son solo para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
+  if ((tab === 'clientes' || tab === 'whatsapp') && esCelular()) tab = 'pedidos';
   activeTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -2863,6 +2865,10 @@ function setTab(tab) {
 }
 
 function goTab(tab) { setTab(tab); }
+// Si la ventana se achica a tamaño celular estando en Clientes o WhatsApp, se pasa a Pedidos (ver setTab).
+// Celular = pantalla angosta y táctil. Una PC con mucho zoom también queda angosta, pero usa mouse: ahí Clientes y WhatsApp siguen.
+function esCelular() { return !!(window.matchMedia && window.matchMedia('(max-width: 767.98px) and (pointer: coarse)').matches); }
+window.addEventListener('resize', () => { if ((activeTab === 'clientes' || activeTab === 'whatsapp') && esCelular()) setTab('pedidos'); });
 
 // Los campos de fecha/hora no se tipean: al tocarlos se abre el widget
 // del navegador (en el celular ya es el comportamiento nativo).
@@ -5805,6 +5811,8 @@ function actualizarHistCliente() {
   if (!box) return;
   const inp = document.getElementById('n_cliente');
   const nombre = inp ? inp.value.trim() : '';
+  // Lo anotado desde WhatsApp «para el próximo pedido» de este cliente (ver whatsapp-carga.js).
+  if (window.WhatsAppCarga) WhatsAppCarga.alCambiarCliente(nombre);
   // Si el cliente tiene despachos de hace más de 7 días, la carga habitual
   // ya no los trae: sin esto, el panel de "suele llevar"/últimos pedidos
   // se veía pobre (o vacío) para un cliente antiguo con pedidos recientes.
@@ -6161,5 +6169,6 @@ function abrirInstalar() {
 <script src="whatsapp-agenda.js"></script>
 <script src="whatsapp-inbox.js"></script>
 <script src="whatsapp-client-review.js"></script>
+<script src="whatsapp-carga.js"></script>
 </body>
 </html>

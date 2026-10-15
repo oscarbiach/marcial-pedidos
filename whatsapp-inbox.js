@@ -19,6 +19,8 @@ const DB=window.WhatsAppPrueba || {
   rpc:(name,args)=>sb.rpc(name,args),
   notas:{listar:key=>sb.from('whatsapp_notes').select('id,body,follow_up_date,created_at').eq('contact_key',key).order('created_at',{ascending:false}).limit(100),
     agregar:(key,body)=>sb.from('whatsapp_notes').insert({contact_key:key,body})},
+  vinculos:()=>sb.from('whatsapp_contacts').select('contact_key,linked_client_name,last_inbound_at,last_outbound_at').not('linked_client_name','is',null).limit(5000),
+  recordatorios:()=>sb.from('whatsapp_notes').select('contact_key,body,created_at').like('body','Para el próximo pedido: %').order('created_at',{ascending:false}).limit(300),
   api:realApi,
 };
 
@@ -70,6 +72,14 @@ const api=body=>DB.api(body);
 // Estado del cliente vinculado según Clientes (seguimiento). Sin pedir el historial: eso lo hace la ficha.
 function segDe(c,opciones){const S=Seg();return S && c.linked_client_name?S.contexto(c.linked_client_name,opciones):null;}
 const PARA_HOY=new Set(['atender','alta','semana','recuperacion','unica']);
+// «Espera respuesta»: el último mensaje es del cliente y nadie le contestó todavía (ni desde la app ni desde el celular).
+function espera(c){return c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at>c.last_outbound_at)?Date.now()-new Date(c.last_inbound_at).getTime():null;}
+function pillEspera(c){
+  const ms=espera(c);if(ms===null)return '';
+  const min=Math.max(1,Math.round(ms/60000)), h=Math.floor(min/60), d=Math.floor(h/24);
+  const t=d>=1?(d===1?'1 día':d+' días'):h>=1?h+' h':min+' min';
+  return pill('Espera respuesta · '+t,min>=60?'error':'aviso','clock',' wa-pill--espera');
+}
 const pill=(texto,tono,icono,extra='')=>`<span class="wa-pill wa-t-${tono} ${extra}">${icono?ico(icono,'ico-xs'):''}${escape(texto)}</span>`;
 function pillCliente(c){
   if(!c.linked_client_name)return pill('Sin vincular','gris','',' wa-pill--hueco');
@@ -131,6 +141,9 @@ function shell(){
     else if(a==='ver-cliente' && contact())Seg()?.verCliente(contact().linked_client_name);
     else if(a==='vincular')window.WhatsAppClientReview.open();
     else if(a==='reintentar-seg'){Seg()?.pedirHistorial();drawFicha();}
+    else if(a==='cargar' && contact()?.linked_client_name)window.WhatsAppCarga?.abrir({cliente:contact().linked_client_name,productos:productosDelChat()});
+    else if(a==='reclamo-pedido')reclamoEnPedido(b.dataset.id);
+    else if(a==='reclamo-guardar')reclamoGuardar(b).catch(handleError);
   });
 }
 // En celular se ve una cosa por vez (lista → chat → ficha); en PC las tres columnas a la vez.
@@ -140,10 +153,11 @@ function mostrar(vista){E.vista=vista;const l=$('wa-layout');if(!l)return;l.data
   requestAnimationFrame(sizeLayout);}
 
 // ── Lista ──
-const FILTROS=[['todos','Todos',''],['sinleer','Sin leer','ok'],['hoy','Para hoy','error'],['sinvincular','Sin vincular','gris']];
+const FILTROS=[['todos','Todos',''],['sinresp','Sin responder','error'],['sinleer','Sin leer','ok'],['hoy','Para hoy','aviso'],['sinvincular','Sin vincular','gris']];
 function pasa(c,f){
   if(f==='sinleer')return Number(c.unread_count)>0;
   if(f==='sinvincular')return !c.linked_client_name;
+  if(f==='sinresp')return espera(c)!==null;
   if(f==='hoy'){const s=segDe(c,{sinCargar:true});return !!(s && s.estado==='ok' && (PARA_HOY.has(s.c.bloque) || s.pausaRevisar));}
   return true;
 }
@@ -163,7 +177,7 @@ function renderContacts(){
     ${avatar(c)}<span class="wa-c-cuerpo">
       <span class="wa-c-1"><span class="wa-c-nom">${escape(title(c))}</span><span class="wa-c-hora">${escape(cuando(c.last_message_at))}</span></span>
       <span class="wa-c-2"><span class="wa-preview">${sale?'<span class="wa-vos">Vos:</span> ':''}${escape(c.last_content || 'Foto, audio o archivo')}</span>${n?`<span class="wa-badge" aria-label="${n} sin leer">${n}</span>`:''}</span>
-      <span class="wa-c-3">${pillCliente(c)}${sub?`<span class="wa-c-sub">${escape(sub)}</span>`:''}</span>
+      <span class="wa-c-3">${pillEspera(c)}${pillCliente(c)}${sub && espera(c)===null?`<span class="wa-c-sub">${escape(sub)}</span>`:''}</span>
     </span></button>`;}).join('') ||
     `<p class="wa-empty">${E.contacts.length?'No hay conversaciones con este filtro.':'No hay conversaciones en esta búsqueda. Si es la primera vez, importá el historial desde «Importar».'}</p>`;
   $('wa-more-contacts').hidden=!E.listMore;
@@ -184,10 +198,11 @@ function drawCabecera(){
   const c=contact(), cab=$('wa-chat-cab');if(!c || !cab)return;
   const sub=[formatoTel(c.phone_number),c.linked_client_name && c.display_name && c.display_name!==c.linked_client_name?'agenda: '+c.display_name:''].filter(Boolean).join(' · ');
   cab.innerHTML=`<button type="button" class="wa-icono-btn wa-solo-angosto" data-wa="volver" aria-label="Volver a conversaciones">${ico('arrow-left','ico')}</button>
-    ${avatar(c,'wa-av--g')}<div class="wa-chat-t"><h3>${escape(title(c))}</h3><p>${escape(sub || 'Sin teléfono compartido')}</p></div>
-    <div class="wa-chat-acc">${pillCliente(c)}
+    ${avatar(c,'wa-av--g')}<div class="wa-chat-t"><h3>${escape(title(c))}</h3><p><span class="wa-chat-tel">${escape(sub || 'Sin teléfono compartido')}</span><span class="wa-cab-pills">${pillEspera(c)}${pillCliente(c)}</span></p></div>
+    <div class="wa-chat-acc">
+    ${c.linked_client_name?`<button type="button" class="wa-btn wa-btn--verde" data-wa="cargar" title="Cargar un pedido para ${escape(c.linked_client_name)}">${ico('shopping-cart')}<span class="wa-txt-ancho">Cargar pedido</span></button>`:''}
     <button type="button" class="wa-btn wa-btn--ficha wa-sin-ficha" data-wa="ficha">${ico('user')}Ficha</button>
-    ${c.phone_number?`<a class="wa-btn wa-btn--wa" href="https://wa.me/${escape(c.phone_number)}" target="_blank" rel="noopener" title="Abrir en WhatsApp Business">${ico('arrow-up-right')}<span class="wa-txt-ancho">WhatsApp Business</span></a>`:''}</div>`;
+    ${c.phone_number?`<a class="wa-btn wa-btn--wa" href="https://wa.me/${escape(c.phone_number)}" target="_blank" rel="noopener" title="Abrir en WhatsApp Business">${ico('arrow-up-right')}<span class="wa-txt-ancho">WhatsApp</span></a>`:''}</div>`;
 }
 function drawThread(){
   const c=contact();if(!c)return;
@@ -280,30 +295,95 @@ async function loadMessages(older=false){
 }
 
 // ── Ficha del cliente ──
+// Todo en secciones desplegables, en este orden: Últimos pedidos, Avisos, Suele llevar, Ficha completa y Notas (pedido del usuario, 15/10).
+// Lo abierto o cerrado se recuerda al pasar de un chat a otro. Arranca abierta solo «Últimos pedidos», que es lo principal.
 const catalogo=()=>((typeof state!=='undefined' && state.products) || []).map(p=>p.n).filter(Boolean);
+const normN=t=>(window.SegClientes?SegClientes.norm(t):String(t||'').trim().toLowerCase());
+E.secs=new Set(['pedidos']);
+function seccion(k,icono,titulo,n,cuerpo,tono){
+  return `<details class="wa-sec" data-sec="${k}"${E.secs.has(k)?' open':''}><summary>${ico(icono)}<span class="wa-sec-t">${escape(titulo)}</span>
+    ${n?`<span class="wa-sec-n${tono?' wa-t-'+tono:''}">${n}</span>`:''}${ico('chevron-down','ico-sm wa-chev')}</summary><div class="wa-sec-cuerpo">${cuerpo}</div></details>`;
+}
+document.addEventListener('toggle',event=>{const d=event.target;if(d.matches && d.matches('#wa-ficha details.wa-sec')){if(d.open)E.secs.add(d.dataset.sec);else E.secs.delete(d.dataset.sec);}},true);
 function drawFicha(){
   const f=$('wa-ficha');if(!f)return;
   const c=contact();
   if(!c){f.innerHTML=`<div class="wa-vacio wa-vacio--ficha">${ico('users','ico')}<p><b>Ficha del cliente</b></p><p>Pedidos, avisos del seguimiento y lo que se habló, en un solo lugar.</p></div>`;return;}
   f.innerHTML=`<button type="button" class="wa-volver-chat wa-sin-ficha" data-wa="chat">${ico('arrow-left')}Volver al chat</button>
     <div id="wa-f-datos"></div>
-    <section class="wa-f-sec wa-f-notas" aria-labelledby="wa-notas-t"><h4 id="wa-notas-t">${ico('notebook-pen')}Notas</h4>
-      <div id="wa-notes"></div>
+    <details class="wa-sec" data-sec="notas"${E.secs.has('notas')?' open':''}><summary>${ico('notebook-pen')}<span class="wa-sec-t">Notas</span><span class="wa-sec-n" id="wa-notas-n" hidden></span>${ico('chevron-down','ico-sm wa-chev')}</summary>
+      <div class="wa-sec-cuerpo"><div id="wa-notes"></div>
       <form id="wa-note-form" class="wa-nota-form"><label for="wa-note" class="wa-sr">Nueva nota</label>
         <textarea id="wa-note" maxlength="4000" rows="2" required placeholder="Ej.: prefiere que le escribamos a la tarde"></textarea>
-        <button type="submit" class="wa-btn wa-btn--prim">${ico('plus')}Agregar nota</button></form>
-    </section>`;
+        <button type="submit" class="wa-btn wa-btn--prim">${ico('plus')}Agregar nota</button></form></div>
+    </details>`;
   $('wa-note-form').onsubmit=guardarNota;
   E.fichaHtml='';drawFichaDatos();renderNotes();
 }
 function drawFichaDatos(){
   const box=$('wa-f-datos'), c=contact();if(!box || !c)return;
-  const s=c.linked_client_name?segDe(c,{pedidos:4}):null;
+  const s=c.linked_client_name?segDe(c,{pedidos:9999}):null;
   const html=c.linked_client_name?fichaCliente(c,s):fichaSinVincular(c);
   if(html===E.fichaHtml)return;   // la actualización periódica no mueve la ficha si no cambió nada
   E.fichaHtml=html;box.innerHTML=html;
 }
-function contactoTiles(c,s){
+const analisis=(s)=>{const t=T();return t?t.analizar(E.messages,catalogo(),s && s.estado==='ok'?s.c:null):null;};
+const validos=s=>(s && s.estado==='ok' && s.pedidos?s.pedidos.filter(p=>p.estado!=='Cancelado'):[]);
+const fmtQty=it=>(typeof itemLabelCorto==='function'?itemLabelCorto(it):String(Math.round(Number(it.qty)*100)/100).replace('.',','));
+const ESTADO_PEDIDO={Pendiente:'aviso',Despachado:'ok',Cancelado:'error'};
+function diaPedido(f){const x=new Date(String(f).slice(0,10)+'T12:00:00');return SEM[x.getDay()].slice(0,3)+' '+corta(f);}
+// Últimos pedidos: un producto por renglón (cantidad | producto), igual que el historial de Cargar Pedido.
+function secPedidos(s){
+  const ps=(s && s.estado==='ok' && s.pedidos?s.pedidos:[]).slice(0,4);
+  if(!ps.length)return seccion('pedidos','shopping-cart','Últimos pedidos',0,'<p class="wa-muted">Todavía no tiene pedidos.</p>');
+  return seccion('pedidos','shopping-cart','Últimos pedidos',ps.length,ps.map(p=>{
+    const dias=Math.max(0,Math.round((Date.now()-new Date(String(p.fecha).slice(0,10)+'T12:00:00').getTime())/86400000));
+    return `<div class="wa-ped"><div class="wa-ped-cab"><b>${escape(diaPedido(p.fecha))}</b><span class="wa-muted">${escape(dias===0?'hoy':dias===1?'ayer':'hace '+dias+' días')}</span>${pill(p.estado||'—',ESTADO_PEDIDO[p.estado]||'gris')}</div>
+      <div class="wa-ped-items">${(p.items||[]).map(it=>`<span class="wa-q">${escape(fmtQty(it))}</span><span class="wa-n">${escape(it.prod)}</span>`).join('')}</div></div>`;}).join(''));
+}
+// Reclamo detectado en el chat → que lo tenga en cuenta el reparto: en su pedido pendiente (se abre «Editar pedido» con la observación escrita)
+// o, si no tiene, guardado para el próximo pedido (se ofrece al cargarlo, también desde Cargar Pedido).
+function obsReclamo(tema){return `Reclamo por WhatsApp (${corta(dia(tema.ultima))}): «${tema.frase}»`;}
+function accionReclamo(c,s,tema){
+  if(!c.linked_client_name || !tema)return '';
+  const obs=obsReclamo(tema), desde=dia(tema.ultima);
+  const ps=validos(s), anotado=ps.find(p=>String(p.fecha).slice(0,10)>=desde && String(p.notas||'').includes(obs));
+  if(anotado)return `<p class="wa-hecho">${ico('circle-check')}Anotado en su pedido del ${escape(corta(anotado.fecha))}.</p>`;
+  const pend=((typeof state!=='undefined' && state.pedidos) || []).filter(p=>normN(p.cliente)===normN(c.linked_client_name) && p.estado==='Pendiente')
+    .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)))[0];
+  if(pend)return `<button type="button" class="wa-btn wa-btn--chico" data-wa="reclamo-pedido" data-id="${escape(pend.id)}">${ico('square-pen')}Anotar en su pedido del ${escape(corta(pend.fecha))}</button>`;
+  if(recordatoriosDe(c.linked_client_name).some(r=>r.obs===obs))return `<p class="wa-hecho">${ico('clock')}Guardado: se ofrece al cargar su próximo pedido.</p>`;
+  return `<button type="button" class="wa-btn wa-btn--chico" data-wa="reclamo-guardar">${ico('pin')}Anotar para su próximo pedido</button>`;
+}
+function secAvisos(c,s){
+  const out=[];let tono='';
+  const r=analisis(s), reclamo=r && r.temas.find(t=>t.clave==='reclamo');
+  if(reclamo){tono='error';out.push(['error','triangle-alert',`<b>Reclamo en el chat</b> <span class="wa-muted">(${escape(cuandoLargo(reclamo.ultima))})</span>: «${escape(reclamo.frase)}»${accionReclamo(c,s,reclamo)}`]);}
+  if(s && s.estado==='ok'){
+    const k=s.c, [t,i,tn]=s.insignia;
+    if(!s.alDia || k.manual){out.push([tn,i,`<b>${escape(t)}:</b> ${escape(k.razon)}.`]);if(tn==='error')tono='error';}
+    k.dejoDeTodos.forEach(d=>out.push(['aviso','trending-down',`<b>Dejó de llevar ${escape(d.nombre)}</b> <span class="wa-muted">(lo llevó ${d.veces} veces; la última hace ${d.hace} días)</span>`]));
+    (k.cambiosProductos||[]).filter(x=>x.tipo==='alternativa').forEach(x=>out.push(['info','package',`<b>Compraba ${escape(x.de)}</b> y todavía no compró <b>${escape(x.a)}</b>: se le puede ofrecer.`]));
+    if(k.manual && k.manual.nota)out.push(['gris','notebook-pen',`<b>Nota del seguimiento:</b> ${escape(k.manual.nota)}`]);
+  }
+  const REL={nuevo:['Nunca lo compró','marca'],dejo:['Lo había dejado','aviso'],lleva:['Ya lo lleva','ok']};
+  const temas=r?r.temas.filter(x=>x.clave!=='reclamo'):[], prods=r?r.productos:[];
+  const chat=(temas.length || prods.length)?`<div class="wa-chat-det"><p class="wa-sub">${ico('message-circle','ico-xs')}Del chat <span class="wa-muted">· lo que escribió el cliente, últimos ${r.dias} días</span></p>
+    ${temas.length?`<div class="wa-temas">${temas.map(x=>`<span class="wa-pill wa-t-${x.tono}" title="${escape('«'+x.frase+'» · '+cuandoLargo(x.ultima))}">${ico(x.icono,'ico-xs')}${escape(x.etiqueta)}</span>`).join('')}</div>`:''}
+    ${prods.map(p=>`<div class="wa-interes"><div class="wa-interes-1">${ico('package')}<b>${escape(p.nombre)}</b>${p.relacion?pill(REL[p.relacion][0],REL[p.relacion][1]):''}</div>
+      <p class="wa-cita">${p.pregunta?'Preguntó':'Lo nombró'} ${escape(cuandoLargo(p.ultima))}: «${escape(p.frase)}»</p></div>`).join('')}</div>`:'';
+  const n=out.length+prods.length+temas.length;
+  if(!n)return seccion('avisos','bell','Avisos',0,'<p class="wa-muted">Sin avisos: está dentro de su ritmo y no hay nada para destacar en el chat.</p>');
+  return seccion('avisos','bell','Avisos',n,`${out.length?`<ul class="wa-alertas">${out.map(([tn,ic,h])=>`<li class="wa-alerta wa-t-${tn}">${ico(ic)}<span>${h}</span></li>`).join('')}</ul>`:''}${chat}`,tono || (out.length?'aviso':'marca'));
+}
+// Suele llevar: el mismo cálculo que el historial de Cargar Pedido (cantidad más repetida y en cuántos pedidos aparece).
+function secSuele(s){
+  const ps=validos(s);
+  const habs=typeof habitualesDe==='function' && ps.length>=2?habitualesDe(ps):[];
+  if(!habs.length)return seccion('suele','star','Suele llevar',0,'<p class="wa-muted">Hacen falta al menos dos pedidos para saberlo.</p>');
+  return seccion('suele','star','Suele llevar',habs.length,`<div class="wa-habs">${habs.map(h=>`<span class="wa-q">${escape(h.qty)}</span><span class="wa-n">${escape(h.prod)}</span><span class="wa-v">${h.veces}×</span>`).join('')}</div>`);
+}
+function secFicha(c,s){
   const tiles=[];
   if(s && s.estado==='ok'){const k=s.c;
     tiles.push(`<div class="wa-tile wa-t-${s.insignia[2]}"><span class="wa-tile-k">Último pedido</span><b>${escape(diasN(k.dias))}</b><span class="wa-tile-s">${escape(corta(k.ultimo))}</span></div>`);
@@ -311,64 +391,29 @@ function contactoTiles(c,s){
   }
   const quien=c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at>=c.last_outbound_at)?'te escribió':'le escribimos';
   tiles.push(`<div class="wa-tile wa-t-ok"><span class="wa-tile-k">Último contacto</span><b>${escape(cuandoLargo(c.last_message_at))}</b><span class="wa-tile-s">${escape(c.last_message_at?quien:'')}</span></div>`);
-  return `<div class="wa-tiles">${tiles.join('')}</div>`;
-}
-function alertas(s){
-  if(!s || s.estado!=='ok')return '';
-  const k=s.c, out=[];
-  const [t,i,tn]=s.insignia;
-  if(!s.alDia || k.manual)out.push([tn,i,`<b>${escape(t)}:</b> ${escape(k.razon)}.`]);
-  k.dejoDeTodos.forEach(d=>out.push(['aviso','trending-down',`<b>Dejó de llevar ${escape(d.nombre)}</b> <span class="wa-muted">(lo llevó ${d.veces} veces; la última hace ${d.hace} días)</span>`]));
-  (k.cambiosProductos||[]).filter(x=>x.tipo==='alternativa').forEach(x=>out.push(['info','package',`<b>Compraba ${escape(x.de)}</b> y todavía no compró <b>${escape(x.a)}</b>: se le puede ofrecer.`]));
-  if(k.manual && k.manual.nota)out.push(['gris','notebook-pen',`<b>Nota del seguimiento:</b> ${escape(k.manual.nota)}`]);
-  if(k.observacion && Date.now()-new Date(k.observacion.fecha+'T12:00:00').getTime()<45*86400000)out.push(['gris','info',`<b>Observación del último pedido:</b> ${escape(k.observacion.texto)}`]);
-  if(!out.length)out.push(['ok','circle-check','<b>Todo en orden:</b> está dentro de su ritmo de compra.']);
-  return `<section class="wa-f-sec"><h4>${ico('bell')}Avisos</h4><ul class="wa-alertas">${out.map(([tono,icono,h])=>`<li class="wa-alerta wa-t-${tono}">${ico(icono)}<span>${h}</span></li>`).join('')}</ul></section>`;
-}
-function delChat(c,s){
-  const t=T();if(!t)return '';
-  const r=t.analizar(E.messages,catalogo(),s && s.estado==='ok'?s.c:null);
-  if(!r.analizados)return `<section class="wa-f-sec"><h4>${ico('message-circle')}Del chat</h4><p class="wa-muted">El cliente no escribió en los últimos ${r.dias} días.</p></section>`;
-  if(!r.productos.length && !r.temas.length)return `<section class="wa-f-sec"><h4>${ico('message-circle')}Del chat</h4><p class="wa-muted">Nada para destacar en sus mensajes de los últimos ${r.dias} días.</p></section>`;
-  const REL={nuevo:['Nunca lo compró','marca'],dejo:['Lo había dejado','aviso'],lleva:['Ya lo lleva','ok']};
-  const temas=r.temas.length?`<div class="wa-temas">${r.temas.map(x=>`<span class="wa-pill wa-t-${x.tono}" title="${escape('«'+x.frase+'» · '+cuandoLargo(x.ultima))}">${ico(x.icono,'ico-xs')}${escape(x.etiqueta)}</span>`).join('')}</div>`:'';
-  const prods=r.productos.map(p=>`<li class="wa-interes">
-      <div class="wa-interes-1">${ico('package')}<b>${escape(p.nombre)}</b>${p.relacion?pill(REL[p.relacion][0],REL[p.relacion][1]):''}</div>
-      <p class="wa-cita">${p.pregunta?'Preguntó':'Lo nombró'} ${escape(cuandoLargo(p.ultima))}: «${escape(p.frase)}»</p></li>`).join('');
-  return `<section class="wa-f-sec"><h4>${ico('message-circle')}Del chat</h4>${temas}${prods?`<ul class="wa-intereses">${prods}</ul>`:''}
-    <p class="wa-nota-pie">Detectado en lo que escribió el cliente (últimos ${r.dias} días).</p></section>`;
-}
-const ESTADO_PEDIDO={Pendiente:'aviso',Despachado:'ok',Cancelado:'error','En preparación':'info'};
-function pedidos(s){
-  if(!s || s.estado!=='ok' || !s.pedidos || !s.pedidos.length)return '';
-  const fmtQty=q=>String(Math.round(Number(q)*100)/100).replace('.',',');
-  return `<section class="wa-f-sec"><h4>${ico('shopping-cart')}Últimos pedidos</h4><ul class="wa-pedidos">${s.pedidos.map(p=>{
-    const items=(p.items||[]).map(it=>fmtQty(it.qty)+' × '+it.prod);
-    return `<li class="wa-pedido"><div class="wa-pedido-1"><span class="wa-fecha">${escape(corta(p.fecha))}</span>${pill(p.estado||'—',ESTADO_PEDIDO[p.estado]||'gris')}<span class="wa-muted">${escape(items.length+' '+(items.length===1?'producto':'productos'))}</span></div>
-      <p class="wa-pedido-items">${escape(items.slice(0,3).join(' · '))}${items.length>3?' <span class="wa-muted">y '+(items.length-3)+' más</span>':''}</p></li>`;}).join('')}</ul></section>`;
-}
-function suele(s){
-  if(!s || s.estado!=='ok' || !s.c.lleva.length)return '';
-  return `<section class="wa-f-sec"><h4>${ico('star')}Suele llevar</h4><div class="wa-temas">${s.c.lleva.map(n=>`<span class="wa-pill wa-t-marca">${escape(n)}</span>`).join('')}</div></section>`;
+  const ver=s && s.estado==='ok'?`<button type="button" class="wa-btn wa-btn--bloque" data-wa="ver-cliente">${ico('users')}Ver ficha completa en Clientes${ico('arrow-right','ico-xs')}</button>`:'';
+  return seccion('ficha','user','Ficha completa','',`<div class="wa-tiles">${tiles.join('')}</div>${ver}`);
 }
 function fichaCliente(c,s){
-  let seg='';
+  let seg='', resumen='';
   if(!s || s.estado==='cargando')seg=`<p class="wa-cargando">${ico('refresh-cw')}Buscando sus pedidos y su seguimiento…</p>`;
   else if(s.estado==='error')seg=`<p class="wa-ventana wa-t-error">${ico('circle-alert')}No se pudo traer el historial de pedidos. <button type="button" class="wa-link" data-wa="reintentar-seg">Reintentar</button></p>`;
   else if(s.estado==='sinpedidos')seg=`<p class="wa-ventana wa-t-gris">${ico('info')}Todavía no tiene pedidos registrados con este nombre.</p>`;
-  const verMas=s && s.estado==='ok'?`<button type="button" class="wa-btn wa-btn--bloque" data-wa="ver-cliente">${ico('users')}Ver ficha completa en Clientes${ico('arrow-right','ico-xs')}</button>`:'';
+  else{const k=s.c;resumen=`<p class="wa-f-res">Último pedido <b>${escape(diasN(k.dias))}</b> · pide cada <b>${escape(String(Math.round(k.intervalo*10)/10).replace('.',','))} días</b></p>`;}
   return `<div class="wa-f-cab">${avatar(c,'wa-av--g')}<div><h3>${escape(c.linked_client_name)}</h3>${s && s.estado==='ok'?pill(s.insignia[0],s.insignia[2],s.insignia[1]):pill('Cliente','marca','user')}</div></div>
-    ${contactoTiles(c,s)}${seg}${alertas(s)}${delChat(c,s)}${pedidos(s)}${suele(s)}${verMas}`;
+    ${resumen}<button type="button" class="wa-btn wa-btn--verde wa-btn--bloque" data-wa="cargar">${ico('shopping-cart')}Cargar pedido</button>
+    ${seg}${secPedidos(s)}${secAvisos(c,s)}${secSuele(s)}${secFicha(c,s)}`;
 }
 function fichaSinVincular(c){
   return `<div class="wa-f-cab">${avatar(c,'wa-av--g')}<div><h3>${escape(title(c))}</h3>${pill('Sin vincular','gris','',' wa-pill--hueco')}</div></div>
     <div class="wa-sinvinc">${ico('user-plus','ico')}<div><p><b>Este número todavía no es un cliente de la app.</b></p>
     <p class="wa-muted">Vinculalo para ver acá sus pedidos, sus avisos y lo que suele llevar.</p>
     ${E.permissions?.manage?'<button type="button" class="wa-btn wa-btn--prim" data-wa="vincular">'+ico('user-plus')+'Vincular clientes</button>':''}</div></div>
-    ${contactoTiles(c,null)}${delChat(c,null)}`;
+    ${secAvisos(c,null)}${secFicha(c,null)}`;
 }
 function renderNotes(){
   const box=$('wa-notes');if(!box)return;
+  const n=$('wa-notas-n');if(n){n.textContent=E.notes.length||'';n.hidden=!E.notes.length;}
   box.innerHTML=E.notes.length?`<ul class="wa-notas">${E.notes.map(n=>`<li class="wa-nota"><p>${escape(n.body)}</p>
     <span class="wa-muted">${escape(cuandoLargo(n.created_at))}${n.follow_up_date?' · seguimiento: '+escape(corta(n.follow_up_date)):''}</span></li>`).join('')}</ul>`+
     (E.notes.length===100?'<p class="wa-nota-pie">Se muestran las últimas 100 notas.</p>':''):'';
@@ -391,6 +436,70 @@ async function guardarNota(event){
     field.value='';await loadNotes();
   }finally{E.noteBusy=false;button.disabled=false;}
 }
+// Acciones de la ficha que necesitan datos (las de navegación están en shell)
+async function reclamoGuardar(boton){
+  const c=contact();if(!c || E.noteBusy)return;
+  const r=analisis(segDe(c,{pedidos:9999})), tema=r && r.temas.find(t=>t.clave==='reclamo');if(!tema)return;
+  E.noteBusy=true;boton.disabled=true;
+  try{
+    const {error}=await DB.notas.agregar(c.contact_key,PREFIJO_PROXIMO+obsReclamo(tema));
+    if(error){handleError(error);return;}
+    await Promise.all([loadNotes(),cargarVinculos(true)]);E.fichaHtml='';drawFichaDatos();
+  }finally{E.noteBusy=false;boton.disabled=false;}
+}
+function reclamoEnPedido(id){
+  const c=contact(), r=analisis(segDe(c,{pedidos:9999})), tema=r && r.temas.find(t=>t.clave==='reclamo');
+  if(!tema || typeof openPedidoEdit!=='function')return;
+  openPedidoEdit(id);
+  const notas=$('p_notas'), obs=obsReclamo(tema);
+  if(notas && !notas.value.includes(obs)){notas.value=(notas.value.trim()?notas.value.trim()+'\n':'')+obs;}
+  if(typeof setExtrasOpen==='function')setExtrasOpen('p',true);
+  notas?.focus();
+}
+
+// ── Clientes conectados con WhatsApp: a quién se le escribió y qué quedó anotado para el próximo pedido ──
+// Una lectura liviana de los contactos vinculados (último mensaje enviado y recibido) y de las notas «Para el próximo pedido».
+// La usan la pestaña Clientes («Le escribimos hoy» en Para hoy) y Cargar Pedido (lo anotado aparece al elegir el cliente).
+const PREFIJO_PROXIMO='Para el próximo pedido: ';
+const V={ts:0,cargando:null,porNombre:new Map(),recs:[]};
+async function cargarVinculos(forzar){
+  if(V.cargando)return V.cargando;
+  if(!forzar && V.ts && Date.now()-V.ts<60000)return;
+  V.cargando=(async()=>{
+    try{
+      const [a,b]=await Promise.all([DB.vinculos(),DB.recordatorios()]);
+      if(a.error || b.error)return;   // sin acceso a WhatsApp: no se muestra nada, sin error
+      const m=new Map(), clave=new Map();
+      (a.data||[]).forEach(x=>{const k=normN(x.linked_client_name);clave.set(x.contact_key,k);
+        const v=m.get(k)||{out:null,in:null};if(x.last_outbound_at && (!v.out || x.last_outbound_at>v.out))v.out=x.last_outbound_at;
+        if(x.last_inbound_at && (!v.in || x.last_inbound_at>v.in))v.in=x.last_inbound_at;m.set(k,v);});
+      V.porNombre=m;
+      V.recs=(b.data||[]).filter(x=>clave.has(x.contact_key) && String(x.body).startsWith(PREFIJO_PROXIMO))
+        .map(x=>({k:clave.get(x.contact_key),obs:String(x.body).slice(PREFIJO_PROXIMO.length),desde:dia(x.created_at),creado:x.created_at}));
+      V.ts=Date.now();
+      document.dispatchEvent(new CustomEvent('wa:vinculos'));
+    }catch(e){/* sin conexión: se reintenta la próxima vez */}
+    finally{V.cargando=null;}
+  })();
+  return V.cargando;
+}
+// Fecha del último mensaje que le mandamos, si fue después de su último pedido (ultimo = 'AAAA-MM-DD').
+function contactado(nombre,ultimo){const v=V.porNombre.get(normN(nombre));return v && v.out && dia(v.out)>String(ultimo||'')?v.out:null;}
+// Lo guardado «para el próximo pedido» que todavía no quedó en ningún pedido cargado desde ese día.
+function recordatoriosDe(nombre){
+  const k=normN(nombre);if(!k)return [];
+  const peds=((typeof state!=='undefined' && state.pedidos)||[]).filter(p=>normN(p.cliente)===k && p.estado!=='Cancelado');
+  const vistos=new Set();
+  return V.recs.filter(r=>r.k===k && !vistos.has(r.obs) && vistos.add(r.obs) && !peds.some(p=>String(p.fecha).slice(0,10)>=r.desde && String(p.notas||'').includes(r.obs)));
+}
+// Productos nombrados en el chat abierto, con el nombre exacto del catálogo (el que el cliente compra, si lo compró).
+function productosDelChat(){
+  const c=contact();if(!c)return [];
+  const s=segDe(c,{sinCargar:true}), r=analisis(s);if(!r)return [];
+  const compra=new Set(s && s.estado==='ok'?s.c.productos.map(p=>normN(p.nombre)):[]);
+  return r.productos.map(p=>{const n=p.nombres.find(x=>compra.has(normN(x))) || p.nombres.slice().sort((a,b)=>a.length-b.length)[0];return {prod:n,nombre:p.nombre,frase:p.frase};});
+}
+document.addEventListener('wa:vinculos',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp')drawFichaDatos();});
 document.addEventListener('seg:actualizado',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp'){renderContacts();drawCabecera();drawFichaDatos();}});
 
 async function selectContact(key){
@@ -444,6 +553,7 @@ async function open(client=null){
   $('wa-mas').hidden=!permissions.manage;
   $('wa-review-clients').hidden=!permissions.manage;
   status('');
+  cargarVinculos();
   Seg()?.asegurar();   // pide el historial de Clientes (si hace falta) para los estados de la lista y la ficha
   await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);
@@ -526,5 +636,5 @@ if(!window.WhatsAppPrueba)sb.auth.onAuthStateChange(event=>{
     if($('wa-ficha'))$('wa-ficha').innerHTML='';
   }
 });
-window.WhatsAppUI={refresh:()=>refresh().catch(handleError),open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
+window.WhatsAppUI={cargarVinculos,contactado,recordatoriosDe,refresh:()=>refresh().catch(handleError),open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
 })();

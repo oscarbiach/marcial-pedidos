@@ -67,7 +67,7 @@
       const pregunta = PREGUNTA.test(texto) || /\?/.test(m.content);
       fams.forEach(f => {
         if (!nombra(f, set)) return;
-        const p = prods.get(f.clave) || { clave: f.clave, nombre: f.nombre, veces: 0, ultima: m.occurred_at, frase: frase(m.content), pregunta: false };
+        const p = prods.get(f.clave) || { clave: f.clave, nombre: f.nombre, nombres: f.nombres.slice(), veces: 0, ultima: m.occurred_at, frase: frase(m.content), pregunta: false };
         p.veces++; if (pregunta) p.pregunta = true; prods.set(f.clave, p);
       });
       TEMAS.forEach(t => {
