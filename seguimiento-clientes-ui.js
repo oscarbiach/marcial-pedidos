@@ -80,8 +80,8 @@
     const vence = setTimeout(() => { if (E.cargando && E.ts === antes) { E.cargando = false; E.error = true; render(); } }, 20000);
     // El historial llega entero o no llega (la consulta falla si se corta una página): nunca se calcula con una parte.
     google.script.run
-      .withSuccessHandler(extra => { clearTimeout(vence); E.historial = Array.isArray(extra) ? extra : []; E.ts = Date.now(); E.cargando = false; E.error = false; E.huella = ''; render(); })
-      .withFailureHandler(() => { clearTimeout(vence); E.cargando = false; E.error = true; render(); })
+      .withSuccessHandler(extra => { clearTimeout(vence); E.historial = Array.isArray(extra) ? extra : []; E.ts = Date.now(); E.cargando = false; E.error = false; E.huella = ''; render(); avisar(); })
+      .withFailureHandler(() => { clearTimeout(vence); E.cargando = false; E.error = true; render(); avisar(); })
       .historialAntiguo();
   }
   // Quién ve la pestaña: solo los de CONFIG.usuarios. Es solo de interfaz (la base deja leer los pedidos a cualquier sesión con PIN válido).
@@ -95,6 +95,8 @@
   function abrir() {
     if (!$('sc-raiz') || !aplicarAcceso()) return;
     E.q = ''; E.vista = 'hoy'; E.filtroPausa = 'todas'; E.sel = null; E.fichaAbierta = false; E.aviso = null;   // al entrar siempre se ve la lista del día, no una búsqueda ni una ficha vieja
+    // Salvo que se llegue desde WhatsApp con «Ver ficha completa»: entonces se abre la ficha de ese cliente.
+    if (E.abrirCon) { E.vista = 'clientes'; E.sel = E.abrirCon; E.fichaAbierta = true; E.abrirCon = null; }
     if (!E.historial || Date.now() - E.ts > VIEJO_MS) pedirHistorial(); else render();
     cargarDatos();
   }
@@ -129,7 +131,44 @@
     else E.datos = { estado: r.estado, decisiones: [], reglas: [], ts: Date.now(), ultimoOk: 0, cargando: false, error: false, mensaje: r.mensaje || '' };
     E.huella = '';
     if (E.vista === 'pausa' && !datosOk()) E.vista = 'hoy';
-    render();
+    render(); avisar();
+  }
+
+  // ── Para WhatsApp (whatsapp-inbox.js) ──
+  // Al lado de cada chat se muestra el mismo cálculo que en esta pestaña: estado, avisos y últimos pedidos del cliente vinculado.
+  // Cuando llega el historial o las decisiones se avisa con un evento, para que WhatsApp se redibuje sin consultar nada por su cuenta.
+  const avisar = () => document.dispatchEvent(new CustomEvent('seg:actualizado'));
+  function asegurar() {
+    if (!E.cargando && (!E.historial ? !E.error : Date.now() - E.ts > VIEJO_MS)) pedirHistorial();
+    if (E.datos.estado === 'pendiente' && !E.datos.cargando) cargarDatos(true);
+  }
+  function buscarCliente(nombre) {
+    const calc = recalcular(), k = S.norm(nombre);
+    let c = calc.clientes.find(x => x.clave === k);
+    if (!c) {   // un nombre corto unificado con «<nombre> - <negocio>» (CONFIG.unificar): se lo busca por sus pedidos
+      const p = mezclar().find(x => S.norm(x.cliente) === k);
+      if (p) c = calc.clientes.find(x => x.pedidoIds.includes(String(p.id)));
+    }
+    return c || null;
+  }
+  // { estado: 'cargando' | 'error' | 'sinpedidos' | 'ok', c, insignia: [texto, ícono, tono], pedidos (los últimos, del más nuevo al más viejo) }
+  function contexto(nombre, opciones) {
+    if (!nombre) return { estado: 'sinpedidos' };
+    if (!(opciones && opciones.sinCargar)) asegurar();
+    if (!E.historial) return { estado: E.error ? 'error' : 'cargando' };
+    const c = buscarCliente(nombre);
+    if (!c) return { estado: 'sinpedidos' };
+    const r = { estado: 'ok', c, insignia: estado(c), alDia: c.bloque === 'notocar', pausaRevisar: !!(c.manual && c.manual.revisar) };
+    if (opciones && opciones.pedidos) {
+      const ids = new Set(c.pedidoIds);
+      r.pedidos = mezclar().filter(p => ids.has(String(p.id))).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, opciones.pedidos);
+    }
+    return r;
+  }
+  function verCliente(nombre) {
+    const c = E.historial && buscarCliente(nombre);
+    E.abrirCon = c ? c.clave : null;
+    if (typeof setTab === 'function') setTab('clientes');
   }
 
   // «Atender» y «Recuperación» vuelven solos a automático cuando el cliente pide de nuevo (decisión del usuario, 13/10). El motor ya lo muestra así;
@@ -844,7 +883,7 @@
   document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sc-q') { E.q = ev.target.value; renderBusqueda(); } });
 
   window.SegUI = {
-    abrir, render, aplicarAcceso, puedeVer, pedirHistorial, cargarDatos,
+    abrir, render, aplicarAcceso, puedeVer, pedirHistorial, cargarDatos, contexto, verCliente, asegurar,
     alRefrescar() {
       if (pestana() !== 'clientes') return;
       render();

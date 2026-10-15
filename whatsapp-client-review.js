@@ -8,7 +8,8 @@ const shortDate=value=>value?new Date(value+'T12:00:00').toLocaleDateString('es-
 function message(value,error=false){const e=$('wa-review-status');if(e){e.textContent=value;e.classList.toggle('wa-error',error);}}
 function failure(error){message(error.code==='57014'?'La consulta tardó demasiado. Instalá el SQL de optimización de vínculos y volvé a intentar.':error.code==='PGRST202'?
  'Falta instalar el SQL de vinculación de clientes en Supabase.':error.message || String(error),true);}
-async function rpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw error;return data;}
+// En modo prueba (sandbox-whatsapp.js) las consultas se resuelven en memoria, sin tocar la red.
+async function rpc(name,args){const {data,error}=await (window.WhatsAppPrueba || sb).rpc(name,args);if(error)throw error;return data;}
 function shell(){
  const panel=$('wa-review-panel');if(!panel)return;
  panel.innerHTML='<div class="wa-review-top"><h3>Vincular clientes con WhatsApp</h3><button type="button" id="wa-review-close">Volver a conversaciones</button></div>'+
@@ -101,6 +102,6 @@ async function open(){
  message('Revisá un cliente o tocá Vincular coincidencias exactas de activos.');
  await load();
 }
-sb.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){R.generation++;R.client=null;R.candidates=[];const panel=$('wa-review-panel');if(panel){panel.hidden=true;panel.innerHTML='';}}});
+if(!window.WhatsAppPrueba)sb.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){R.generation++;R.client=null;R.candidates=[];const panel=$('wa-review-panel');if(panel){panel.hidden=true;panel.innerHTML='';}}});
 window.WhatsAppClientReview={open:()=>open().catch(failure)};
 })();

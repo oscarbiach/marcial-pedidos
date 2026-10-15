@@ -1537,7 +1537,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="pedidos" onclick="goTab('pedidos')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg>Pedidos</button>
       <button data-tab="reparto" onclick="goTab('reparto')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg>Reparto</button>
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
-      <button data-tab="whatsapp" onclick="goTab('whatsapp')">WhatsApp</button>
+      <button data-tab="whatsapp" onclick="goTab('whatsapp')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg>WhatsApp</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1684,7 +1684,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="pedidos" class="bn-item" onclick="goTab('pedidos')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-shopping-cart"/></svg></span>Pedidos</button>
     <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg></span>Reparto</button>
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
-    <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span>☏</span>WhatsApp</button>
+    <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg></span>WhatsApp</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -6157,6 +6157,7 @@ function abrirInstalar() {
   document.getElementById('instalarModal').classList.add('open');
 }
 </script>
+<script src="whatsapp-temas.js"></script>
 <script src="whatsapp-agenda.js"></script>
 <script src="whatsapp-inbox.js"></script>
 <script src="whatsapp-client-review.js"></script>
