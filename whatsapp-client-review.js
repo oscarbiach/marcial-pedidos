@@ -6,7 +6,7 @@ const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const shortDate=value=>value?new Date(value+'T12:00:00').toLocaleDateString('es-AR'):'Sin pedidos';
 function message(value,error=false){const e=$('wa-review-status');if(e){e.textContent=value;e.classList.toggle('wa-error',error);}}
-function failure(error){message(error.code==='PGRST202'?
+function failure(error){message(error.code==='57014'?'La consulta tardó demasiado. Instalá el SQL de optimización de vínculos y volvé a intentar.':error.code==='PGRST202'?
  'Falta instalar el SQL de vinculación de clientes en Supabase.':error.message || String(error),true);}
 async function rpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw error;return data;}
 function shell(){
@@ -97,8 +97,9 @@ async function defer(){
 async function open(){
  shell();$('wa-review-panel').hidden=false;$('wa-layout').hidden=true;
  R.active=true;R.deferred=false;$('wa-review-scope').value='active';
- // The user requested automatic exact matches, followed by individual review.
- await autoLink();
+ // Loading the review is read-only. Exact linking runs from its explicit button.
+ message('Revisá un cliente o tocá Vincular coincidencias exactas de activos.');
+ await load();
 }
 sb.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){R.generation++;R.client=null;R.candidates=[];const panel=$('wa-review-panel');if(panel){panel.hidden=true;panel.innerHTML='';}}});
 window.WhatsAppClientReview={open:()=>open().catch(failure)};
