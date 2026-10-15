@@ -249,7 +249,8 @@ function updateComposer(){
     E.sendBusy?'Enviando…':'';
   $('wa-send-help').innerHTML+=!E.sendBusy && !E.sendRequest?.uncertain && within && E.permissions?.send?'<span class="wa-atajo">Ctrl + Enter para enviar</span>':'';
 }
-const TIPOS={image:['Foto','eye'],audio:['Audio','message-circle'],voice:['Audio','message-circle'],video:['Video','eye'],document:['Archivo','file-text'],sticker:['Sticker','star'],location:['Ubicación','map-pin'],contacts:['Contacto','user'],reaction:['Reacción','star']};
+const TIPOS={image:['Foto','eye'],audio:['Audio','message-circle'],voice:['Audio','message-circle'],video:['Video','eye'],document:['Archivo','file-text'],sticker:['Sticker','star'],location:['Ubicación','map-pin'],contacts:['Contacto compartido','user'],order:['Pedido del catálogo','shopping-cart'],
+  media_placeholder:['Foto, audio o archivo del historial','clock'],errors:['Mensaje que WhatsApp no deja ver acá','circle-alert'],unsupported:['Mensaje que WhatsApp no deja ver acá','circle-alert']};
 const ESTADOS={accepted:['Aceptado','✓'],sent:['Enviado','✓'],delivered:['Entregado','✓✓'],read:['Leído','✓✓'],failed:['No entregado','!']};
 // Resalta en el mensaje las palabras que nombran un producto del catálogo (mismo criterio que la ficha).
 function resaltar(texto){
@@ -257,18 +258,50 @@ function resaltar(texto){
   const marcar=t.palabrasProducto(texto,cat);if(!marcar.size)return escape(texto);
   return String(texto).split(/(\s+)/).map(w=>{const n=t.raizDe(t.norm(w));return n && marcar.has(n)?`<mark class="wa-prod">${escape(w)}</mark>`:escape(w);}).join('');
 }
+// Ediciones, reacciones y mensajes borrados llegan como mensajes aparte que apuntan al original (raw_payload):
+// se aplican sobre el original (texto nuevo + «Editado», emoji abajo, «Lo eliminó») y no se muestran sueltos si el original está en pantalla.
+const cuerpoDe=m=>(m.raw_payload && m.raw_payload.message) || {};
+function preparar(msgs){
+  const ids=new Set(msgs.map(m=>m.whatsapp_message_id)), ed=new Map(), rx=new Map(), borrado=new Set(), ocultos=new Set();
+  msgs.forEach(m=>{
+    const c=cuerpoDe(m);
+    if(m.message_type==='edit'){const o=c.edit && c.edit.original_message_id, txt=(c.edit && c.edit.message && c.edit.message.text && c.edit.message.text.body) || m.content;
+      if(o && ids.has(o)){ed.set(o,txt);ocultos.add(m.whatsapp_message_id);}}
+    else if(m.message_type==='reaction'){const o=c.reaction && c.reaction.message_id, e=c.reaction && c.reaction.emoji;
+      if(o && ids.has(o)){const l=rx.get(o)||new Map();if(e)l.set(m.direction,e);else l.delete(m.direction);rx.set(o,l);ocultos.add(m.whatsapp_message_id);}}
+    else if(m.message_type==='revoke'){const o=c.revoke && c.revoke.original_message_id;if(o && ids.has(o)){borrado.add(o);ocultos.add(m.whatsapp_message_id);}}
+  });
+  return {ed,rx,borrado,ocultos};
+}
+// Lo que se muestra de cada tipo de mensaje: etiqueta (ícono + texto) y texto (el del mensaje, el pie de la foto o el nombre del archivo).
+function contenidoDe(m,prep){
+  const c=cuerpoDe(m), x=c[m.message_type] || {};
+  if(m.message_type==='edit')return {tag:['Editado','square-pen'],texto:(x.message && x.message.text && x.message.text.body) || m.content};
+  if(m.message_type==='reaction')return {tag:null,texto:x.emoji?'Reaccionó '+x.emoji+' a un mensaje':'Sacó una reacción'};
+  if(m.message_type==='revoke')return {tag:['Eliminó un mensaje','ban'],texto:''};
+  if(m.message_type==='contacts'){const n=(c.contacts || []).map(k=>k.name && (k.name.formatted_name || k.name.first_name)).filter(Boolean).join(', ');return {tag:TIPOS.contacts,texto:n};}
+  if(m.message_type==='location')return {tag:TIPOS.location,texto:[x.name,x.address].filter(Boolean).join(' · ')};
+  if(m.message_type==='document')return {tag:TIPOS.document,texto:[x.filename,m.content].filter(Boolean).join(' — ')};
+  const tag=m.message_type!=='text'?(TIPOS[m.message_type] || ['Mensaje','file-text']):null;
+  return {tag,texto:prep.ed.has(m.whatsapp_message_id)?prep.ed.get(m.whatsapp_message_id):m.content};
+}
 function renderMessages(initial=false){
   const pane=$('wa-messages'), lista=$('wa-burbujas');if(!pane || !lista)return;
   const nearBottom=pane.scrollHeight-pane.scrollTop-pane.clientHeight<100, previousHeight=pane.scrollHeight;
+  const prep=preparar(E.messages);
   let ultimoDia='';
-  lista.innerHTML=E.messages.map(m=>{
+  lista.innerHTML=E.messages.filter(m=>!prep.ocultos.has(m.whatsapp_message_id)).map(m=>{
     const d=dia(m.occurred_at), sep=d!==ultimoDia?`<p class="wa-dia"><span>${escape(separador(m.occurred_at))}</span></p>`:'';ultimoDia=d;
-    const tipo=m.message_type!=='text'?TIPOS[m.message_type] || [m.message_type,'file-text']:null;
+    const {tag,texto}=contenidoDe(m,prep), id=m.whatsapp_message_id;
+    const editado=prep.ed.has(id), borrado=prep.borrado.has(id), reac=prep.rx.get(id);
     const st=m.direction==='outbound'?ESTADOS[m.message_status]:null;
-    return sep+`<article class="wa-msg ${m.direction==='outbound'?'wa-out':'wa-in'}">
-      ${tipo?`<span class="wa-adjunto">${ico(tipo[1],'ico-xs')}${escape(tipo[0])}</span>`:''}
-      ${m.content?`<p>${m.direction==='inbound'?resaltar(m.content):escape(m.content)}</p>`:''}
-      <span class="wa-msg-pie">${m.origin==='business_app'?'<span class="wa-origen">desde el celular</span>':''}<time>${escape(hora(m.occurred_at))}</time>${st?`<span class="wa-tilde${m.message_status==='read'?' wa-tilde--leido':''}${m.message_status==='failed'?' wa-tilde--error':''}" title="${escape(st[0])}" aria-label="${escape(st[0])}">${st[1]}</span>`:''}</span></article>`;
+    const sinArchivo=['image','audio','voice','video','document','sticker'].includes(m.message_type);
+    return sep+`<article class="wa-msg ${m.direction==='outbound'?'wa-out':'wa-in'}${borrado?' wa-msg--borrado':''}${m.message_type==='reaction'?' wa-msg--reac':''}" data-id="${escape(id)}">
+      ${borrado?`<span class="wa-adjunto wa-adjunto--borrado">${ico('ban','ico-xs')}Lo eliminó del chat</span>`:''}
+      ${tag?`<span class="wa-adjunto${m.message_type==='media_placeholder' || tag===TIPOS.errors?' wa-adjunto--gris':''}"${m.message_type==='media_placeholder'?' title="WhatsApp no comparte las fotos, audios ni archivos de los chats viejos importados"':sinArchivo?' title="Por ahora se abre en WhatsApp Business"':''}>${ico(tag[1],'ico-xs')}${escape(tag[0])}</span>`:''}
+      ${texto?`<p>${m.direction==='inbound'?resaltar(texto):escape(texto)}</p>`:''}
+      <span class="wa-msg-pie">${editado || m.message_type==='edit'?'<span class="wa-origen">editado</span>':''}${m.origin==='business_app'?'<span class="wa-origen">desde el celular</span>':''}<time>${escape(hora(m.occurred_at))}</time>${st?`<span class="wa-tilde${m.message_status==='read'?' wa-tilde--leido':''}${m.message_status==='failed'?' wa-tilde--error':''}" title="${escape(st[0])}" aria-label="${escape(st[0])}">${st[1]}</span>`:''}</span>
+      ${reac && reac.size?`<span class="wa-reac" aria-label="Reacciones">${[...reac.values()].map(e=>escape(e)).join(' ')}</span>`:''}</article>`;
   }).join('') || '<p class="wa-empty">Todavía no hay mensajes guardados.</p>';
   $('wa-older').hidden=!E.messageMore;
   if(initial || nearBottom)pane.scrollTop=pane.scrollHeight;

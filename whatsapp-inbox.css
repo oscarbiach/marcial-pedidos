@@ -406,3 +406,12 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 /* Ventana de PC angosta (768–1099 px): con la pestaña WhatsApp la barra de arriba no entraba y el botón del usuario quedaba fuera de la
    pantalla. En ese rango el menú muestra solo los íconos (el nombre sigue siendo el texto accesible del botón). */
 @media(min-width:768px) and (max-width:1099.98px){#pcNav button{font-size:0;gap:0;padding:0 12px}#pcNav button .ico{width:19px;height:19px}}
+/* Ediciones, reacciones, borrados y archivos */
+.wa-msg{position:relative}
+.wa-reac{position:absolute;bottom:-11px;right:10px;padding:1px 6px;border-radius:999px;background:#2A4566;border:1px solid #0E2038;font-size:13px;line-height:18px}
+.wa-msg:has(.wa-reac){margin-bottom:16px}
+.wa-msg--borrado p{opacity:.6;text-decoration:line-through;text-decoration-thickness:1px}
+.wa-adjunto--borrado{background:rgba(240,96,110,.18);color:#FFA3AC}
+.wa-adjunto--gris{background:rgba(255,255,255,.05);color:var(--m-tinta-3)}
+.wa-msg--reac{background:transparent;box-shadow:none;padding:2px 6px}
+.wa-msg--reac p{font-size:13px;color:var(--m-tinta-3)}
