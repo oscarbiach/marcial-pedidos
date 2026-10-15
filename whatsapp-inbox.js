@@ -5,7 +5,7 @@
    El vínculo con un cliente ya no se edita acá: se hace en «Vincular clientes». Las notas siguen, más simples (sin fecha). */
 (function(){
 'use strict';
-const E={permissions:null,contacts:[],selected:null,messages:[],notes:[],filtro:'todos',vista:'lista',
+const E={marcados:new Set(),permissions:null,contacts:[],selected:null,messages:[],notes:[],filtro:'todos',vista:'lista',
   query:'',client:null,listMore:false,messageMore:false,loading:false,generation:0,noteBusy:false,
   sendBusy:false,sendRequest:null,syncBusy:false,syncPaused:false,agendaBusy:false,namesBusy:false,namesPaused:false,namesCursor:null,namesCounts:{processed:0,named:0,matched:0,filled:0}};
 const $=id=>document.getElementById(id);
@@ -23,6 +23,8 @@ const DB=window.WhatsAppPrueba || {
   recordatorios:()=>sb.from('whatsapp_notes').select('contact_key,body,created_at').like('body','Para el próximo pedido: %').order('created_at',{ascending:false}).limit(300),
   api:realApi,
   media:realMedia,
+  // Chats marcados «no leído» a mano (columna marked_unread). Sin la columna instalada devuelve error y no se marca nada.
+  marcados:()=>sb.from('whatsapp_contacts').select('contact_key').eq('marked_unread',true).limit(1000),
 };
 
 // ── Fechas ──
@@ -82,6 +84,8 @@ async function realMedia(id){
 // Estado del cliente vinculado según Clientes (seguimiento). Sin pedir el historial: eso lo hace la ficha.
 function segDe(c,opciones){const S=Seg();return S && c.linked_client_name?S.contexto(c.linked_client_name,opciones):null;}
 const PARA_HOY=new Set(['atender','alta','semana','recuperacion','unica']);
+// Sin leer: tiene mensajes nuevos o alguien lo marcó «no leído» (clic derecho), como en WhatsApp Business. Solo en la app.
+const sinLeer=c=>Number(c.unread_count)>0 || E.marcados.has(c.contact_key);
 // «Espera respuesta»: el último mensaje es del cliente y nadie le contestó todavía (ni desde la app ni desde el celular).
 function espera(c){return c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at>c.last_outbound_at)?Date.now()-new Date(c.last_inbound_at).getTime():null;}
 function pillEspera(c){
@@ -168,7 +172,7 @@ function mostrar(vista){E.vista=vista;const l=$('wa-layout');if(!l)return;l.data
 // ── Lista ──
 const FILTROS=[['todos','Todos',''],['sinresp','Sin responder','error'],['sinleer','Sin leer','ok'],['hoy','Para hoy','aviso'],['sinvincular','Sin vincular','gris']];
 function pasa(c,f){
-  if(f==='sinleer')return Number(c.unread_count)>0;
+  if(f==='sinleer')return sinLeer(c);
   if(f==='sinvincular')return !c.linked_client_name;
   if(f==='sinresp')return espera(c)!==null;
   if(f==='hoy'){const s=segDe(c,{sinCargar:true});return !!(s && s.estado==='ok' && (PARA_HOY.has(s.c.bloque) || s.pausaRevisar));}
@@ -183,13 +187,13 @@ function renderContacts(){
   renderFiltros();
   const lista=E.contacts.filter(c=>pasa(c,E.filtro));
   $('wa-contacts').innerHTML=lista.map(c=>{
-    const n=Number(c.unread_count)||0, sale=c.last_outbound_at && c.last_outbound_at===c.last_message_at;
+    const n=Number(c.unread_count)||0, marcado=!n && E.marcados.has(c.contact_key), sale=c.last_outbound_at && c.last_outbound_at===c.last_message_at;
     const sub=c.linked_client_name && c.display_name && c.display_name!==c.linked_client_name?c.display_name:formatoTel(c.phone_number);
-    return `<button type="button" class="wa-contact${c.contact_key===E.selected?' on':''}${n?' wa-contact--nuevo':''}"
+    return `<button type="button" class="wa-contact${c.contact_key===E.selected?' on':''}${n || marcado?' wa-contact--nuevo':''}"
     data-wa-contact="${escape(c.contact_key)}" aria-current="${c.contact_key===E.selected}">
     ${avatar(c)}<span class="wa-c-cuerpo">
       <span class="wa-c-1"><span class="wa-c-nom">${escape(title(c))}</span><span class="wa-c-hora">${escape(cuando(c.last_message_at))}</span></span>
-      <span class="wa-c-2"><span class="wa-preview">${sale?'<span class="wa-vos">Vos:</span> ':''}${escape(c.last_content || 'Foto, audio o archivo')}</span>${n?`<span class="wa-badge" aria-label="${n} sin leer">${n}</span>`:''}</span>
+      <span class="wa-c-2"><span class="wa-preview">${sale?'<span class="wa-vos">Vos:</span> ':''}${escape(c.last_content || 'Foto, audio o archivo')}</span>${n?`<span class="wa-badge" aria-label="${n} sin leer">${n}</span>`:marcado?'<span class="wa-badge wa-badge--punto" role="img" aria-label="Marcado como no leído"></span>':''}</span>
       <span class="wa-c-3">${pillEspera(c)}${pillCliente(c)}${sub && espera(c)===null?`<span class="wa-c-sub">${escape(sub)}</span>`:''}</span>
     </span></button>`;}).join('') ||
     `<p class="wa-empty">${E.contacts.length?'No hay conversaciones con este filtro.':'No hay conversaciones en esta búsqueda. Si es la primera vez, importá el historial desde «Importar».'}</p>`;
@@ -201,7 +205,10 @@ async function loadContacts(append=false){
   if(error)throw error;
   if(query!==E.query || client!==E.client)return;
   E.contacts=append?E.contacts.concat(data.filter(c=>!E.contacts.some(x=>x.contact_key===c.contact_key))):data;
-  E.listMore=data.length===100;renderContacts();
+  E.listMore=data.length===100;
+  const m=await DB.marcados().catch(()=>({error:true}));
+  if(m && !m.error)E.marcados=new Set((m.data||[]).map(x=>x.contact_key));
+  renderContacts();
   const current=E.contacts.find(c=>c.contact_key===E.selected);if(current){E.selectedContact=current;drawCabecera();}
 }
 
@@ -603,9 +610,49 @@ function productosDelChat(){
 document.addEventListener('wa:vinculos',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp')drawFichaDatos();});
 document.addEventListener('seg:actualizado',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp'){renderContacts();drawCabecera();drawFichaDatos();}});
 
+// ── Clic derecho en un chat: «Marcar como no leído» / «Marcar como leído» (solo en la app; WhatsApp no se entera) ──
+function cerrarMenuChat(){const m=$('wa-ctx');if(m)m.remove();}
+function abrirMenuChat(event,boton){
+  cerrarMenuChat();
+  const key=boton.dataset.waContact, c=E.contacts.find(x=>x.contact_key===key);if(!c)return;
+  const leido=!sinLeer(c);
+  const m=document.createElement('div');m.id='wa-ctx';m.className='wa-ctx';m.setAttribute('role','menu');
+  m.innerHTML=`<button type="button" role="menuitem" data-ctx="${leido?'no-leido':'leido'}">${ico(leido?'message-circle':'check')}${leido?'Marcar como no leído':'Marcar como leído'}</button>`;
+  $('wa-raiz').appendChild(m);E.menuDesde=Date.now();
+  // Con el mouse, donde se hizo clic; con teclado (tecla de menú o Shift+F10), debajo del chat.
+  const r=boton.getBoundingClientRect(), x=event.clientX || r.left+24, y=event.clientY || r.top+r.height/2;
+  const w=m.offsetWidth, h=m.offsetHeight;
+  m.style.left=Math.min(x,innerWidth-w-8)+'px';m.style.top=Math.min(y,innerHeight-h-8)+'px';
+  m.querySelector('button').focus();
+  m.querySelector('button').onclick=()=>{cerrarMenuChat();marcarChat(key,leido).catch(handleError);boton.focus();};
+}
+async function marcarChat(key,noLeido){
+  if(E.marcando)return;E.marcando=true;
+  try{
+    const {error}=noLeido?await DB.rpc('wa_mark_unread',{p_contact:key,p_value:true}):await DB.rpc('wa_mark_seen',{p_contact:key});
+    if(error){if(error.code==='PGRST202')throw new Error('Falta instalar «marcar como no leído» en Supabase.');throw error;}
+    if(noLeido){
+      E.marcados.add(key);
+      // Igual que WhatsApp: el chat marcado se cierra (si quedara abierto, se volvería a marcar leído enseguida).
+      if(E.selected===key){E.selected=null;E.selectedContact=null;E.generation++;E.messages=[];E.notes=[];$('wa-thread').innerHTML=vacioThread();drawFicha();mostrar('lista');}
+    }else E.marcados.delete(key);
+    await loadContacts();
+  }finally{E.marcando=false;}
+}
+document.addEventListener('contextmenu',event=>{
+  const b=event.target.closest && event.target.closest('#wa-contacts [data-wa-contact]');
+  if(!b){cerrarMenuChat();return;}
+  event.preventDefault();abrirMenuChat(event,b);
+});
+document.addEventListener('pointerdown',event=>{if(!event.target.closest('#wa-ctx'))cerrarMenuChat();},true);
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && $('wa-ctx')){cerrarMenuChat();}});
+window.addEventListener('resize',cerrarMenuChat);
+// Un desplazamiento lo cierra, salvo el que hace el propio navegador al abrirlo (para mostrar el chat).
+document.addEventListener('scroll',()=>{if(Date.now()-(E.menuDesde||0)>250)cerrarMenuChat();},true);
 async function selectContact(key){
   if(E.sendBusy){status('Esperá a que termine el envío antes de cambiar de contacto.',true);return;}
   if(E.selected && E.selected!==key && $('wa-draft')?.value.trim() && !confirm('Hay una respuesta sin enviar. ¿Cambiar de contacto y descartarla?'))return;
+  E.marcados.delete(key);
   E.selected=key;E.selectedContact=E.contacts.find(c=>c.contact_key===key);E.generation++;E.messages=[];E.notes=[];E.sendRequest=null;
   drawThread();drawFicha();renderContacts();mostrar('chat');
   await Promise.all([loadMessages(),loadNotes()]);
@@ -664,13 +711,13 @@ async function open(client=null){
 // Marca como leídos todos los chats de una vez (con confirmación). Es lo mismo que abrir cada uno: no borra ni cambia mensajes.
 async function leerTodo(){
   if(E.leyendoTodo)return;
-  const n=E.contacts.filter(c=>Number(c.unread_count)>0).length;
+  const n=E.contacts.filter(sinLeer).length;
   if(!confirm(n?`¿Marcar como leídos los ${n} chats con mensajes sin leer?`:'¿Marcar todos los chats como leídos?'))return;
   E.leyendoTodo=true;$('wa-leer-todo').disabled=true;
   try{
     const {data,error}=await DB.rpc('wa_mark_all_seen');
     if(error){if(error.code==='PGRST202')throw new Error('Falta instalar la función de «marcar todo como leído» en Supabase.');throw error;}
-    await loadContacts();
+    E.marcados=new Set();await loadContacts();
     status(Number(data)?`Listo: ${Number(data)} ${Number(data)===1?'chat marcado':'chats marcados'} como leídos.`:'No había chats sin leer.');
   }finally{E.leyendoTodo=false;$('wa-leer-todo').disabled=false;}
 }
