@@ -144,3 +144,9 @@ En WhatsApp, Oscar/Joaquín pueden tocar Vincular clientes. Al abrir, se vincula
 Activos: último pedido válido en los últimos 150 días. Se excluyen cancelados, eliminados, futuros y cuentas de prueba/muestra/evento. Se respetan los tres alias históricos ya confirmados en seguimiento.
 La pantalla muestra un cliente, dirección, fecha y cantidad de pedidos y contactos sugeridos. Vincular este número confirma; Dejar pendiente lo guarda en Pospuestos. Se puede buscar por nombre o teléfono. Los vínculos existentes se conservan; para corregirlos se usa Cliente asociado y notas dentro de la conversación.
 El vínculo utiliza el nombre del cliente, como las fichas existentes; no agrega teléfonos a clientes ni altera pedidos. Las coincidencias exactas son coincidencias de nombre, no una verificación externa de identidad.
+
+
+## Corrección de timeout al vincular clientes
+Ejecutar supabase/migrations/20261015_whatsapp_link_performance.sql sobre la instalación existente. Reemplaza las consultas de lectura y coincidencias exactas, conserva vínculos y permisos y agrega índices por nombres normalizados. No cambia el tiempo límite de Supabase.
+La pantalla abre primero la revisión sin escribir vínculos; Vincular coincidencias exactas de activos ejecuta el proceso explícitamente.
+La regresión SQL cubre 800 clientes, 32.000 pedidos y 3.200 contactos con un presupuesto de 3 segundos para revisión/vinculación.

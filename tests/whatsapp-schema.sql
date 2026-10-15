@@ -116,6 +116,7 @@ insert into whatsapp_contacts(contact_key,phone_number_id,phone_number,display_n
  ('link:4','link','541100000104','Proveedor No Activo'),
  ('link:5','link','541100000105','Juan');
 \ir ../supabase/migrations/20261014_whatsapp_client_links.sql
+\ir ../supabase/migrations/20261015_whatsapp_link_performance.sql
 set role authenticated;
 select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false);
 do $$ begin
@@ -143,4 +144,30 @@ do $$ declare first_result jsonb; review jsonb; begin
  if wa_client_link_review(false,true)->'client'<>'null'::jsonb then raise exception 'Linked customer remains deferred'; end if;
  if has_table_privilege('authenticated','public.whatsapp_client_review','select') then raise exception 'Private queue exposed'; end if;
 end $$;
+reset role;
+
+-- Representative scale regression: 800 customers, 32,000 orders and 3,200 contacts.
+-- Reuse the production API timeout instead of hiding slow queries with a larger budget.
+insert into clientes(nombre,direccion)
+select 'Rendimiento Cliente '||n,'Dirección de prueba' from generate_series(1,800) n;
+insert into pedidos(id,cliente,fecha,estado)
+select 'perf-'||n||'-'||k,'Rendimiento Cliente '||n,
+ (now() at time zone 'America/Montevideo')::date-(k%30),'Despachado'
+from generate_series(1,800) n cross join generate_series(1,40) k;
+insert into whatsapp_contacts(contact_key,phone_number_id,phone_number,display_name)
+select 'perf:'||n,'perf','5411999'||lpad(n::text,4,'0'),
+ case when n<=800 then 'Rendimiento Cliente '||n else 'Contacto adicional '||n end
+from generate_series(1,3200) n;
+analyze clientes; analyze pedidos; analyze whatsapp_contacts;
+set role authenticated;
+select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false);
+set statement_timeout='3s';
+do $$ declare q jsonb; begin
+ q:=wa_client_link_review(true,false);
+ if (q->>'remaining')::integer<800 then raise exception 'Missing scaled queue'; end if;
+ if (wa_auto_link_exact(true)->>'linked')::integer<>800 then raise exception 'Scaled matching failed'; end if;
+ q:=wa_client_link_review(true,false);
+ if (q->>'remaining')::integer>=800 then raise exception 'Linked rows remain queued'; end if;
+end $$;
+reset statement_timeout;
 reset role;
