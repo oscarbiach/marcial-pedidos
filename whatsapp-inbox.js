@@ -206,7 +206,8 @@ async function loadContacts(append=false){
   if(query!==E.query || client!==E.client)return;
   E.contacts=append?E.contacts.concat(data.filter(c=>!E.contacts.some(x=>x.contact_key===c.contact_key))):data;
   E.listMore=data.length===100;
-  const m=await DB.marcados().catch(()=>({error:true}));
+  // Las consultas de Supabase se pueden esperar pero no son promesas completas (no tienen .catch): se envuelven.
+  const m=await Promise.resolve().then(()=>DB.marcados()).catch(()=>({error:true}));
   if(m && !m.error)E.marcados=new Set((m.data||[]).map(x=>x.contact_key));
   renderContacts();
   const current=E.contacts.find(c=>c.contact_key===E.selected);if(current){E.selectedContact=current;drawCabecera();}
