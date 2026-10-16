@@ -286,7 +286,7 @@ function updateComposer(){
     E.sendBusy?'Enviando…':'';
   $('wa-send-help').innerHTML+=!E.sendBusy && !E.sendRequest?.uncertain && within && E.permissions?.send?'<span class="wa-atajo">Ctrl + Enter para enviar</span>':'';
 }
-const TIPOS={image:['Foto','eye'],audio:['Audio','message-circle'],voice:['Audio','message-circle'],video:['Video','eye'],document:['Archivo','file-text'],sticker:['Sticker','star'],location:['Ubicación','map-pin'],contacts:['Contacto compartido','user'],order:['Pedido del catálogo','shopping-cart'],
+const TIPOS={image:['Foto','eye'],audio:['Audio','play'],voice:['Audio','play'],video:['Video','eye'],document:['Archivo','file-text'],sticker:['Sticker','star'],location:['Ubicación','map-pin'],contacts:['Contacto compartido','user'],order:['Pedido del catálogo','shopping-cart'],
   media_placeholder:['Foto, audio o archivo del historial','clock'],errors:['Mensaje que WhatsApp no deja ver acá','circle-alert'],unsupported:['Mensaje que WhatsApp no deja ver acá','circle-alert']};
 const ESTADOS={accepted:['Aceptado','✓'],sent:['Enviado','✓'],delivered:['Entregado','✓✓'],read:['Leído','✓✓'],failed:['No entregado','!']};
 // Resalta en el mensaje las palabras que nombran un producto del catálogo (mismo criterio que la ficha).
@@ -338,8 +338,9 @@ function archivo(m){
   if(url && t==='document'){const n=(cuerpoDe(m).document || {}).filename || 'archivo';return `<a class="wa-archivo" href="${url}" download="${escape(n)}" target="_blank" rel="noopener">${ico('download','ico-xs')}Abrir ${escape(n)}</a>`;}
   const cargando=MEDIA.pend.has(id);
   const txt=cargando?'Trayendo…':t==='audio'?'Escuchar audio':t==='video'?'Ver video':t==='document'?'Abrir archivo':'Ver foto';
-  const icono=t==='audio'?'message-circle':t==='document'?'file-text':'eye';
-  return `<button type="button" class="wa-archivo${t==='image' || t==='sticker'?' wa-archivo--auto':''}" data-media="${a}"${cargando?' disabled':''}>${ico(icono,'ico-xs')}${escape(txt)}</button>`;
+  const icono=t==='audio' || t==='video'?'play':t==='document'?'file-text':'eye';
+  const play=t==='audio' || t==='video';
+  return `<button type="button" class="wa-archivo${t==='image' || t==='sticker'?' wa-archivo--auto':''}${play?' wa-archivo--play':''}" data-media="${a}"${cargando?' disabled':''}${play?` aria-label="${escape(txt)}"`:''}>${play?`<span class="wa-play" aria-hidden="true">${ico(icono,'ico-xs')}</span>`:ico(icono,'ico-xs')}${escape(txt)}</button>`;
 }
 async function traerArchivo(id){
   if(MEDIA.url.has(id) || MEDIA.pend.has(id))return;
@@ -379,6 +380,7 @@ function renderMessages(initial=false){
   E.firmaMsgs=firma;
   const nearBottom=pane.scrollHeight-pane.scrollTop-pane.clientHeight<100, previousHeight=pane.scrollHeight;
   const prep=preparar(E.messages);
+  const sonando=[...lista.querySelectorAll('audio,video')].find(a=>!a.paused && !a.ended), idSonando=sonando && sonando.closest('[data-id]')?.dataset.id;
   let ultimoDia='';
   lista.innerHTML=E.messages.filter(m=>!prep.ocultos.has(m.whatsapp_message_id)).map(m=>{
     const d=dia(m.occurred_at), sep=d!==ultimoDia?`<p class="wa-dia"><span>${escape(separador(m.occurred_at))}</span></p>`:'';ultimoDia=d;
@@ -394,6 +396,7 @@ function renderMessages(initial=false){
       <span class="wa-msg-pie">${editado || m.message_type==='edit'?'<span class="wa-origen">editado</span>':''}${m.origin==='business_app'?'<span class="wa-origen">desde el celular</span>':''}<time>${escape(hora(m.occurred_at))}</time>${st?`<span class="wa-tilde${m.message_status==='read'?' wa-tilde--leido':''}${m.message_status==='failed'?' wa-tilde--error':''}" title="${escape(st[0])}" aria-label="${escape(st[0])}">${st[1]}</span>`:''}</span>
       ${reac && reac.size?`<span class="wa-reac" aria-label="Reacciones">${[...reac.values()].map(e=>escape(e)).join(' ')}</span>`:''}</article>`;
   }).join('') || '<p class="wa-empty">Todavía no hay mensajes guardados.</p>';
+  if(sonando && idSonando){const nuevo=lista.querySelector(`[data-id="${CSS.escape(idSonando)}"] audio, [data-id="${CSS.escape(idSonando)}"] video`);if(nuevo)nuevo.replaceWith(sonando);}
   $('wa-older').hidden=!E.messageMore;
   observarFotos();
   if(initial || nearBottom)pane.scrollTop=pane.scrollHeight;
@@ -412,7 +415,9 @@ async function loadMessages(older=false){
   E.messages=[...map.values()].sort((a,b)=>a.occurred_at.localeCompare(b.occurred_at) ||
     a.whatsapp_message_id.localeCompare(b.whatsapp_message_id));
   if(older || E.messages.length<=100)E.messageMore=data.length===100;
-  E.prepending=older;renderMessages(!older && E.messages.length===data.length);
+  // Entero solo la primera vez (al abrir el chat). Antes se redibujaba cada 10 s en los chats de hasta 100 mensajes
+  // y eso cortaba el audio que se estaba escuchando.
+  E.prepending=older;renderMessages(!older && antes===0);
   if(E.messages.length!==antes)drawFichaDatos();   // lo detectado en el chat depende de los mensajes
   if(activeTab==='whatsapp' && !document.hidden){
     const {error:seenError}=await DB.rpc('wa_mark_seen',{p_contact:selected});if(seenError)throw seenError;
