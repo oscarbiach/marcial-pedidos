@@ -25,6 +25,8 @@ const DB=window.WhatsAppPrueba || {
   media:realMedia,
   // Chats marcados «no leído» a mano (columna marked_unread). Sin la columna instalada devuelve error y no se marca nada.
   marcados:()=>sb.from('whatsapp_contacts').select('contact_key').eq('marked_unread',true).limit(1000),
+  // Fotos cargadas a mano (whatsapp-fotos.js); unos 10 KB cada una.
+  fotos:()=>sb.from('whatsapp_contact_photos').select('contact_key,image').limit(2000),
 };
 
 // ── Fechas ──
@@ -57,7 +59,12 @@ function formatoTel(t){const s=String(t||'');const m=s.match(/^54(9)?(11|\d{3})(
 function iniciales(c){const n=(c.linked_client_name || c.display_name || '').replace(/[^\p{L}\p{N} ]/gu,' ').trim();
   if(!n)return ico('user','ico-sm');const p=n.split(/\s+/);return escape((p[0][0]+(p[1]?p[1][0]:'')).toUpperCase());}
 function tonoAvatar(c){const s=c.linked_client_name || c.display_name || c.phone_number || c.contact_key;let h=0;for(const ch of String(s))h=(h*31+ch.charCodeAt(0))>>>0;return h%7;}
-const avatar=(c,extra='')=>`<span class="wa-av wa-av--${tonoAvatar(c)} ${extra}" aria-hidden="true">${iniciales(c)}</span>`;
+// Con foto cargada (Importar → Fotos de contactos) se ve la foto; si no, las iniciales sobre un color.
+function avatar(c,extra=''){
+  const foto=window.WhatsAppFotos && WhatsAppFotos.de(c.contact_key);
+  return foto?`<span class="wa-av wa-av--foto ${extra}" aria-hidden="true"><img src="${escape(foto)}" alt=""></span>`
+    :`<span class="wa-av wa-av--${tonoAvatar(c)} ${extra}" aria-hidden="true">${iniciales(c)}</span>`;
+}
 function handleError(error){status(/PGRST202|42P01|42883/.test(error.code || '')?
   'La conexión está preparada, pero falta instalar las funciones y tablas en Supabase.':errorText(error),true);}
 async function realApi(body){
@@ -120,6 +127,7 @@ function shell(){
           <button type="button" id="wa-sync">${ico('history')}<span><b>Historial de mensajes</b><small>Trae lo guardado en Kapso</small></span></button>
           <button type="button" id="wa-import-names">${ico('users')}<span><b>Nombres de Kapso</b><small>Completa los contactos sin nombre</small></span></button>
           <button type="button" id="wa-import-agenda">${ico('smartphone')}<span><b>Agenda del iPhone</b><small>Archivo .vcf exportado del celular</small></span></button>
+          <button type="button" id="wa-fotos-abrir">${ico('image')}<span><b>Fotos de contactos</b><small>Subí o pegá una foto para reconocerlos</small></span></button>
           <div class="wa-mas-sep" role="separator"></div>
           <button type="button" id="wa-leer-todo" class="wa-mas-chico">${ico('check')}<span><b>Marcar todo como leído</b><small>Pone en cero los «sin leer» de todos los chats</small></span></button>
         </div></details>
@@ -147,6 +155,7 @@ function shell(){
   $('wa-import-names').addEventListener('click',()=>{$('wa-mas').open=false;importNames();});
   $('wa-review-clients').addEventListener('click',()=>window.WhatsAppClientReview.open());
   $('wa-leer-todo').addEventListener('click',()=>{$('wa-mas').open=false;leerTodo().catch(handleError);});
+  $('wa-fotos-abrir').addEventListener('click',()=>{$('wa-mas').open=false;window.WhatsAppFotos?.abrir(E.selectedContact);});
   $('wa-import-agenda').addEventListener('click',()=>{$('wa-mas').open=false;$('wa-agenda-file').value='';$('wa-agenda-file').click();});
   $('wa-agenda-file').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importAgenda(file).catch(handleError);});
   $('wa-contacts').addEventListener('click',event=>{
@@ -732,11 +741,15 @@ async function open(client=null){
   E.permissions=permissions;
   if(!permissions.read){status('Tu cuenta todavía no tiene acceso a WhatsApp. El administrador debe habilitarla en Supabase.',true);return;}
   $('wa-mas').hidden=false;
-  ['wa-sync','wa-import-names','wa-import-agenda'].forEach(id=>{$(id).hidden=!permissions.manage;});
+  ['wa-sync','wa-import-names','wa-import-agenda','wa-fotos-abrir'].forEach(id=>{$(id).hidden=!permissions.manage;});
   document.querySelector('#wa-mas .wa-mas-sep').hidden=!permissions.manage;
   $('wa-review-clients').hidden=!permissions.manage;
   status('');
   cargarVinculos();
+  if(window.WhatsAppFotos){
+    WhatsAppFotos.init({DB,titulo:title,avatar,aviso:t=>status(t),alCambiar:()=>{renderContacts();if(E.selectedContact){drawCabecera();drawFichaDatos();}}});
+    WhatsAppFotos.cargar().then(()=>{renderContacts();if(E.selectedContact)drawCabecera();}).catch(()=>{});
+  }
   Seg()?.asegurar();   // pide el historial de Clientes (si hace falta) para los estados de la lista y la ficha
   await loadContacts();
   if(client && E.contacts.length===1)await selectContact(E.contacts[0].contact_key);

@@ -374,6 +374,38 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-carga-chip.hecho{background:#1E8449;color:#fff;cursor:default}
 .wa-carga-chip:focus-visible{outline:3px solid #2F63A3;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.wa-carga-modal{animation:none}}
+/* Fotos de contactos (whatsapp-fotos.js): la foto ocupa el círculo del avatar */
+.wa-av--foto{overflow:hidden;background:var(--m-superficie-3)}
+.wa-av--foto img{width:100%;height:100%;object-fit:cover;display:block}
+.wa-fotos-modal{max-width:520px}
+.wa-fotos-lbl{display:block;margin:4px 0 7px;font-size:13px;font-weight:800;color:var(--m-tinta-2)}
+.wa-fotos-lbl:not(:first-child){margin-top:16px}
+.wa-fotos-input{width:100%;min-height:42px;padding:0 12px;border:1px solid var(--m-linea-2);border-radius:10px;background:var(--m-superficie);font:inherit;font-size:15px;color:var(--m-tinta)}
+.wa-fotos-res{display:grid;gap:2px;margin-top:6px;max-height:232px;overflow:auto}
+.wa-fotos-res button,.wa-fotos-elegido{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border:0;border-radius:10px;background:none;text-align:left;font:inherit;color:var(--m-tinta)}
+.wa-fotos-res button{cursor:pointer}
+.wa-fotos-res button:hover,.wa-fotos-res button:focus-visible{background:var(--m-azul-50);outline:none}
+.wa-fotos-res button>span:not(.wa-av),.wa-fotos-elegido>span:not(.wa-av){display:grid;min-width:0;flex:1}
+#wa-fotos [hidden]{display:none!important}
+/* La ventana es clara: los colores de avatar de la pantalla oscura se verían lavados */
+#wa-fotos .wa-av:not(.wa-av--foto){background:#E3ECF7;color:#163459}
+.wa-fotos-res small,.wa-fotos-elegido small,.wa-fotos-zona small{color:var(--m-tinta-3);font-size:12.5px}
+.wa-fotos-elegido{border:1px solid var(--m-linea-2);background:var(--m-superficie-2)}
+.wa-fotos-vacio{padding:8px;color:var(--m-tinta-3);font-size:13.5px}
+.wa-fotos-zona{display:flex;align-items:center;gap:14px;padding:14px;border:2px dashed var(--m-linea-2);border-radius:14px;background:var(--m-superficie-2);cursor:pointer}
+.wa-fotos-zona span:last-child{display:grid;gap:3px}
+.wa-fotos-zona:hover,.wa-fotos-zona.sobre{border-color:var(--m-azul-500);background:var(--m-azul-50)}
+.wa-fotos-zona:focus-visible{outline:3px solid var(--m-azul-500);outline-offset:2px}
+.wa-fotos-zona.con-foto{border-style:solid}
+.wa-fotos-prev{flex:none;display:grid;place-items:center;width:84px;height:84px;border-radius:50%;overflow:hidden;background:var(--m-superficie-3);color:var(--m-tinta-3)}
+.wa-fotos-prev img{width:100%;height:100%;object-fit:cover}
+.wa-fotos-fila{display:flex;gap:8px;margin-top:10px}
+.wa-fotos-fila .wa-fotos-input{flex:1;min-width:0}
+.wa-fotos-msg{min-height:20px;margin:10px 0 0;font-size:13.5px;color:var(--m-tinta-2)}
+.wa-fotos-msg.wa-error{color:#B03A2E;font-weight:700}
+.wa-fotos-acc{display:flex;align-items:center;gap:8px;margin-top:12px}
+.wa-fotos-acc span{flex:1}
+@media(max-width:560px){.wa-fotos-fila{flex-wrap:wrap}.wa-fotos-fila .wa-btn{width:100%}}
 /* Lo anotado desde WhatsApp para el próximo pedido (en Cargar Pedido, con o sin ventana) */
 .wa-recordatorio{margin:4px 0 14px;padding:11px 12px;border-radius:12px;background:#FEF9E7;border:1px solid #F3E2B5;font-size:13.5px;color:#5B3B05}
 .wa-recordatorio[hidden]{display:none}
