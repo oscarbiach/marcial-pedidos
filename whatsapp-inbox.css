@@ -488,23 +488,53 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-ctx .ico{color:var(--m-azul-500)}
 
 /* Oportunidades (whatsapp-oportunidades.js) */
-.wa-oport .op-grupos{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:12px 0}
-.wa-oport .op-grupo{border:1px solid var(--m-linea-2);border-radius:12px;padding:10px 12px;margin:0;min-width:0}
-.wa-oport .op-grupo legend{font-weight:800;padding:0 4px}
+.wa-oport .op-barra{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 20px;margin:14px 0 10px}
+.wa-oport .op-campo{display:grid;gap:6px;min-width:0}
+.wa-oport .op-et{font-size:12.5px;font-weight:700;color:var(--m-tinta-3)}
+.wa-oport .op-prods{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.wa-oport .op-otro{width:240px;min-height:40px;font-size:14px}
+.wa-oport .op-chips{display:contents}
+.wa-oport .op-tag{display:inline-flex;align-items:center;gap:2px;min-height:40px;padding:0 4px 0 14px;border-radius:999px;background:#EEF3FA;color:#0B1C33;font-size:14px;font-weight:700}
+.wa-oport .op-tag button{display:inline-grid;place-items:center;min-height:0;width:32px;height:32px;padding:0;border:0;border-radius:999px;background:none;color:#0B1C33;font-size:18px;line-height:1}
+.wa-oport .op-tag button:hover:not(:disabled){background:rgba(11,28,51,.1)}
+.wa-oport .op-vacio{margin:6px 0;padding:22px;border:1px dashed var(--m-linea-2);border-radius:12px;color:var(--m-tinta-2);font-size:14px;text-align:center}
+.wa-oport .op-grupos-in{display:contents}
+.wa-oport .op-barra select{min-height:40px;font-size:14px}
+.wa-oport .op-ajustes{margin:0 0 6px}
+.wa-oport .op-ajustes summary{display:inline-flex;align-items:center;gap:6px;min-height:32px;cursor:pointer;list-style:none;font-size:13.5px;font-weight:700;color:var(--m-tinta-2)}
+.wa-oport .op-ajustes summary::-webkit-details-marker{display:none}
+.wa-oport .op-ajustes summary::before{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform var(--m-dur-1,.15s) ease}
+.wa-oport .op-ajustes[open] summary::before{transform:rotate(45deg)}
+.wa-oport .op-ajustes summary:hover{color:var(--m-tinta)}
+.wa-oport .op-ajustes[open]{padding:4px 0 8px}
+.wa-oport .op-grupos{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:8px 0}
+.wa-oport .op-grupo{border:1px solid var(--m-linea-2);border-radius:12px;padding:8px 12px 12px;margin:0;min-width:0}
+.wa-oport .op-grupo legend{font-weight:800;font-size:13.5px;padding:0 4px}
 .wa-oport .op-grupo label{display:block;margin-top:6px;font-size:12.5px;color:var(--m-tinta-3)}
 .wa-oport .op-grupo input:not([type=checkbox]){width:100%;margin-top:3px}
-.wa-oport .op-filtros{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:6px 0}
-.wa-oport .op-filtros label{display:grid;gap:3px;font-size:12.5px}
-.wa-oport .op-filtros .op-check{display:flex;align-items:center;gap:6px;font-size:13.5px;min-height:42px}
+.wa-oport .op-grupo .op-check{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--m-tinta-2)}
 .wa-oport input[type=checkbox]{width:auto;margin:0}
-.wa-oport .op-aviso{min-height:22px;font-size:14px}
-.wa-oport .op-tabla-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px}
-.wa-oport .op-tabla-cab h4{display:flex;align-items:center;gap:8px;font-size:16px;color:var(--m-tinta)}
-.wa-oport .op-n{min-width:24px;padding:0 8px;border-radius:999px;background:var(--m-superficie-3);font-size:12.5px;line-height:22px;text-align:center}
-.wa-oport .op-scroll{overflow:auto;max-height:60vh;border:1px solid var(--m-linea);border-radius:12px}
-.wa-oport .op-tabla{width:100%;border-collapse:collapse;font-size:13.5px}
-.wa-oport .op-tabla th{position:sticky;top:0;background:var(--m-superficie-2);text-align:left;padding:8px 10px;font-size:12px;color:var(--m-tinta-3);z-index:1}
-.wa-oport .op-tabla td{padding:8px 10px;border-top:1px solid var(--m-linea);vertical-align:top;overflow-wrap:anywhere}
-.wa-oport .op-sub{color:var(--m-tinta-3);font-size:12.5px}
-.wa-oport .op-chat{min-height:32px;padding:4px 10px;font-size:12.5px;white-space:nowrap}
-.wa-oport .op-nota{margin-top:10px;font-size:12.5px;color:var(--m-tinta-3)}
+.wa-oport .op-aviso{min-height:20px;margin:2px 0;font-size:13px;color:var(--m-tinta-3)}
+.wa-oport .op-tabs{display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px;margin-top:6px;border-bottom:1px solid var(--m-linea-2)}
+.wa-oport .op-tabs .wa-chip{min-height:42px;margin-bottom:-1px;padding:8px 14px;border:0;border-bottom:3px solid transparent;border-radius:0;background:none;font-size:14.5px;color:var(--m-tinta-3)}
+.wa-oport .op-tabs .wa-chip:hover:not(:disabled){background:none;color:var(--m-tinta)}
+.wa-oport .op-tabs .wa-chip[aria-pressed="true"],.wa-oport .op-tabs .wa-chip[aria-pressed="true"]:hover:not(:disabled){background:none;border-color:var(--m-azul-500);color:var(--m-tinta)}
+.wa-oport .op-tabs .wa-chip[aria-pressed="true"] .wa-chip-n{background:var(--m-superficie-3);color:var(--m-tinta)}
+.wa-oport .op-tabs .wa-chip--error .wa-chip-n,.wa-oport .op-tabs .wa-chip--error[aria-pressed="true"] .wa-chip-n{background:var(--m-error-fondo);color:var(--m-error-tinta)}
+.wa-oport .op-tabs .wa-chip--ok .wa-chip-n,.wa-oport .op-tabs .wa-chip--ok[aria-pressed="true"] .wa-chip-n{background:var(--m-ok-fondo);color:var(--m-ok-tinta)}
+.wa-oport .op-copiar{align-self:center;margin-bottom:6px}
+.wa-oport .op-copiar{margin-left:auto}
+.wa-oport .op-desc{margin:8px 0 10px;font-size:13.5px;color:var(--m-tinta-2)}
+.wa-oport .op-scroll{overflow:auto;max-height:62vh;border:1px solid var(--m-linea);border-radius:12px}
+.wa-oport .op-scroll .wa-empty{padding:18px}
+.wa-oport .op-tabla{width:100%;border-collapse:collapse;font-size:14px}
+.wa-oport .op-tabla th{position:sticky;top:0;background:var(--m-superficie-2);text-align:left;padding:9px 12px;font-size:12px;color:var(--m-tinta-3);z-index:1}
+.wa-oport .op-tabla td{padding:10px 12px;border-top:1px solid var(--m-linea);vertical-align:top;overflow-wrap:anywhere;line-height:1.4}
+.wa-oport .op-tabla td:first-child{min-width:170px}
+.wa-oport .op-sub{display:block;color:var(--m-tinta-3);font-size:12.5px}
+.wa-oport .op-cuando{margin-bottom:2px}
+.wa-oport .op-prod{display:block}
+.wa-oport .op-prod b{color:var(--m-tinta)}
+.wa-oport .op-acc{width:1%;text-align:right}
+.wa-oport .op-chat{min-height:34px;padding:4px 12px;font-size:13px;white-space:nowrap}
+.wa-oport .op-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

@@ -1,5 +1,5 @@
 /* WhatsApp → «Oportunidades» (pedido del usuario, 16/10/2026).
-   Para un producto (o varios), arma dos listas:
+   Para cualquier producto que se escriba (o varios, para compararlos), arma las listas:
      1) quiénes ya lo compraron: qué productos exactos, cuánto, en cuántos pedidos y cuándo fue la última vez;
      2) quiénes preguntaron, recibieron cotización o se lo ofrecimos por WhatsApp y todavía no lo compraron.
    Cada producto se define con palabras a incluir y frases a excluir (sin importar mayúsculas ni tildes). Las frases
@@ -16,16 +16,16 @@
   const fecha = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-AR') : '-';
   const tel = n => n ? '+' + String(n).replace(/^\+/, '') : '-';
 
-  const PRESETS = [
-    { id: 'vacio', nombre: 'Vacío', incluir: 'vacio',
-      excluir: 'al vacio, envasado al vacio, envasados al vacio, envasada al vacio, envasadas al vacio, salame de campo vacio' },
-    { id: 'picada', nombre: 'Carne picada / Blend La Morena', incluir: 'picada, blend, carne hamburguesa, hamburguesa la morena, la morena',
-      excluir: 'picada clasica, picada grande clasica, picada mundialista, picada comun y picada economica, asado - la morena, magron la morena, vacio la morena' },
-  ];
+  // Frases que se descartan solas al agregar ciertos productos (se pueden cambiar en «Ajustar búsqueda»).
+  const NO_CONTAR = {
+    vacio: 'al vacio, envasado al vacio, envasados al vacio, envasada al vacio, envasadas al vacio, salame de campo vacio',
+    picada: 'picada clasica, picada grande clasica, picada mundialista, picada comun y picada economica',
+  };
+  const CLAVE = 'dm_op_productos';
   // Equipo y proveedores (se ocultan por nombre de agenda) y mensajes internos (hojas de reparto, listas de entregas).
   const NO_CLIENTE = /vendedor|proveedor|comercial|\(carnes\)/i;
   const INTERNO = /hoja de reparto|=== entregas ===|=== total a cargar/i;
-  const S = { busy: false, gen: 0, ultimo: null };
+  const S = { busy: false, gen: 0, ultimo: null, prods: [] };
 
   // ── Datos: Supabase de verdad o el modo prueba (sin red) ──
   const prueba = () => window.WhatsAppPrueba && window.WhatsAppPrueba.todo;
@@ -92,15 +92,14 @@
   }
 
   async function buscar() {
-    if (S.busy) return;
     const grupos = leerGrupos();
-    if (!grupos.length) { aviso('Elegí al menos un producto o escribí palabras para buscar.', true); return; }
-    const prefijos = lista($('op-zona').value).map(p => p.replace(/\D/g, '')).filter(Boolean);
+    if (!grupos.length) { S.gen++; S.busy = false; S.ultimo = null; $('op-resultado').removeAttribute('aria-busy'); $('op-resultado').innerHTML = '<p class="op-vacio">Escribí un producto arriba (por ejemplo: vacío, muzzarella, salame) y tocá «Agregar». Podés sumar varios para compararlos.</p>'; aviso(''); return; }
+    const prefijos = $('op-zona-modo').value === 'sf' ? lista($('op-zona').value).map(p => p.replace(/\D/g, '')).filter(Boolean) : [];
     const dias = Number($('op-periodo').value) || 0;
     const desde = dias ? new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10) : '';
     const ocultar = $('op-ocultar').checked;
     const gen = ++S.gen;
-    S.busy = true; $('op-buscar').disabled = true; aviso('Buscando en pedidos y chats…');
+    S.busy = true; $('op-resultado').setAttribute('aria-busy', 'true'); aviso('Buscando en pedidos y chats…');
     try {
       const [items, msgs] = await Promise.all([traerItems(grupos), traerMensajes(grupos)]);
       if (gen !== S.gen) return;
@@ -140,8 +139,11 @@
       // Teléfonos y mensajes de los compradores (por cliente vinculado)
       const compradores = [...porCliente.values()];
       const nombreComprador = new Map(compradores.map(c => [norm(c.cliente), c]));
-      compradores.forEach(c => { c.tels = []; c.msg = null; });
-      contactos.forEach(x => { const c = x.linked_client_name && nombreComprador.get(norm(x.linked_client_name)); if (c && x.phone_number && !c.tels.includes(x.phone_number)) c.tels.push(x.phone_number); });
+      compradores.forEach(c => { c.tels = []; c.key = ''; c.msg = null; });
+      contactos.forEach(x => {
+        const c = x.linked_client_name && nombreComprador.get(norm(x.linked_client_name));
+        if (c && x.phone_number && !c.tels.includes(x.phone_number)) { c.tels.push(x.phone_number); if (!c.key) c.key = x.contact_key; }
+      });
       const interesados = [];
       let ocultos = 0, fuera = 0;
       porContacto.forEach(c => {
@@ -150,84 +152,104 @@
         if (comprador) { const m = c.entrada || c.salida; if (m && (!comprador.msg || m.occurred_at > comprador.msg.occurred_at)) comprador.msg = m; return; }
         if (ocultar && esEquipo(x)) { ocultos++; return; }
         if (!enZona(x.phone_number, prefijos)) { fuera++; return; }
-        Object.assign(c, { contacto: x });
+        c.contacto = x; c.estado = estado(c);
         interesados.push(c);
       });
       compradores.sort((a, b) => b.ultima.localeCompare(a.ultima));
       interesados.sort((a, b) => String(b.ultimo).localeCompare(String(a.ultimo)));
-      S.ultimo = { grupos, compradores, interesados };
-      dibujar(grupos, compradores, interesados);
-      aviso(`${compradores.length} ${compradores.length === 1 ? 'cliente compró' : 'clientes compraron'} · ${interesados.length} ${interesados.length === 1 ? 'interesado' : 'interesados'} sin compra` +
-        (ocultos ? ` · ${ocultos} del equipo o proveedores ocultos` : '') + (fuera ? ` · ${fuera} fuera de la zona` : '') + '.');
+      const listas = {
+        responder: interesados.filter(c => c.estado.id === 'responder'),
+        seguir: interesados.filter(c => c.estado.id !== 'responder'),
+        compraron: compradores,
+      };
+      if (!S.tab || !listas[S.tab].length) S.tab = TABS.find(t => listas[t.id].length)?.id || 'responder';
+      S.ultimo = { grupos, listas };
+      dibujar();
+      const extra = [ocultos && `${ocultos} del equipo o proveedores`, fuera && `${fuera} fuera de la zona`].filter(Boolean);
+      aviso(extra.length ? 'No se muestran: ' + extra.join(' y ') + '.' : '');
     } catch (e) {
-      aviso('No se pudo buscar: ' + (e.message || e), true);
-    } finally { S.busy = false; const b = $('op-buscar'); if (b) b.disabled = false; }
+      if (gen === S.gen) aviso('No se pudo buscar: ' + (e.message || e), true);
+    } finally { if (gen === S.gen) { S.busy = false; $('op-resultado')?.removeAttribute('aria-busy'); } }
   }
 
-  function queCompro(c, grupos) {
-    if (grupos.length > 1 && grupos.every(g => c.grupos.has(g.nombre))) return 'Ambos' + (grupos.length > 2 ? ' / todos' : '');
-    return 'Solo ' + [...c.grupos].join(' + ');
-  }
+  // Interesados: «responder» si lo último sobre el tema fue una consulta suya y después no le escribimos.
   function estado(c) {
     const x = c.contacto || {};
-    if (c.entrada && !(x.last_outbound_at && x.last_outbound_at > c.entrada.occurred_at)) return ['Preguntó: no hay respuesta nuestra', 'error'];
-    if (c.entrada) return ['Respondido o cotizado: seguir', 'aviso'];
-    return ['Le ofrecimos: esperar respuesta', 'gris'];
+    if (c.entrada && !(x.last_outbound_at && x.last_outbound_at > c.entrada.occurred_at)) return { id: 'responder', txt: 'Sin respuesta nuestra' };
+    if (c.entrada) return { id: 'respondido', txt: 'Le respondimos' };
+    return { id: 'ofrecido', txt: 'Le ofrecimos' };
   }
-  const extracto = m => m ? String(m.content).replace(/\s+/g, ' ').slice(0, 180) : '';
+  const TABS = [
+    { id: 'responder', nombre: 'Sin respuesta nuestra', tono: 'error', desc: 'Preguntaron por el producto y todavía no les contestamos.' },
+    { id: 'seguir', nombre: 'Para seguir', tono: '', desc: 'Ya les respondimos o les ofrecimos, pero no compraron.' },
+    { id: 'compraron', nombre: 'Ya compraron', tono: 'ok', desc: 'Clientes con pedidos de este producto (sin contar cancelados).' },
+  ];
+  const extracto = m => m ? String(m.content).replace(/\s+/g, ' ').slice(0, 160) : '';
+  const cant = n => String(Math.round(n * 100) / 100).replace('.', ',');
+  const pills = (set, grupos) => [...set].map(n => `<span class="wa-pill wa-t-${grupos.findIndex(g => g.nombre === n) % 2 ? 'info' : 'marca'}">${esc(n)}</span>`).join(' ');
+  const botonChat = (key, telefono) => key ? `<button type="button" class="wa-btn op-chat" data-op-chat="${esc(key)}" data-op-tel="${esc(telefono || '')}">${ico('message-circle')}Abrir chat</button>` : '';
 
-  function dibujar(grupos, compradores, interesados) {
-    const t1 = compradores.map(c => `<tr>
-      <td><b>${esc(c.cliente)}</b></td>
-      <td>${c.tels.length ? c.tels.map(t => esc(tel(t))).join('<br>') : '-'}<br><span class="op-sub">${esc(c.direccion || '-')}</span></td>
-      <td>${esc(queCompro(c, grupos))}</td>
-      <td>${[...c.prods].sort((a, b) => b[1].cant - a[1].cant).map(([n, p]) => esc(n) + ' ×' + esc(String(Math.round(p.cant * 100) / 100).replace('.', ','))).join('; ')}</td>
-      <td>${c.pedidos.size} · ${esc(fecha(c.ultima))}</td>
-      <td>${c.msg ? `<span class="op-sub">${esc(fecha(c.msg.occurred_at))}:</span> «${esc(extracto(c.msg))}»` : '-'}</td></tr>`).join('');
-    const t2 = interesados.map(c => {
-      const x = c.contacto || {}, [txt, tono] = estado(c), m = c.entrada || c.salida;
-      const nombre = x.linked_client_name || x.display_name || 'Sin nombre';
+  function dibujar() {
+    const r = S.ultimo; if (!r) return;
+    const { grupos, listas } = r, tab = TABS.find(t => t.id === S.tab);
+    const filas = listas[S.tab];
+    let cuerpo;
+    if (!filas.length) cuerpo = `<p class="wa-empty">${S.tab === 'compraron' ? 'Nadie compró estos productos en el período elegido.' : 'No hay nadie en esta lista.'}</p>`;
+    else if (S.tab === 'compraron') cuerpo = `<table class="op-tabla"><thead><tr><th>Cliente</th><th>Compró</th><th>Detalle</th><th>Última compra</th><th><span class="op-sr">Acción</span></th></tr></thead><tbody>${filas.map(c => `<tr>
+      <td><b>${esc(c.cliente)}</b><span class="op-sub">${c.tels.length ? c.tels.map(t => esc(tel(t))).join(' · ') : 'Sin WhatsApp vinculado'}</span></td>
+      <td>${pills(c.grupos, grupos)}</td>
+      <td>${[...c.prods].sort((a, b) => b[1].cant - a[1].cant).map(([n, p]) => `<span class="op-prod">${esc(n)} <b>×${esc(cant(p.cant))}</b></span>`).join('')}</td>
+      <td>${esc(fecha(c.ultima))}<span class="op-sub">${c.pedidos.size} ${c.pedidos.size === 1 ? 'pedido' : 'pedidos'}</span></td>
+      <td class="op-acc">${botonChat(c.key, c.tels[0])}</td></tr>`).join('')}</tbody></table>`;
+    else cuerpo = `<table class="op-tabla"><thead><tr><th>Contacto</th><th>Producto</th><th>Último mensaje sobre el tema</th><th><span class="op-sr">Acción</span></th></tr></thead><tbody>${filas.map(c => {
+      const x = c.contacto || {}, m = c.entrada || c.salida;
       return `<tr>
-      <td><b>${esc(nombre)}</b><br><span class="op-sub">${esc(tel(x.phone_number))}</span></td>
-      <td>${esc(fecha(c.ultimo))}</td>
-      <td>${esc([...c.grupos].join(' + '))}</td>
-      <td>${m ? `${c.entrada ? '' : '<span class="op-sub">Nosotros:</span> '}«${esc(extracto(m))}»` : '-'}</td>
-      <td><span class="wa-pill wa-t-${tono}">${esc(txt)}</span></td>
-      <td><button type="button" class="wa-btn op-chat" data-op-chat="${esc(c.key)}" data-op-tel="${esc(x.phone_number || '')}">${ico('message-circle')}Abrir chat</button></td></tr>`;
-    }).join('');
+      <td><b>${esc(x.linked_client_name || x.display_name || 'Sin nombre')}</b><span class="op-sub">${esc(tel(x.phone_number))}</span></td>
+      <td>${pills(c.grupos, grupos)}</td>
+      <td><span class="op-sub op-cuando">${esc(fecha(c.ultimo))}${S.tab === 'seguir' ? ' · ' + esc(c.estado.txt) : ''}</span>${m ? `${c.entrada ? '' : '<b>Nosotros:</b> '}«${esc(extracto(m))}»` : '-'}</td>
+      <td class="op-acc">${botonChat(c.key, x.phone_number)}</td></tr>`; }).join('')}</tbody></table>`;
     $('op-resultado').innerHTML = `
-      <div class="op-tabla-cab"><h4>Clientes que ya compraron <span class="op-n">${compradores.length}</span></h4>
-        <button type="button" class="wa-btn" data-op-copiar="1">${ico('copy')}Copiar</button></div>
-      ${compradores.length ? `<div class="op-scroll"><table class="op-tabla"><thead><tr><th>Cliente</th><th>Teléfono · Dirección</th><th>Qué compró</th><th>Productos y cantidades</th><th>Pedidos · Última</th><th>Último mensaje del tema</th></tr></thead><tbody>${t1}</tbody></table></div>`
-        : '<p class="wa-empty">Nadie compró estos productos en el período elegido.</p>'}
-      <div class="op-tabla-cab"><h4>Interesados sin compra <span class="op-n">${interesados.length}</span></h4>
-        <button type="button" class="wa-btn" data-op-copiar="2">${ico('copy')}Copiar</button></div>
-      ${interesados.length ? `<div class="op-scroll"><table class="op-tabla"><thead><tr><th>Contacto</th><th>Último contacto</th><th>Producto</th><th>Mensaje</th><th>Estado</th><th></th></tr></thead><tbody>${t2}</tbody></table></div>`
-        : '<p class="wa-empty">No hay consultas ni cotizaciones sin compra en el período elegido.</p>'}
-      <p class="op-nota">Solo lee los datos: no cambia nada. Los chats guardados en la app empiezan el 28/09/2026. Para afinar la búsqueda, cambiá las palabras a incluir o excluir.</p>`;
+      <div class="op-tabs" role="tablist" aria-label="Listas">
+        ${TABS.map(t => `<button type="button" role="tab" class="wa-chip${t.tono ? ' wa-chip--' + t.tono : ''}" data-op-tab="${t.id}" aria-selected="${t.id === S.tab}" aria-pressed="${t.id === S.tab}">${esc(t.nombre)} <span class="wa-chip-n">${listas[t.id].length}</span></button>`).join('')}
+        ${filas.length ? `<button type="button" class="wa-btn op-copiar" data-op-copiar="${S.tab}">${ico('copy')}Copiar lista</button>` : ''}
+      </div>
+      <p class="op-desc">${esc(tab.desc)}</p>
+      <div class="op-scroll" role="tabpanel">${cuerpo}</div>`;
   }
 
   // Texto para pegar en WhatsApp o en una planilla (columnas separadas por tabulación).
-  function textoTabla(n) {
+  function textoTabla(id) {
     const r = S.ultimo; if (!r) return '';
-    if (n === '1') return ['Cliente\tTeléfono\tDirección\tQué compró\tProductos\tPedidos\tÚltima compra']
-      .concat(r.compradores.map(c => [c.cliente, c.tels.map(tel).join(' / ') || '-', c.direccion || '-', queCompro(c, r.grupos),
-        [...c.prods].map(([nn, p]) => nn + ' x' + Math.round(p.cant * 100) / 100).join('; '), c.pedidos.size, fecha(c.ultima)].join('\t'))).join('\n');
+    if (id === 'compraron') return ['Cliente\tTeléfono\tDirección\tCompró\tProductos\tPedidos\tÚltima compra']
+      .concat(r.listas.compraron.map(c => [c.cliente, c.tels.map(tel).join(' / ') || '-', c.direccion || '-', [...c.grupos].join(' + '),
+        [...c.prods].map(([nn, p]) => nn + ' x' + cant(p.cant)).join('; '), c.pedidos.size, fecha(c.ultima)].join('\t'))).join('\n');
     return ['Contacto\tTeléfono\tÚltimo contacto\tProducto\tMensaje\tEstado']
-      .concat(r.interesados.map(c => { const x = c.contacto || {}; return [x.linked_client_name || x.display_name || 'Sin nombre', tel(x.phone_number), fecha(c.ultimo),
-        [...c.grupos].join(' + '), extracto(c.entrada || c.salida), estado(c)[0]].join('\t'); })).join('\n');
+      .concat((r.listas[id] || []).map(c => { const x = c.contacto || {}; return [x.linked_client_name || x.display_name || 'Sin nombre', tel(x.phone_number), fecha(c.ultimo),
+        [...c.grupos].join(' + '), extracto(c.entrada || c.salida), c.estado.txt].join('\t'); })).join('\n');
   }
-  async function copiar(n) {
-    const t = textoTabla(n);
-    try { await navigator.clipboard.writeText(t); aviso('Copiado: pegalo en WhatsApp o en una planilla.'); }
-    catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); aviso('Copiado.'); }
+  async function copiar(id) {
+    const t = textoTabla(id);
+    try { await navigator.clipboard.writeText(t); aviso('Lista copiada: pegala en WhatsApp o en una planilla.'); }
+    catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); aviso('Lista copiada.'); }
   }
 
   function leerGrupos() {
-    const gs = PRESETS.filter(p => $('op-p-' + p.id).checked).map(p => ({ nombre: p.nombre, incluir: lista($('op-in-' + p.id).value), excluir: lista($('op-ex-' + p.id).value) }));
-    const otro = lista($('op-in-otro').value);
-    if (otro.length) gs.push({ nombre: $('op-in-otro').value.split(',')[0].trim() || 'Otro', incluir: otro, excluir: lista($('op-ex-otro').value) });
-    return gs.filter(g => g.incluir.length);
+    return S.prods.map(p => ({ nombre: p.nombre, incluir: lista(p.incluir), excluir: lista(p.excluir) })).filter(g => g.incluir.length);
+  }
+  function guardarProds() { try { localStorage.setItem(CLAVE, JSON.stringify(S.prods)); } catch (e) { /* sin almacenamiento: solo en memoria */ } }
+  function agregarProducto() {
+    const inp = $('op-producto'), txt = inp.value.trim(); if (!txt) { inp.focus(); return; }
+    const n0 = txt.split(',')[0].trim(), nombre = n0.charAt(0).toUpperCase() + n0.slice(1), k = norm(nombre);
+    if (!S.prods.some(p => norm(p.nombre) === k)) S.prods.push({ nombre, incluir: txt, excluir: NO_CONTAR[k.split(' ')[0]] || '' });
+    inp.value = ''; productosCambiaron();
+  }
+  function productosCambiaron() {
+    guardarProds();
+    $('op-chips').innerHTML = S.prods.map((p, i) => `<span class="op-tag">${esc(p.nombre)}<button type="button" data-op-quitar="${i}" aria-label="Quitar ${esc(p.nombre)}">×</button></span>`).join('');
+    $('op-ajustes-prods').innerHTML = S.prods.map((p, i) => `<fieldset class="op-grupo"><legend>${esc(p.nombre)}</legend>
+      <label>Buscar (variantes separadas por coma)<input data-op-campo="incluir" data-i="${i}" value="${esc(p.incluir)}"></label>
+      <label>No contar<input data-op-campo="excluir" data-i="${i}" value="${esc(p.excluir)}" placeholder="Ej.: salame al vacío"></label></fieldset>`).join('');
+    buscar();
   }
   function aviso(t, error) { const p = $('op-aviso'); if (p) { p.textContent = t || ''; p.classList.toggle('wa-error', !!error); } }
 
@@ -236,35 +258,53 @@
     if (!panel.dataset.listo) {
       panel.dataset.listo = '1';
       panel.innerHTML = `<div class="wa-review-top"><h3>${ico('search')} Oportunidades</h3><button type="button" id="op-cerrar">Volver a conversaciones</button></div>
-        <p class="wa-help">Quién compró un producto y quién preguntó o recibió cotización por WhatsApp sin comprarlo todavía.</p>
-        <div class="op-grupos">
-          ${PRESETS.map(p => `<fieldset class="op-grupo"><legend><label><input type="checkbox" id="op-p-${p.id}" checked> ${esc(p.nombre)}</label></legend>
-            <label>Incluir<input id="op-in-${p.id}" value="${esc(p.incluir)}"></label>
-            <label>Excluir<input id="op-ex-${p.id}" value="${esc(p.excluir)}"></label></fieldset>`).join('')}
-          <fieldset class="op-grupo"><legend>Otro producto (opcional)</legend>
-            <label>Incluir<input id="op-in-otro" placeholder="Ej.: muzzarella, muzza"></label>
-            <label>Excluir<input id="op-ex-otro" placeholder="Frases a no contar"></label></fieldset>
+        <p class="wa-help">Quién compró un producto y quién lo consultó por WhatsApp sin comprarlo.</p>
+        <div class="op-barra">
+          <div class="op-campo"><label class="op-et" for="op-producto">Producto</label>
+            <div class="op-prods">
+              <input id="op-producto" class="op-otro" placeholder="Escribí un producto…" autocomplete="off" enterkeyhint="search">
+              <button type="button" class="wa-btn wa-btn--prim" id="op-agregar">${ico('search')}Agregar</button>
+              <div id="op-chips" class="op-chips" aria-live="polite"></div>
+            </div></div>
+          <label class="op-campo"><span class="op-et">Zona</span><select id="op-zona-modo"><option value="sf">Santa Fe y alrededores</option><option value="">Todas</option></select></label>
+          <label class="op-campo"><span class="op-et">Período</span><select id="op-periodo"><option value="0">Todo</option><option value="90">Últimos 90 días</option><option value="30">Últimos 30 días</option></select></label>
         </div>
-        <div class="op-filtros">
-          <label>Zona (características)<input id="op-zona" value="342, 3404, 3496, 3497" title="Vacío = todas las zonas. Los que ya compraron se cuentan siempre."></label>
-          <label>Período<select id="op-periodo"><option value="0">Todo el historial</option><option value="90">Últimos 90 días</option><option value="30">Últimos 30 días</option></select></label>
-          <label class="op-check"><input type="checkbox" id="op-ocultar" checked> Ocultar equipo, proveedores y hojas de reparto</label>
-          <button type="button" class="wa-btn wa-btn--prim" id="op-buscar">${ico('search')}Buscar</button>
-        </div>
+        <details class="op-ajustes"><summary>Ajustar búsqueda</summary>
+          <p class="op-sub">Sin importar tildes ni mayúsculas. «Buscar» acepta variantes (muzza, muzzarella); «No contar» descarta frases (salame al vacío).</p>
+          <div class="op-grupos"><div id="op-ajustes-prods" class="op-grupos-in"></div>
+            <fieldset class="op-grupo"><legend>Zona y equipo</legend>
+              <label>Características de «Santa Fe y alrededores»<input id="op-zona" value="342, 3404, 3496, 3497"></label>
+              <label class="op-check"><input type="checkbox" id="op-ocultar" checked> No mostrar equipo, proveedores ni hojas de reparto</label></fieldset>
+          </div>
+          <p class="op-sub">Los que ya compraron se muestran siempre, sin importar la zona. Los chats guardados empiezan el 28/09/2026. Solo lee: no cambia ningún dato.</p>
+        </details>
         <p id="op-aviso" class="op-aviso" role="status" aria-live="polite"></p>
         <div id="op-resultado"></div>`;
       $('op-cerrar').onclick = cerrar;
-      $('op-buscar').onclick = () => buscar();
       panel.addEventListener('click', e => {
+        if (e.target.closest('#op-agregar')) { agregarProducto(); return; }
+        const q = e.target.closest('[data-op-quitar]'); if (q) { S.prods.splice(Number(q.dataset.opQuitar), 1); productosCambiaron(); $('op-producto').focus(); return; }
+        const t = e.target.closest('[data-op-tab]'); if (t) { S.tab = t.dataset.opTab; dibujar(); panel.querySelector(`[data-op-tab="${S.tab}"]`)?.focus(); return; }
         const b = e.target.closest('[data-op-copiar]'); if (b) { copiar(b.dataset.opCopiar); return; }
         const ch = e.target.closest('[data-op-chat]');
         if (ch && window.WhatsAppUI && WhatsAppUI.abrirContacto) { cerrar(); WhatsAppUI.abrirContacto(ch.dataset.opChat, ch.dataset.opTel); }
       });
+      // Cualquier cambio de filtro vuelve a buscar (los textos, al salir del campo o con Enter).
+      panel.addEventListener('change', e => {
+        const c = e.target.closest('[data-op-campo]');
+        if (c) { const pr = S.prods[Number(c.dataset.i)]; if (pr) { pr[c.dataset.opCampo] = c.value; guardarProds(); } buscar(); return; }
+        if (e.target.id !== 'op-producto' && e.target.closest('.op-barra, .op-ajustes')) buscar();
+      });
+      $('op-producto').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); agregarProducto(); } });
+      try { S.prods = (JSON.parse(localStorage.getItem(CLAVE)) || []).filter(p => p && p.nombre); } catch (e) { S.prods = []; }
+      productosCambiaron();
     }
     panel.hidden = false; $('wa-layout').hidden = true;
     const r = $('wa-review-panel'); if (r) r.hidden = true;
+    if (!S.ultimo && !S.busy && S.prods.length) buscar();
+    if (!S.prods.length) $('op-producto').focus();
   }
-  function cerrar() { S.gen++; const p = $('wa-oport-panel'); if (p) p.hidden = true; $('wa-layout').hidden = false; }
+  function cerrar() { S.gen++; S.busy = false; const p = $('wa-oport-panel'); if (p) p.hidden = true; $('wa-layout').hidden = false; }
 
-  window.WhatsAppOportunidades = { abrir, cerrar, buscar, _gruposDe: gruposDe, PRESETS };
+  window.WhatsAppOportunidades = { abrir, cerrar, buscar, _gruposDe: gruposDe, NO_CONTAR };
 })();
