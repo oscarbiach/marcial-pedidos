@@ -203,6 +203,17 @@ body.wa-ancho main{max-width:1680px}
 .wa-review-candidate button:hover:not(:disabled){background:var(--m-marino-800)}
 .wa-review-preview{font-size:13px;color:var(--m-tinta-3)}
 .wa-review .wa-help{color:var(--m-tinta-3);font-size:13px}
+/* Ya vinculados: lista de clientes, sus números y «Desvincular» */
+.wa-review [hidden]{display:none!important}
+.wa-linked-list{display:grid;gap:6px;margin-top:8px}
+.wa-review .wa-linked-item{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:52px;text-align:left}
+.wa-linked-item span:first-child{display:grid;gap:2px}
+.wa-linked-item small{color:var(--m-tinta-3);font-weight:600;font-size:12.5px}
+.wa-review .wa-linked-back{border:0;background:none;padding:6px 0;color:var(--m-azul-500)}
+.wa-linked-nums{margin:4px 0 16px}
+.wa-review .wa-desvincular{flex-shrink:0;background:var(--m-superficie);border-color:#C0392B;color:#C0392B}
+.wa-review .wa-desvincular:hover:not(:disabled){background:#FDEDEC}
+#wa-review-status .wa-link{margin-left:6px;min-height:0;padding:2px 6px}
 
 /* Botón «WhatsApp» en la ficha de Clientes */
 .sc-wa-link{display:inline-flex;align-items:center;gap:7px;margin:10px 0;padding:9px 13px;border:1px solid #A9DCC0;background:#F1FAF5;border-radius:10px;color:#156B3F;font:inherit;font-weight:700;cursor:pointer}

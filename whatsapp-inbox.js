@@ -172,6 +172,7 @@ function shell(){
     else if(a==='chat')mostrar('chat');
     else if(a==='ver-cliente' && contact())Seg()?.verCliente(contact().linked_client_name);
     else if(a==='vincular')window.WhatsAppClientReview.open();
+    else if(a==='numeros' && contact())window.WhatsAppClientReview.open(contact().linked_client_name);
     else if(a==='reintentar-seg'){Seg()?.pedirHistorial();drawFicha();}
     else if(a==='cargar' && contact()?.linked_client_name)window.WhatsAppCarga?.abrir({cliente:contact().linked_client_name,productos:productosDelChat()});
     else if(a==='reclamo-pedido')reclamoEnPedido(b.dataset.id);
@@ -516,7 +517,9 @@ function secFicha(c,s){
   const quien=c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at>=c.last_outbound_at)?'te escribió':'le escribimos';
   tiles.push(`<div class="wa-tile wa-t-ok"><span class="wa-tile-k">Último contacto</span><b>${escape(cuandoLargo(c.last_message_at))}</b><span class="wa-tile-s">${escape(c.last_message_at?quien:'')}</span></div>`);
   const ver=s && s.estado==='ok'?`<button type="button" class="wa-btn wa-btn--bloque" data-wa="ver-cliente">${ico('users')}Ver ficha completa en Clientes${ico('arrow-right','ico-xs')}</button>`:'';
-  return seccion('ficha','user','Ficha completa','',`<div class="wa-tiles">${tiles.join('')}</div>${ver}`);
+  // Un cliente puede tener varios números: se agregan o se quitan en «Vincular clientes» (solo quien administra).
+  const nums=c.linked_client_name && E.permissions?.manage?`<button type="button" class="wa-btn wa-btn--bloque" data-wa="numeros">${ico('smartphone')}Números de este cliente: agregar o quitar</button>`:'';
+  return seccion('ficha','user','Ficha completa','',`<div class="wa-tiles">${tiles.join('')}</div>${ver}${nums}`);
 }
 function fichaCliente(c,s){
   let seg='', resumen='';
