@@ -87,7 +87,13 @@ const PARA_HOY=new Set(['atender','alta','semana','recuperacion','unica']);
 // Sin leer: tiene mensajes nuevos o alguien lo marcó «no leído» (clic derecho), como en WhatsApp Business. Solo en la app.
 const sinLeer=c=>Number(c.unread_count)>0 || E.marcados.has(c.contact_key);
 // «Espera respuesta»: el último mensaje es del cliente y nadie le contestó todavía (ni desde la app ni desde el celular).
-function espera(c){return c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at>c.last_outbound_at)?Date.now()-new Date(c.last_inbound_at).getTime():null;}
+// Si el chat ya se leyó, la marca dura como máximo 10 horas: pasado ese tiempo se da por atendido sin respuesta.
+const ESPERA_LEIDO_MS=10*3600000;
+function espera(c){
+  if(!c.last_inbound_at || (c.last_outbound_at && c.last_inbound_at<=c.last_outbound_at))return null;
+  const ms=Date.now()-new Date(c.last_inbound_at).getTime();
+  return !sinLeer(c) && ms>ESPERA_LEIDO_MS?null:ms;
+}
 function pillEspera(c){
   const ms=espera(c);if(ms===null)return '';
   const min=Math.max(1,Math.round(ms/60000)), h=Math.floor(min/60), d=Math.floor(h/24);
