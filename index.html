@@ -1310,6 +1310,24 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 @media(max-width:767.98px) { .retiro-toggle { flex:1; } }
 @media(prefers-reduced-motion:reduce) { .retiro-toggle { transition:none; } }
 
+/* ── «Remito hecho» (Joaquín y Oscar): pendiente neutro, hecho en verde de confirmación ── */
+.oc-pie { display:flex; justify-content:flex-end; margin-top:8px; }
+.blk-acc { display:flex; justify-content:flex-end; padding:0 0 12px; margin-top:-4px; }
+.remito-btn {
+  display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:6px 12px;
+  border:1.5px solid var(--border, #D5DCE6); border-radius:999px; background:#fff; color:var(--gray, #5D6D7E);
+  font:inherit; font-size:13px; font-weight:700; white-space:nowrap; cursor:pointer;
+  transition:background-color .15s ease, color .15s ease, border-color .15s ease, transform .15s ease-out;
+}
+.remito-btn:hover:not(:disabled) { border-color:var(--green); color:var(--green-ink); }
+.remito-btn:active:not(:disabled) { transform:scale(.97); }
+.remito-btn:focus-visible { outline:3px solid var(--green); outline-offset:2px; }
+.remito-btn.hecho { background:var(--green); border-color:var(--green); color:#fff; }
+.remito-btn.hecho:hover:not(:disabled) { color:#fff; filter:brightness(.95); }
+.remito-btn:disabled { opacity:.6; cursor:progress; }
+@media(max-width:767.98px) { .remito-btn { min-height:40px; font-size:13.5px; } }
+@media(prefers-reduced-motion:reduce) { .remito-btn { transition:none; } }
+
 /* ══ DESPACHAR VARIOS (pestaña Pedidos) ══ */
 .desp-btn {
   flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green-ink);
@@ -1972,7 +1990,7 @@ function mapPedido_(row) {
     fechaEntrega: row.fecha_entrega || '', direccion: row.direccion || '',
     items: items, notas: row.notas || '',
     estado: row.estado || 'Pendiente', fechaDespacho: row.fecha_despacho || '',
-    retiro: !!row.retiro
+    retiro: !!row.retiro, remitoHecho: !!row.remito_hecho
   };
 }
 
@@ -2045,7 +2063,7 @@ async function sbGetAppData() {
     sb.from('productos').select('nombre,unidad,unidades_por_caja,se_fetea,activo'),
     sb.from('clientes').select('nombre,direccion'),
     sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
       .or(`eliminado_en.not.is.null,estado.eq.Pendiente,fecha_despacho.gte.${corte}`)
       .order('fecha', { ascending: false }),
     // Las últimas hojas de reparto. Va en el MISMO viaje que todo lo
@@ -2150,7 +2168,7 @@ async function sbGetHistorialAntiguo() {
   let todos = [];
   while (true) {
     const { data, error } = await sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
       .in('estado', ['Despachado', 'Cancelado'])
       .is('eliminado_en', null)
       .or(`fecha_despacho.lt.${corte},fecha_despacho.is.null`)
@@ -2221,6 +2239,15 @@ async function sbUpdateEstado(id, estado) {
       .update({ cantidad_entregada: null, motivo_faltante: null, detalle_faltante: null })
       .eq('pedido_id', id);
   }
+  return { ok: true };
+}
+
+// «Remito hecho» (Joaquín y Oscar): marca informativa del pedido, aparte del estado y del despacho. Se manda el valor
+// final (no «invertir»), así repetir la llamada da el mismo resultado. Ver supabase/15-remito-hecho.sql.
+async function sbMarcarRemito(id, valor) {
+  const { data, error } = await sb.from('pedidos').update({ remito_hecho: !!valor }).eq('id', id).select('id');
+  if (error) throw sbError_(error);
+  if (!data || !data.length) return { ok: false, error: 'Pedido no encontrado' };
   return { ok: true };
 }
 
@@ -2305,6 +2332,7 @@ function sbAccion(action, args) {
     case 'guardarHoja':        return sbGuardarHoja(args[0], args[1]);
     case 'despacharVarios':    return sbDespacharVarios(args[0]);
     case 'guardarNovedadItem': return sbGuardarNovedadItem(args[0], args[1], args[2], args[3]);
+    case 'marcarRemito':       return sbMarcarRemito(args[0], args[1]);
     case 'eliminarHoja':       return sbEliminarHoja(args[0], args[1]);
     case 'vaciarPapelera':     return sbVaciarPapelera(args[0], args[1]);
     default: {
@@ -2383,7 +2411,7 @@ function makeRunner() {
   // llamada cae en sbAccion y devuelve "Acción desconocida".
   ['getAppData','historialAntiguo','savePedido','updatePedido','updatePedidoStatus','deletePedido',
    'restorePedido','guardarHoja','despacharVarios','guardarNovedadItem',
-   'eliminarHoja','vaciarPapelera']
+   'eliminarHoja','vaciarPapelera','marcarRemito']
     .forEach(action => {
       runner[action] = function () {
         apiCall(action, Array.prototype.slice.call(arguments), h.ok, h.err);
@@ -3968,6 +3996,44 @@ function pedidoNotasHtml(p) {
   </div>`;
 }
 
+// ── «Remito hecho» ──
+// Solo lo ven Joaquín y Oscar (con o sin tilde). Actualización optimista: cambia en pantalla al instante, se guarda,
+// y si falla vuelve atrás con el aviso de siempre. Mientras se guarda, el botón no acepta otro toque.
+const remitoEnVuelo = new Set();
+function puedeMarcarRemito() {
+  const w = (state.who || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return ['joaquin', 'oscar'].includes(w);
+}
+function remitoBtnHtml(p) {
+  // Un pedido que todavía no llegó al servidor no tiene fila para marcar.
+  if (!puedeMarcarRemito() || p.enCola || p.errorCola) return '';
+  const hecho = !!p.remitoHecho, ocupado = remitoEnVuelo.has(p.id);
+  return `<button type="button" class="remito-btn${hecho ? ' hecho' : ''}" aria-pressed="${hecho}"${ocupado ? ' disabled aria-busy="true"' : ''}
+    onclick="toggleRemito(event,'${p.id}')" title="${hecho ? 'Remito hecho. Tocá para desmarcarlo' : 'Marcar que el remito ya está hecho'}">${mIco(hecho ? 'check' : 'file-text', 'ico-sm')}Remito hecho</button>`;
+}
+function toggleRemito(ev, id) {
+  if (ev) ev.stopPropagation();   // la tarjeta abre el detalle (o la elige, despachando varios)
+  if (remitoEnVuelo.has(id) || !puedeMarcarRemito()) return;
+  const p = state.pedidos.find(x => x.id === id);
+  if (!p) return;
+  const valor = !p.remitoHecho;
+  p.remitoHecho = valor;
+  remitoEnVuelo.add(id);
+  renderPedidos();
+  // Un refresco puede haber reemplazado los pedidos mientras tanto: se busca de nuevo por id.
+  const fin = (ok, msg) => {
+    remitoEnVuelo.delete(id);
+    const q = state.pedidos.find(x => x.id === id);
+    if (q) q.remitoHecho = ok ? valor : !valor;
+    renderPedidos();
+    if (!ok) toast('Error: ' + msg);
+  };
+  google.script.run
+    .withSuccessHandler(r => (r && r.ok) ? fin(true) : fin(false, (r && r.error) || 'No se pudo guardar el remito'))
+    .withFailureHandler(e => fin(false, e.message))
+    .marcarRemito(id, valor);
+}
+
 function toggleNotaLarga(id) {
   notasAbiertas[id] = !notasAbiertas[id];
   renderPedidos();
@@ -4022,6 +4088,7 @@ function pedidoBloqueHtml(p) {
         <span>${cargaLabel(p.fecha)}</span>
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
       </div>
+      ${(() => { const b = remitoBtnHtml(p); return b ? `<div class="blk-acc">${b}</div>` : ''; })()}
     </div>`;
 }
 
@@ -4084,6 +4151,7 @@ function pedidoCardHtml(p) {
           <span class="oc-q">${itemDespachoLabelCorto(p, it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}${itemPartialTagHtml(p, it)}</span>`).join('')}
         ${p.items.length > 3 ? `<div class="oc-mas">+ ${p.items.length - 3} más…</div>` : ''}
       </div>
+      ${(() => { const b = remitoBtnHtml(p); return b ? `<div class="oc-pie">${b}</div>` : ''; })()}
     </div>`;
 }
 
