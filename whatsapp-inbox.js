@@ -121,6 +121,7 @@ function shell(){
   $('wa-raiz').innerHTML=`<div class="wa-top"><div class="wa-top-t"><h2>${ico('message-circle','ico')}WhatsApp</h2>
     <p>Cada conversación, con los pedidos y el seguimiento del cliente al lado.</p></div>
     <div class="wa-actions">
+      <button type="button" id="wa-oport" class="wa-btn" hidden>${ico('search')}Oportunidades</button>
       <button type="button" id="wa-review-clients" class="wa-btn" hidden>${ico('user-plus')}Vincular clientes</button>
       <details class="wa-mas" id="wa-mas" hidden><summary class="wa-btn">${ico('download')}Importar${ico('chevron-down','ico-xs wa-chev')}</summary>
         <div class="wa-mas-menu">
@@ -136,6 +137,7 @@ function shell(){
     <p id="wa-status" role="status" aria-live="polite" hidden></p>
     <div id="wa-client-filter" hidden></div>
     <section id="wa-review-panel" class="wa-review" hidden></section>
+    <section id="wa-oport-panel" class="wa-review wa-oport" hidden></section>
     <div id="wa-layout" class="wa-layout" data-vista="lista">
       <section class="wa-list" aria-label="Conversaciones">
         <label class="wa-buscar">${ico('search')}<input id="wa-search" type="search" autocomplete="off" placeholder="Buscar nombre, cliente o teléfono" aria-label="Buscar contacto, cliente o teléfono"></label>
@@ -154,6 +156,7 @@ function shell(){
   $('wa-sync').addEventListener('click',()=>{$('wa-mas').open=false;importHistory();});
   $('wa-import-names').addEventListener('click',()=>{$('wa-mas').open=false;importNames();});
   $('wa-review-clients').addEventListener('click',()=>window.WhatsAppClientReview.open());
+  $('wa-oport').addEventListener('click',()=>window.WhatsAppOportunidades?.abrir());
   $('wa-leer-todo').addEventListener('click',()=>{$('wa-mas').open=false;leerTodo().catch(handleError);});
   $('wa-fotos-abrir').addEventListener('click',()=>{$('wa-mas').open=false;window.WhatsAppFotos?.abrir(E.selectedContact);});
   $('wa-import-agenda').addEventListener('click',()=>{$('wa-mas').open=false;$('wa-agenda-file').value='';$('wa-agenda-file').click();});
@@ -752,6 +755,7 @@ async function open(client=null){
   ['wa-sync','wa-import-names','wa-import-agenda','wa-fotos-abrir'].forEach(id=>{$(id).hidden=!permissions.manage;});
   document.querySelector('#wa-mas .wa-mas-sep').hidden=!permissions.manage;
   $('wa-review-clients').hidden=!permissions.manage;
+  $('wa-oport').hidden=!window.WhatsAppOportunidades;
   status('');
   cargarVinculos();
   if(window.WhatsAppFotos){
@@ -853,5 +857,13 @@ if(!window.WhatsAppPrueba)sb.auth.onAuthStateChange(event=>{
     if($('wa-ficha'))$('wa-ficha').innerHTML='';
   }
 });
-window.WhatsAppUI={cargarVinculos,contactado,recordatoriosDe,refresh:()=>refresh().catch(handleError),open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
+// Abre un chat por su clave aunque no esté entre las conversaciones cargadas: lo busca por teléfono.
+async function abrirContacto(key,telefono){
+  $('wa-layout').hidden=false;$('wa-review-panel').hidden=true;
+  E.client=null;$('wa-client-filter').hidden=true;
+  if(!E.contacts.some(c=>c.contact_key===key) && telefono){E.query=String(telefono);$('wa-search').value=E.query;await loadContacts();}
+  if(E.contacts.some(c=>c.contact_key===key))await selectContact(key);
+  else status('No encontré ese chat en la lista.',true);
+}
+window.WhatsAppUI={abrirContacto:(k,t)=>abrirContacto(k,t).catch(handleError),cargarVinculos,contactado,recordatoriosDe,refresh:()=>refresh().catch(handleError),open:()=>{const client=E.pendingClient || null;E.pendingClient=null;return open(client).catch(handleError);}};
 })();
