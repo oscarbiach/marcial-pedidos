@@ -4005,8 +4005,9 @@ function puedeMarcarRemito() {
   return ['joaquin', 'oscar'].includes(w);
 }
 function remitoBtnHtml(p) {
+  // Solo en Pendientes (pedido del usuario): en Despachados/Cancelados no se muestra.
   // Un pedido que todavía no llegó al servidor no tiene fila para marcar.
-  if (!puedeMarcarRemito() || p.enCola || p.errorCola) return '';
+  if (!puedeMarcarRemito() || p.estado !== 'Pendiente' || p.enCola || p.errorCola) return '';
   const hecho = !!p.remitoHecho, ocupado = remitoEnVuelo.has(p.id);
   return `<button type="button" class="remito-btn${hecho ? ' hecho' : ''}" aria-pressed="${hecho}"${ocupado ? ' disabled aria-busy="true"' : ''}
     onclick="toggleRemito(event,'${p.id}')" title="${hecho ? 'Remito hecho. Tocá para desmarcarlo' : 'Marcar que el remito ya está hecho'}">${mIco(hecho ? 'check' : 'file-text', 'ico-sm')}Remito hecho</button>`;
@@ -4015,7 +4016,7 @@ function toggleRemito(ev, id) {
   if (ev) ev.stopPropagation();   // la tarjeta abre el detalle (o la elige, despachando varios)
   if (remitoEnVuelo.has(id) || !puedeMarcarRemito()) return;
   const p = state.pedidos.find(x => x.id === id);
-  if (!p) return;
+  if (!p || p.estado !== 'Pendiente') return;
   const valor = !p.remitoHecho;
   p.remitoHecho = valor;
   remitoEnVuelo.add(id);
