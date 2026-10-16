@@ -1289,6 +1289,27 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 .rep-hoja button.rh-x:hover { border-color:var(--red); color:var(--red); background:var(--lred); }
 
+/* ── «Solo retiros» (pestaña Pedidos): chip con el verde de RETIRO ── */
+.retiro-toggle {
+  flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:44px;
+  border:1.5px solid #117A65; background:#fff; color:#0E6251;
+  border-radius:999px; padding:9px 15px; font-size:14px; font-weight:700; font-family:inherit;
+  cursor:pointer; white-space:nowrap; transition:transform .15s ease-out, background-color .15s ease, color .15s ease;
+}
+.retiro-toggle:hover { background:#E8F8F5; }
+.retiro-toggle:active { transform:scale(.97); }
+.retiro-toggle:focus-visible { outline:3px solid #117A65; outline-offset:2px; }
+.retiro-toggle.activo { background:#117A65; color:#fff; box-shadow:0 2px 8px -2px rgba(17,122,101,.55); }
+.retiro-toggle .rt-n {
+  flex:none; min-width:22px; padding:1px 7px; border-radius:999px; background:#117A65; color:#fff;
+  font-size:12px; font-weight:800; line-height:20px; text-align:center;
+}
+.retiro-toggle.activo .rt-n { background:#fff; color:#0E6251; }
+.retiro-toggle .rt-n[hidden] { display:none; }
+.retiro-vacio { display:flex; align-items:center; justify-content:center; gap:7px; text-align:center; color:var(--gray); padding:40px 16px; }
+@media(max-width:767.98px) { .retiro-toggle { flex:1; } }
+@media(prefers-reduced-motion:reduce) { .retiro-toggle { transition:none; } }
+
 /* ══ DESPACHAR VARIOS (pestaña Pedidos) ══ */
 .desp-btn {
   flex-shrink:0; border:1.5px solid var(--green); background:var(--lgreen); color:var(--green-ink);
@@ -1622,6 +1643,12 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
             <button class="search-clear" aria-label="Borrar búsqueda" onclick="clearSearch()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
             <div class="ac-list"></div>
           </div>
+          <!-- Filtro rápido: solo los pedidos que pasa a buscar el cliente.
+               Se suma (Y) al buscador; no cambia ningún dato. -->
+          <button type="button" class="retiro-toggle" id="retiroToggle" aria-pressed="false" onclick="toggleSoloRetiros()"
+            title="Mostrar solo los pedidos que retira el cliente en el depósito">
+            <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg><span>Solo retiros</span><span class="rt-n" id="retiroToggleN"></span>
+          </button>
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-refresh-cw"/></svg></span><span class="rb-txt">Actualizar</span>
           </button>
@@ -2377,6 +2404,8 @@ let showProgramados = false;
 let showDespachados = false;
 let showCancelados = false;
 let searchQuery = '';
+// «Solo retiros» (barra de Pedidos): filtro de presentación, en memoria. Se combina con el buscador.
+let soloRetiros = false;
 // '' = texto escrito a mano (coincidencia parcial).
 // 'cliente' | 'producto' = salió de la lista desplegable (coincidencia exacta).
 let searchTipo = '';
@@ -4552,12 +4581,16 @@ function renderPedidos() {
     texto: `${mIco('circle-x', 'ico-sm')} ${canc.length} cancelado${canc.length !== 1 ? 's' : ''}${!q ? ' (últimos 7 días)' : ''}`,
   });
 
-  if (!cuerpo) {
+  const hayVisibles = atrasados.length + hoyG.length + mananaG.length + sinFecha.length + masAdelante.length + desp.length + canc.length > 0;
+  if (soloRetiros && !hayVisibles) {
+    cuerpo += `<p class="retiro-vacio">${mIco('store', 'ico-sm')} No hay pedidos para retirar con los filtros actuales.</p>`;
+  } else if (!cuerpo) {
     cuerpo = q
       ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
       : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde <b>Cargar</b>.</p>';
   }
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
+  actualizarRetiroToggle();
   updatePapeleraFab();
   renderComprometido();
   actualizarBarraDesp();
@@ -5164,6 +5197,10 @@ function toggleCancelados() {
 //    wEBER", porque "eber" está adentro de "weber". Buscar un cliente y
 //    que aparezcan pedidos ajenos no es un detalle: es leer mal el pedido.
 function pedidosFiltrados() {
+  const base = pedidosPorBusqueda();
+  return soloRetiros ? base.filter(p => !!p.retiro) : base;
+}
+function pedidosPorBusqueda() {
   const q = searchQuery.trim().toLowerCase();
   if (!q) return state.pedidos;
   const norm = v => String(v == null ? '' : v).trim().toLowerCase();
@@ -5176,6 +5213,19 @@ function pedidosFiltrados() {
   return state.pedidos.filter(p =>
     norm(p.cliente).includes(q) ||
     (p.items || []).some(it => norm(it.prod).includes(q)));
+}
+function toggleSoloRetiros() {
+  soloRetiros = !soloRetiros;
+  renderPedidos();
+}
+// El botón muestra cuántos retiros PENDIENTES hay con la búsqueda actual (lo que hay que preparar o entregar).
+function actualizarRetiroToggle() {
+  const b = document.getElementById('retiroToggle'); if (!b) return;
+  b.classList.toggle('activo', soloRetiros);
+  b.setAttribute('aria-pressed', soloRetiros ? 'true' : 'false');
+  const n = pedidosPorBusqueda().filter(p => p.retiro && p.estado === 'Pendiente').length;
+  const c = document.getElementById('retiroToggleN');
+  c.textContent = n ? String(n) : ''; c.hidden = !n;
 }
 
 // Cartel que deja claro que el filtro es exacto y sobre qué campo: si no,
