@@ -128,6 +128,25 @@ Deno.serve(async request=>{
   const db=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),{auth:{persistSession:false}});
   const base='meta/whatsapp/v24.0/'+phoneId;
   try{
+    if(body.action==='mark_read'){
+      // «Marcar como leído en WhatsApp»: avisa a WhatsApp que se leyó el último mensaje del cliente (y los anteriores).
+      // El cliente ve los tildes azules y, con la coexistencia, el chat queda leído también en WhatsApp Business.
+      // Marcar «no leído» en WhatsApp no existe en la API. Repetirlo no cambia nada: es seguro reintentar.
+      if(!permissions.send)return result(403,{error:'Tu cuenta no puede marcar chats como leídos en WhatsApp.'});
+      if(typeof body.contact_key!=='string' || !body.contact_key || body.contact_key.length>200)return result(400,{error:'Contacto inválido.'});
+      const {data:contact,error}=await db.from('whatsapp_contacts').select('contact_key,phone_number_id').eq('contact_key',body.contact_key).maybeSingle();
+      if(error)throw new Error('Could not read contact');
+      if(!contact || contact.phone_number_id!==phoneId)return result(404,{error:'Contacto inexistente.'});
+      const {data:last,error:lastError}=await db.from('whatsapp_messages').select('whatsapp_message_id,occurred_at')
+        .eq('contact_key',contact.contact_key).eq('direction','inbound').order('occurred_at',{ascending:false}).limit(1).maybeSingle();
+      if(lastError)throw new Error('Could not read last message');
+      if(!last)return result(409,{error:'Este chat no tiene mensajes del cliente para marcar.'});
+      if(Date.now()-new Date(last.occurred_at).getTime()>30*86400000)
+        return result(409,{error:'WhatsApp solo deja marcar como leídos los mensajes de los últimos 30 días.'});
+      await provider(base+'/messages',key,{method:'POST',body:JSON.stringify({
+        messaging_product:'whatsapp',status:'read',message_id:last.whatsapp_message_id})});
+      return result(200,{ok:true});
+    }
     if(body.action==='send_status'){
       const {data:prior,error}=await db.from('whatsapp_send_requests').select('state,message_id')
         .eq('request_id',body.request_id).eq('user_id',auth.user.id).maybeSingle();

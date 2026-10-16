@@ -611,21 +611,35 @@ function productosDelChat(){
 document.addEventListener('wa:vinculos',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp')drawFichaDatos();});
 document.addEventListener('seg:actualizado',()=>{if(typeof activeTab!=='undefined' && activeTab==='whatsapp'){renderContacts();drawCabecera();drawFichaDatos();}});
 
-// ── Clic derecho en un chat: «Marcar como no leído» / «Marcar como leído» (solo en la app; WhatsApp no se entera) ──
+// ── Clic derecho en un chat: «Marcar como no leído / leído (en la app)», que WhatsApp no se entera, y
+// «Marcar como leído en WhatsApp», que avisa a WhatsApp (el cliente ve los tildes azules y Business lo muestra leído).
+// «No leído en WhatsApp» no se ofrece: la API de WhatsApp no lo permite.
 function cerrarMenuChat(){const m=$('wa-ctx');if(m)m.remove();}
 function abrirMenuChat(event,boton){
   cerrarMenuChat();
   const key=boton.dataset.waContact, c=E.contacts.find(x=>x.contact_key===key);if(!c)return;
   const leido=!sinLeer(c);
+  const opciones=[[leido?'no-leido':'leido',leido?'message-circle':'check',leido?'Marcar como no leído (en la app)':'Marcar como leído (en la app)']];
+  if(E.permissions?.send && c.last_inbound_at)opciones.push(['leido-wa','check','Marcar como leído en WhatsApp']);
   const m=document.createElement('div');m.id='wa-ctx';m.className='wa-ctx';m.setAttribute('role','menu');
-  m.innerHTML=`<button type="button" role="menuitem" data-ctx="${leido?'no-leido':'leido'}">${ico(leido?'message-circle':'check')}${leido?'Marcar como no leído':'Marcar como leído'}</button>`;
+  m.innerHTML=opciones.map(([id,icono,texto])=>`<button type="button" role="menuitem" data-ctx="${id}">${ico(icono)}${texto}</button>`).join('');
   $('wa-raiz').appendChild(m);E.menuDesde=Date.now();
   // Con el mouse, donde se hizo clic; con teclado (tecla de menú o Shift+F10), debajo del chat.
   const r=boton.getBoundingClientRect(), x=event.clientX || r.left+24, y=event.clientY || r.top+r.height/2;
   const w=m.offsetWidth, h=m.offsetHeight;
   m.style.left=Math.min(x,innerWidth-w-8)+'px';m.style.top=Math.min(y,innerHeight-h-8)+'px';
   m.querySelector('button').focus();
-  m.querySelector('button').onclick=()=>{cerrarMenuChat();marcarChat(key,leido).catch(handleError);boton.focus();};
+  m.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    cerrarMenuChat();
+    (b.dataset.ctx==='leido-wa'?leidoEnWhatsApp(key):marcarChat(key,leido)).catch(handleError);
+    boton.focus();
+  });
+  // Flechas para moverse entre opciones, como en un menú del sistema.
+  m.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowDown' && e.key!=='ArrowUp')return;
+    const bs=[...m.querySelectorAll('button')], k=bs.indexOf(document.activeElement);
+    bs[(k+(e.key==='ArrowDown'?1:bs.length-1))%bs.length].focus();e.preventDefault();
+  });
 }
 async function marcarChat(key,noLeido){
   if(E.marcando)return;E.marcando=true;
@@ -637,6 +651,18 @@ async function marcarChat(key,noLeido){
       // Igual que WhatsApp: el chat marcado se cierra (si quedara abierto, se volvería a marcar leído enseguida).
       if(E.selected===key){E.selected=null;E.selectedContact=null;E.generation++;E.messages=[];E.notes=[];$('wa-thread').innerHTML=vacioThread();drawFicha();mostrar('lista');}
     }else E.marcados.delete(key);
+    await loadContacts();
+  }finally{E.marcando=false;}
+}
+// Leído en WhatsApp y también en la app. Repetirlo es inofensivo; mientras está en curso no se puede volver a pedir.
+async function leidoEnWhatsApp(key){
+  if(E.marcando)return;E.marcando=true;
+  try{
+    status('Marcando como leído en WhatsApp…');
+    await api({action:'mark_read',contact_key:key});
+    const {error}=await DB.rpc('wa_mark_seen',{p_contact:key});if(error)throw error;
+    E.marcados.delete(key);
+    status('Listo: quedó leído en WhatsApp y en la app.');
     await loadContacts();
   }finally{E.marcando=false;}
 }
