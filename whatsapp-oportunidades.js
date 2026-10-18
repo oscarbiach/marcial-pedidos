@@ -4,14 +4,14 @@
      2) quiénes preguntaron, recibieron cotización o se lo ofrecimos por WhatsApp y todavía no lo compraron.
    Cada producto se define con palabras a incluir y frases a excluir (sin importar mayúsculas ni tildes). Las frases
    excluidas se quitan del texto antes de buscar: así «Salame al vacío» no cuenta como Vacío, pero «pulpas, picada,
-   vacío» sí. Solo lee: no cambia ningún dato. No usa IA: la zona sale de la característica del número, y el equipo y los
-   proveedores se ocultan por nombre (se puede apagar). */
+   vacío» sí. Solo lee: no cambia ningún dato. No usa IA: la zona sale de la característica del número.
+   No oculta a nadie por nombre (pedido del usuario); solo descarta las hojas de reparto. */
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
   const ico = (n, c) => (window.mIco ? mIco(n, c || 'ico-sm') : '');
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const lista = s => String(s || '').split(',').map(norm).filter(Boolean);
   const fecha = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-AR') : '-';
   const tel = n => n ? '+' + String(n).replace(/^\+/, '') : '-';
@@ -22,8 +22,7 @@
     picada: 'picada clasica, picada grande clasica, picada mundialista, picada comun y picada economica',
   };
   const CLAVE = 'dm_op_productos';
-  // Equipo y proveedores (se ocultan por nombre de agenda) y mensajes internos (hojas de reparto, listas de entregas).
-  const NO_CLIENTE = /vendedor|proveedor|comercial|\(carnes\)/i;
+  // Mensajes internos (hojas de reparto, listas de entregas): no son interés de nadie. A las personas no se las oculta (pedido del usuario).
   const INTERNO = /hoja de reparto|=== entregas ===|=== total a cargar/i;
   const S = { busy: false, gen: 0, ultimo: null, prods: [] };
 
@@ -84,12 +83,6 @@
     });
   }
   const enZona = (phone, prefijos) => !prefijos.length || !phone || prefijos.some(p => String(phone).replace(/^\+/, '').startsWith('549' + p));
-  function esEquipo(c) {
-    const n = String((c && c.display_name) || '').trim();
-    if (NO_CLIENTE.test(n)) return true;
-    const vend = typeof VENDEDORES !== 'undefined' ? VENDEDORES : [];
-    return vend.some(v => norm(n) === norm(v) || norm(n).startsWith(norm(v) + ' '));
-  }
 
   async function buscar() {
     const grupos = leerGrupos();
@@ -97,7 +90,6 @@
     const prefijos = $('op-zona-modo').value === 'sf' ? lista($('op-zona').value).map(p => p.replace(/\D/g, '')).filter(Boolean) : [];
     const dias = Number($('op-periodo').value) || 0;
     const desde = dias ? new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10) : '';
-    const ocultar = $('op-ocultar').checked;
     const gen = ++S.gen;
     S.busy = true; $('op-resultado').setAttribute('aria-busy', 'true'); aviso('Buscando en pedidos y chats…');
     try {
@@ -145,12 +137,11 @@
         if (c && x.phone_number && !c.tels.includes(x.phone_number)) { c.tels.push(x.phone_number); if (!c.key) c.key = x.contact_key; }
       });
       const interesados = [];
-      let ocultos = 0, fuera = 0;
+      let fuera = 0;
       porContacto.forEach(c => {
         const x = ck.get(c.key) || {};
         const comprador = x.linked_client_name && nombreComprador.get(norm(x.linked_client_name));
         if (comprador) { const m = c.entrada || c.salida; if (m && (!comprador.msg || m.occurred_at > comprador.msg.occurred_at)) comprador.msg = m; return; }
-        if (ocultar && esEquipo(x)) { ocultos++; return; }
         if (!enZona(x.phone_number, prefijos)) { fuera++; return; }
         c.contacto = x; c.estado = estado(c);
         interesados.push(c);
@@ -165,8 +156,7 @@
       if (!S.tab || !listas[S.tab].length) S.tab = TABS.find(t => listas[t.id].length)?.id || 'responder';
       S.ultimo = { grupos, listas };
       dibujar();
-      const extra = [ocultos && `${ocultos} del equipo o proveedores`, fuera && `${fuera} fuera de la zona`].filter(Boolean);
-      aviso(extra.length ? 'No se muestran: ' + extra.join(' y ') + '.' : '');
+      aviso(fuera ? `No se muestran ${fuera} ${fuera === 1 ? 'contacto' : 'contactos'} de fuera de la zona.` : '');
     } catch (e) {
       if (gen === S.gen) aviso('No se pudo buscar: ' + (e.message || e), true);
     } finally { if (gen === S.gen) { S.busy = false; $('op-resultado')?.removeAttribute('aria-busy'); } }
@@ -272,9 +262,9 @@
         <details class="op-ajustes"><summary>Ajustar búsqueda</summary>
           <p class="op-sub">Sin importar tildes ni mayúsculas. «Buscar» acepta variantes (muzza, muzzarella); «No contar» descarta frases (salame al vacío).</p>
           <div class="op-grupos"><div id="op-ajustes-prods" class="op-grupos-in"></div>
-            <fieldset class="op-grupo"><legend>Zona y equipo</legend>
-              <label>Características de «Santa Fe y alrededores»<input id="op-zona" value="342, 3404, 3496, 3497"></label>
-              <label class="op-check"><input type="checkbox" id="op-ocultar" checked> No mostrar equipo, proveedores ni hojas de reparto</label></fieldset>
+            <fieldset class="op-grupo"><legend>Zona</legend>
+              <label>Características de «Santa Fe y alrededores»<input id="op-zona" value="342, 3496"></label>
+              <span class="op-sub">342: Santa Fe, Santo Tomé y Recreo · 3496: Esperanza.</span></fieldset>
           </div>
           <p class="op-sub">Los que ya compraron se muestran siempre, sin importar la zona. Los chats guardados empiezan el 28/09/2026. Solo lee: no cambia ningún dato.</p>
         </details>

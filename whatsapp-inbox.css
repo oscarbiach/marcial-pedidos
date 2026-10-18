@@ -230,9 +230,9 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 /* Notebook: conversaciones | chat; la ficha se abre en lugar del chat */
 @media(max-width:1279.98px){
   .wa-layout{grid-template-columns:300px minmax(0,1fr)}
-  .wa-ficha{display:none}
+  .wa-layout .wa-lado{display:none}
   .wa-layout[data-vista="ficha"] .wa-thread{display:none}
-  .wa-layout[data-vista="ficha"] .wa-ficha{display:block}
+  .wa-layout[data-vista="ficha"] .wa-lado{display:flex}
   .wa-btn.wa-sin-ficha{display:inline-flex}
   .wa-volver-chat.wa-sin-ficha{display:inline-flex}
 }
@@ -242,10 +242,10 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
   .wa-top{display:block;margin-top:2px}.wa-top h2{font-size:21px}.wa-top h2 .ico{width:32px;height:32px;padding:7px}
   .wa-actions{margin-top:10px}.wa-mas-menu{left:0;right:auto}
   .wa-layout{grid-template-columns:1fr;gap:0}
-  .wa-layout .wa-thread,.wa-layout .wa-ficha{display:none}
+  .wa-layout .wa-thread,.wa-layout .wa-lado{display:none}
   .wa-layout[data-vista="chat"] .wa-list,.wa-layout[data-vista="ficha"] .wa-list{display:none}
   .wa-layout[data-vista="chat"] .wa-thread{display:flex}
-  .wa-layout[data-vista="ficha"] .wa-ficha{display:block}
+  .wa-layout[data-vista="ficha"] .wa-lado{display:flex}
   .wa[data-vista="chat"] .wa-top,.wa[data-vista="ficha"] .wa-top{display:none}
   .wa-solo-angosto{display:inline-grid}
   .wa-chat-cab{padding:8px 10px;gap:8px}.wa-chat-acc .wa-pill{display:none}
@@ -512,7 +512,6 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-oport .op-grupo legend{font-weight:800;font-size:13.5px;padding:0 4px}
 .wa-oport .op-grupo label{display:block;margin-top:6px;font-size:12.5px;color:var(--m-tinta-3)}
 .wa-oport .op-grupo input:not([type=checkbox]){width:100%;margin-top:3px}
-.wa-oport .op-grupo .op-check{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--m-tinta-2)}
 .wa-oport input[type=checkbox]{width:auto;margin:0}
 .wa-oport .op-aviso{min-height:20px;margin:2px 0;font-size:13px;color:var(--m-tinta-3)}
 .wa-oport .op-tabs{display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px;margin-top:6px;border-bottom:1px solid var(--m-linea-2)}
@@ -538,3 +537,29 @@ body.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex}
 .wa-oport .op-acc{width:1%;text-align:right}
 .wa-oport .op-chat{min-height:34px;padding:4px 12px;font-size:13px;white-space:nowrap}
 .wa-oport .op-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Columna derecha con pestañas «Cliente | Precios» (whatsapp-precios.js) */
+.wa-lado{display:flex;flex-direction:column;gap:8px;min-height:0;min-width:0}
+.wa-lado>.wa-ficha{flex:1 1 auto}
+.wa-lado [hidden]{display:none!important}
+.wa-lado-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border:1px solid var(--m-linea);border-radius:12px;background:var(--m-superficie)}
+.wa-lado-tabs button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;border:0;border-radius:9px;background:none;color:var(--m-tinta-3);font-weight:700;font-size:14px}
+.wa-lado-tabs button:hover{color:var(--m-tinta)}
+.wa-lado-tabs button[aria-selected="true"]{background:var(--m-superficie-3);color:var(--m-tinta)}
+.wa-precios{display:flex;flex-direction:column;gap:10px}
+.wa-precios .pr-buscar{position:sticky;top:-16px;z-index:1;margin:-16px -16px 0;padding:12px 16px 10px;background:var(--m-superficie);border-bottom:1px solid var(--m-linea)}
+.wa-precios .pr-buscar .wa-buscar{margin:0}
+.wa-precios .pr-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:12px;color:var(--m-tinta-3)}
+.wa-precios .pr-meta button{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:2px 8px;border:0;border-radius:8px;background:none;color:var(--m-tinta-2);font-size:12.5px;font-weight:700}
+.wa-precios .pr-meta button:hover{background:var(--m-superficie-3)}
+.wa-precios .pr-cats{display:flex;flex-wrap:wrap;gap:6px}
+.wa-precios .pr-cats .wa-chip{min-height:30px;font-size:12.5px}
+.wa-precios .pr-cat{margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:var(--m-tinta-3)}
+.wa-precios .pr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:start;padding:9px 0;border-top:1px solid var(--m-linea)}
+.wa-precios .pr-cat+.pr-item{border-top:0}
+.wa-precios .pr-n{font-size:14px;font-weight:700;color:var(--m-tinta);line-height:1.3;overflow-wrap:anywhere}
+.wa-precios .pr-vals{grid-column:1;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13.5px;color:var(--m-tinta-2)}
+.wa-precios .pr-vals b{color:var(--m-tinta);font-variant-numeric:tabular-nums}
+.wa-precios .pr-pasar{grid-column:2;grid-row:1/span 2;align-self:center;min-height:34px;padding:4px 10px;font-size:12.5px}
+.wa-precios .pr-aviso{margin:0;font-size:13px;color:var(--m-tinta-2)}
+.wa-precios .pr-mas{font-size:12.5px;color:var(--m-tinta-3)}

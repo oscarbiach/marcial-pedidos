@@ -145,7 +145,13 @@ function shell(){
         <div id="wa-contacts" class="wa-contacts"></div><button id="wa-more-contacts" class="wa-mas-contactos" type="button" hidden>Cargar más conversaciones</button>
       </section>
       <section id="wa-thread" class="wa-thread" aria-label="Conversación"></section>
-      <aside id="wa-ficha" class="wa-ficha" aria-label="Ficha del cliente"></aside>
+      <div id="wa-lado" class="wa-lado">
+        <div class="wa-lado-tabs" id="wa-lado-tabs" role="tablist" aria-label="Panel lateral" hidden>
+          <button type="button" role="tab" data-wa="lado" data-lado="ficha" aria-selected="true">${ico('user')}Cliente</button>
+          <button type="button" role="tab" data-wa="lado" data-lado="precios" aria-selected="false">${ico('tag')}Precios</button></div>
+        <aside id="wa-ficha" class="wa-ficha" aria-label="Ficha del cliente"></aside>
+        <aside id="wa-precios" class="wa-ficha wa-precios" aria-label="Consultor de precios" hidden></aside>
+      </div>
     </div>`;
   $('wa-refresh').addEventListener('click',()=>refresh().catch(handleError));
   $('wa-search').addEventListener('input',event=>{
@@ -171,7 +177,9 @@ function shell(){
     const b=event.target.closest('[data-wa]');if(!b)return;
     const a=b.dataset.wa;
     if(a==='volver')mostrar('lista');
-    else if(a==='ficha')mostrar('ficha');
+    else if(a==='ficha'){mostrar('ficha');lado('ficha');}
+    else if(a==='precios'){mostrar('ficha');lado('precios');}
+    else if(a==='lado')lado(b.dataset.lado);
     else if(a==='chat')mostrar('chat');
     else if(a==='ver-cliente' && contact())Seg()?.verCliente(contact().linked_client_name);
     else if(a==='vincular')window.WhatsAppClientReview.open();
@@ -181,6 +189,13 @@ function shell(){
     else if(a==='reclamo-pedido')reclamoEnPedido(b.dataset.id);
     else if(a==='reclamo-guardar')reclamoGuardar(b).catch(handleError);
   });
+}
+// Columna derecha: «Cliente» (la ficha) o «Precios» (whatsapp-precios.js, pedido del usuario 16/10).
+function lado(t){
+  if(!$('wa-precios'))return;const precios=t==='precios' && !!window.WhatsAppPrecios;
+  $('wa-ficha').hidden=precios;$('wa-precios').hidden=!precios;
+  document.querySelectorAll('#wa-lado-tabs [data-lado]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.lado===(precios?'precios':'ficha'))));
+  if(precios)window.WhatsAppPrecios.mostrar();
 }
 // En celular se ve una cosa por vez (lista → chat → ficha); en PC las tres columnas a la vez.
 function mostrar(vista){E.vista=vista;const l=$('wa-layout');if(!l)return;l.dataset.vista=vista;$('wa-raiz').dataset.vista=vista;
@@ -242,6 +257,7 @@ function drawCabecera(){
     <div class="wa-chat-acc">
     ${c.linked_client_name?`<button type="button" class="wa-btn wa-btn--verde" data-wa="cargar" title="Cargar un pedido para ${escape(c.linked_client_name)}">${ico('shopping-cart')}<span class="wa-txt-ancho">Cargar pedido</span></button>`:''}
     <button type="button" class="wa-btn wa-btn--ficha wa-sin-ficha" data-wa="ficha">${ico('user')}Ficha</button>
+    ${window.WhatsAppPrecios?`<button type="button" class="wa-btn wa-btn--ficha wa-sin-ficha" data-wa="precios">${ico('tag')}Precios</button>`:''}
     ${c.phone_number?`<a class="wa-btn wa-btn--wa" href="https://wa.me/${escape(c.phone_number)}" target="_blank" rel="noopener" title="Abrir en WhatsApp Business">${ico('arrow-up-right')}<span class="wa-txt-ancho">WhatsApp</span></a>`:''}</div>`;
 }
 function drawThread(){
@@ -756,6 +772,7 @@ async function open(client=null){
   document.querySelector('#wa-mas .wa-mas-sep').hidden=!permissions.manage;
   $('wa-review-clients').hidden=!permissions.manage;
   $('wa-oport').hidden=!window.WhatsAppOportunidades;
+  $('wa-lado-tabs').hidden=!window.WhatsAppPrecios;
   status('');
   cargarVinculos();
   if(window.WhatsAppFotos){
