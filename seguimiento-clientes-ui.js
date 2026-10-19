@@ -458,7 +458,7 @@
   function vistas(calc) {
     const b = (v, txt, extra) => `<button type="button" class="sc-vista" data-sc="vista" data-v="${v}" aria-pressed="${E.vista === v}">${txt}${extra || ''}</button>`;
     const conPausa = datosOk();
-    return `<div class="sc-vistas${conPausa ? ' sc-vistas--3' : ''}" role="group" aria-label="Vista">${b('hoy', 'Para hoy')}${b('clientes', 'Clientes', ` <span class="sc-cant">${calc.clientes.length}</span>`)}${conPausa ? b('pausa', 'En pausa', ` <span class="sc-cant${calc.pausa.revisar ? ' sc-t-aviso' : ''}">${calc.pausa.total}</span>`) : ''}</div>`;
+    return `<div class="sc-vistas sc-vistas--${conPausa ? 4 : 3}" role="group" aria-label="Vista">${b('hoy', 'Para hoy')}${b('clientes', 'Clientes', ` <span class="sc-cant">${calc.clientes.length}</span>`)}${b('dias', 'Por día')}${conPausa ? b('pausa', 'En pausa', ` <span class="sc-cant${calc.pausa.revisar ? ' sc-t-aviso' : ''}">${calc.pausa.total}</span>`) : ''}</div>`;
   }
   // Avisos de la pantalla (guardado, conflicto, datos viejos): se ven arriba y se pueden cerrar.
   function avisos() {
@@ -513,7 +513,32 @@
       <div class="sc-filtros" role="group" aria-label="Filtro">${f('todas', 'Todas', todos.length)}${f('revisar', 'Para revisar', rev.length)}</div>
       ${lista.length ? `<ol class="sc-ol">${lista.map(c => fila(c, 'pausa', true)).join('')}</ol>` : `<p class="sc-nadie">${todos.length ? 'Ninguna pausa tiene la revisión vencida.' : 'Nadie en pausa.'}</p>`}</section>`;
   }
+  // «Por día» (pedido del usuario, 19/10/2026): quiénes suelen pedir cada día, en columnas de lunes a sábado como los pedidos.
+  // Usa el día habitual del cálculo (día de carga, últimos 6 meses, con un mínimo de pedidos); un cliente puede estar en más de un día.
+  // Los que están en pausa no figuran. Tocar una tarjeta abre la ficha, igual que en las otras vistas.
+  function vistaDias(calc) {
+    const hoyD = F.aFecha(hoy()).getDay(), activos = calc.clientes.filter(c => !(c.manual && c.manual.tipo === 'pausa'));
+    const porDia = new Map(SEMANA.map(d => [d, []]));
+    activos.forEach(c => c.diasHab.forEach(d => porDia.get(d).push(c)));
+    const sinDia = activos.filter(c => !c.diasHab.length).length, mayus = t => t[0].toUpperCase() + t.slice(1);
+    const tarjeta = (c, d) => `<li><button type="button" class="sc-fila sc-fila--dia sc-t-${tono(c)}" data-sc="fila" data-k="${at(c.clave)}"${E.sel === c.clave ? ' aria-current="true"' : ''}>
+        <span class="sc-nom">${esc(c.nombre)}</span>
+        <span class="sc-dia-dato">Último pedido: <b class="sc-met-ult">${esc(c.dias === 0 ? 'hoy' : 'hace ' + diasN(c.dias))}</b></span>
+        ${c.diasHab.length > 1 ? `<span class="sc-dia-dato">También: ${esc(c.diasHab.filter(x => x !== d).map(x => ABREV[x]).join(', '))}</span>` : ''}
+        <span class="sc-dia-pill">${pill(c)}</span></button></li>`;
+    const dias = SEMANA.filter(d => d !== 0 || porDia.get(0).length);
+    const cols = dias.map(d => {
+      const l = porDia.get(d).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      return `<section class="sc-dia${d === hoyD ? ' sc-dia--hoy' : ''}" data-dia="${d}" aria-label="${at(mayus(S.DIAS[d]) + (d === hoyD ? ' (hoy)' : ''))}">
+        <h4 class="sc-dia-h"><span>${esc(mayus(S.DIAS[d]))}</span>${d === hoyD ? '<span class="sc-dia-hoy">Hoy</span>' : ''}<span class="sc-cant">${l.length}</span></h4>
+        ${l.length ? `<ul class="sc-dia-l">${l.map(c => tarjeta(c, d)).join('')}</ul>` : '<p class="sc-dia-nadie">Nadie fijo este día.</p>'}</section>`;
+    });
+    return `<section class="sc-bloque sc-bloque--dias"><div class="sc-bhead"><h3 class="sc-bh1"><span class="sc-ib sc-t-info">${ico('calendar-days')}</span><span class="sc-tit">Quiénes suelen pedir cada día</span></h3></div>
+      <p class="sc-subt">Según el día en que cargan el pedido en los últimos 6 meses. Un cliente puede figurar en más de un día.${sinDia ? ` ${sinDia} ${sinDia === 1 ? 'cliente no tiene' : 'clientes no tienen'} un día fijo (pocos pedidos o piden cualquier día) y no figura${sinDia === 1 ? '' : 'n'} acá.` : ''}</p>
+      <div class="sc-semana" style="--n:${dias.length}">${cols.join('')}</div></section>`;
+  }
   function cuerpo(calc) {
+    if (E.vista === 'dias') return vistaDias(calc);
     if (E.vista === 'pausa' && datosOk()) return vistaPausa(calc);
     if (E.vista === 'clientes') {
       const q = S.norm(E.q), res = resultados(calc);

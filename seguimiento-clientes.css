@@ -59,6 +59,9 @@ body.seg-ancho main { max-width: none; }
 
 @media (min-width: 1024px) {
   .sc-area { display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); gap: 24px; align-items: start; }
+  /* Sin cliente elegido la lista usa todo el ancho, como Pedidos (pedido del usuario, 19/10); la ficha aparece al costado al elegir uno. */
+  .sc-area:not(.sc-area--ficha) { grid-template-columns: minmax(0, 1fr); }
+  .sc-area:not(.sc-area--ficha) .sc-col--ficha { display: none; }
   .sc-area--ficha .sc-col--lista { display: block; }
   .sc-col--ficha, .sc-area--ficha .sc-col--ficha {
     display: block; position: sticky; top: calc(var(--sandbox-banner-h, 0px) + var(--sc-hdr) + 16px);
@@ -97,9 +100,10 @@ body.seg-ancho main { max-width: none; }
 .sc-fila:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: -2px; }
 .sc-fila[aria-current="true"] { background: var(--m-azul-50); box-shadow: inset 0 0 0 2px var(--m-azul-500); }
 @media (hover: hover) and (pointer: fine) { .sc-fila:hover:not([aria-current="true"]) { background: var(--m-superficie-2); } }
-.sc-fila-1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sc-fila-1 { display: flex; align-items: center; justify-content: flex-start; gap: 10px; flex-wrap: wrap; }
+.sc-fila-1 > .sc-nom { margin-right: auto; }
 .sc-nom { font-size: var(--m-t-xl); font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
-.sc-mets { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 16px; }
+.sc-mets { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 16px; max-width: 720px; }
 .sc-met { font-size: var(--m-t-lg); color: var(--m-tinta); }
 .sc-met-k { color: var(--m-tinta-2); font-weight: 500; }
 .sc-met b { font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -241,7 +245,8 @@ body.seg-ancho main { max-width: none; }
 /* ═══ Mover, pausar y resolver avisos (IDEA-10/11/12). Solo aparece para quien puede editar y con la base lista. ═══ */
 .sc-t-marca { --tf: var(--m-azul-100); --tt: var(--m-marino-800); --ta: var(--m-marino-800); --tx: var(--m-marino-800); }
 .sc-vistas--3 { grid-template-columns: repeat(3, 1fr); max-width: 560px; }
-.sc-vistas--3 .sc-vista { padding: 0 8px; }
+.sc-vistas--4 { grid-template-columns: repeat(4, 1fr); max-width: 700px; }
+.sc-vistas--3 .sc-vista, .sc-vistas--4 .sc-vista { padding: 0 8px; }
 .sc-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: var(--m-r-pill); background: var(--m-superficie-3); color: var(--m-tinta-2); font-size: var(--m-t-sm); font-weight: 700; white-space: nowrap; }
 .sc-ok { color: var(--m-ok-tinta); font-weight: 700; }
 
@@ -363,7 +368,27 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
   .sc-dlg-pie .sc-btn, .sc-dlg-pie .sc-accion { flex: 1 1 140px; justify-content: center; }
 }
 @media (max-width: 480px) {
-  .sc-vistas--3 { max-width: none; }
-  .sc-vistas--3 .sc-vista { font-size: var(--m-t-md); gap: 4px; padding: 0 4px; }
+  .sc-vistas--3, .sc-vistas--4 { max-width: none; }
+  .sc-vistas--3 .sc-vista, .sc-vistas--4 .sc-vista { font-size: var(--m-t-md); gap: 4px; padding: 0 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .sc-btn { transition: none; } }
+
+/* «Por día»: una columna por día de la semana (lunes a sábado; domingo solo si alguien pide ese día), como las columnas de Pedidos */
+.sc-semana { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 8px 0 14px; }
+@media (min-width: 1280px) { .sc-area:not(.sc-area--ficha) .sc-semana { grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); gap: 10px; } }
+.sc-fila--dia .sc-pill { white-space: normal; max-width: 100%; }
+.sc-dia { min-width: 0; padding: 10px; background: var(--m-superficie-2); border: 1px solid var(--m-linea); border-radius: var(--m-r-md); }
+.sc-dia--hoy { border-color: var(--m-azul-500); box-shadow: inset 0 3px 0 var(--m-azul-500); }
+.sc-dia-h { display: flex; align-items: center; gap: 8px; margin: 2px 4px 10px; font-size: var(--m-t-lg); font-weight: 800; }
+.sc-dia-h .sc-cant { margin-left: auto; }
+.sc-dia-hoy { padding: 1px 9px; border-radius: var(--m-r-pill); background: var(--m-azul-500); color: #fff; font-size: var(--m-t-sm, 13px); font-weight: 800; }
+.sc-dia-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sc-fila--dia { grid-template-columns: minmax(0, 1fr); row-gap: 4px; padding: 10px 12px; background: var(--m-superficie); border: 1px solid var(--m-linea); box-shadow: var(--m-sombra-1); }
+.sc-fila--dia::before { content: none; }
+.sc-fila--dia > * { grid-column: 1; }
+.sc-fila--dia .sc-nom { font-size: var(--m-t-lg); }
+.sc-dia-dato { font-size: var(--m-t-md); color: var(--m-tinta-2); }
+.sc-dia-dato b { font-weight: 800; }
+.sc-dia-pill { margin-top: 2px; }
+.sc-dia-nadie { margin: 4px; font-size: var(--m-t-md); color: var(--m-tinta-3); }
+@media (hover: hover) and (pointer: fine) { .sc-fila--dia:hover:not([aria-current="true"]) { background: var(--m-superficie); border-color: var(--m-linea-2); } }
