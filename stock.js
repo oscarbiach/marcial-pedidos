@@ -155,7 +155,7 @@
     if (!E.rec) {
       let h = '<div class="st-card st-inicio"><div class="st-ico-grande">' + ico('clipboard-list') + '</div>' +
         '<h3>No hay recuento abierto</h3>' +
-        '<p>El recuento vale como stock <b>al arrancar el día</b>: lo que se venda o entre después se suma o resta solo. Si hoy ya entró mercadería antes de contar, no la cargues después como ingreso.</p>' +
+        '<p>Se cuenta <b>al terminar el día</b>, cuando ya no sale ni entra nada más. Lo que se venda o entre desde mañana se resta o suma solo.</p>' +
         '<div class="field"><label>Fecha del recuento</label><input type="date" id="st-rec-fecha" value="' + hoy() + '" max="' + hoy() + '"></div>' +
         '<button class="btn btn-primary" onclick="StockUI.abrirRecuento()">' + ico('play') + 'Empezar recuento</button></div>';
       h += historialRecuentos();
@@ -402,7 +402,7 @@
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
     h += '<p class="st-ayuda">Exportá de Dubix el reporte <b>Productos Vendidos</b> (CSV) del período y subilo acá. ' +
-      (ult ? 'Última importación: <b>' + fmtF(ult.desde) + ' al ' + fmtF(ult.hasta) + '</b>, así que la próxima arranca el ' + fmtF(sumarDia(ult.hasta)) + '.' : 'Todavía no se importó ninguna venta.') + '</p>';
+      '<b>En Dubix elegí desde el ' + fmtF(ult ? sumarDia(ult.hasta) : (E.cerrados[0] ? sumarDia(E.cerrados[0].fecha) : hoy())) + ' hasta hoy.</b></p>';
     h += '<div class="st-card"><h4>Ventas importadas</h4>' + (E.imps.length ? E.imps.map(x =>
       '<div class="st-hist' + (x.anulada ? ' anulada' : '') + '"><span><b>' + fmtF(x.desde) + (x.hasta !== x.desde ? ' al ' + fmtF(x.hasta) : '') + '</b> · ' + x.filas + ' productos' + (x.sin_match ? ' · ' + x.sin_match + ' sin match' : '') + ' · ' + esc(x.autor) + (x.anulada ? ' · ANULADA' : '') + '</span>' +
       (x.anulada ? '' : '<button class="st-link st-link--peligro" onclick="StockUI.anularImp(\'' + x.id + '\')">Anular</button>') + '</div>').join('') : '<p class="st-ayuda">Nada todavía.</p>') + '</div>';
@@ -547,14 +547,14 @@
   }
   function pintarImport() {
     const x = E.imp, ult = E.imps.find(i => !i.anulada);
-    const desde = ult ? sumarDia(ult.hasta) : (E.cerrados[0] ? E.cerrados[0].fecha : ayer());
+    const desde = ult ? sumarDia(ult.hasta) : (E.cerrados[0] ? sumarDia(E.cerrados[0].fecha) : ayer());
     let b = '<p><b>' + esc(x.archivo) + '</b>: ' + x.filas.length + ' productos reconocidos (' + fmtN(x.total) + ' unidades/kg en total).</p>';
     if (x.sin.length) b += '<div class="st-nota">' + ico('triangle-alert') + '<div><b>' + x.sin.length + (x.sin.length === 1 ? ' fila no coincide' : ' filas no coinciden') + ' con el catálogo</b> y no se van a descontar:<ul>' +
       x.sin.slice(0, 12).map(s => '<li>' + esc(s.cod ? s.cod + ' · ' : '') + esc(s.det) + ' (' + fmtN(s.cant) + ')</li>').join('') + (x.sin.length > 12 ? '<li>… y ' + (x.sin.length - 12) + ' más</li>' : '') + '</ul>' +
       '<label class="st-check"><input type="checkbox" id="st-imp-crear" checked> Agregarlas al catálogo y descontarlas igual</label></div></div>';
-    b += '<p class="st-ayuda">Poné el mismo período que elegiste en Dubix. No puede pisar otra importación ni cruzar la fecha de un recuento.</p>';
+    b += '<p class="st-ayuda">Tienen que ser <b>las mismas fechas que elegiste en Dubix</b>. Si no coinciden, cancelá y exportá de nuevo.</p>';
     b += '<div class="st-dos"><div class="field"><label>Desde</label><input type="date" id="st-imp-desde" value="' + desde + '" max="' + hoy() + '"></div>' +
-      '<div class="field"><label>Hasta</label><input type="date" id="st-imp-hasta" value="' + (desde > ayer() ? hoy() : ayer()) + '" max="' + hoy() + '"></div></div>';
+      '<div class="field"><label>Hasta</label><input type="date" id="st-imp-hasta" value="' + hoy() + '" max="' + hoy() + '"></div></div>';
     modal('Importar ventas de Dubix', b, [['Cancelar', 'btn-secondary', cerrarModal], ['Descontar ventas', 'btn-primary', confirmarImport]]);
   }
   async function confirmarImport() {
