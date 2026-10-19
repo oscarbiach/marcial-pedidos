@@ -273,12 +273,11 @@ create policy stock_alias_editar on public.stock_alias for update to authenticat
 -- Los valores de por_caja (62 productos) salen de productos.unidades_por_caja de
 -- la app de pedidos y del nombre de cada producto; se cargaron aparte.
 
--- ── El recuento vale al CIERRE del día (19/10/2026) ─────────────────
--- Se cuenta al terminar el día. stock_actual suma movimientos con fecha
--- POSTERIOR al recuento (m.fecha > u.fecha); las ventas importadas se fechan
--- con el último día del período (p_hasta); un período de ventas no puede
--- empezar el día del recuento o antes y terminar después
--- (stock_importar_ventas: r.fecha >= p_desde and r.fecha < p_hasta;
--- stock_cerrar_recuento: x.desde <= v_fecha and x.hasta > v_fecha).
--- Aplicado con create or replace de stock_actual, stock_cerrar_recuento y
--- stock_importar_ventas.
+-- ── Regla final: el recuento vale a la APERTURA del día (19/10/2026) ──
+-- Se cuenta a la mañana, antes de cargar el primer reparto (hay repartos que
+-- vuelven y salen de nuevo y entregas a las 21-22 h, así que el cierre no sirve).
+-- stock_actual suma movimientos con fecha >= la del recuento; las ventas
+-- importadas se fechan con el último día del período (p_hasta); un período no
+-- puede empezar antes del recuento y terminar ese día o después
+-- (importar: r.fecha > p_desde and r.fecha <= p_hasta;
+--  cerrar: x.desde < v_fecha and x.hasta >= v_fecha).
