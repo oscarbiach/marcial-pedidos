@@ -3730,7 +3730,34 @@ function repTagsTexto(it) {
   const t = [];
   if (it.fetear) t.push('FETEAR');
   if (it.fetear && isPanceta(it.prod)) t.push(it.sinCuero ? 'SIN CUERO' : 'CON CUERO');
+  // La panceta sin fetear también se aclara: si no, quien carga no sabe si va feteada o en pieza.
+  if (!it.fetear && isPanceta(it.prod)) t.push('PIEZA ENTERA, SIN FETEAR');
   return t.length ? ' [' + t.join(' - ') + ']' : '';
+}
+
+// Cantidad para el texto de la hoja (pedido del usuario, 19/10/2026): siempre con la palabra completa
+// (CAJAS, unidades sueltas, kg), para que quien carga no confunda cajas con bolsas o paquetes sueltos.
+// En el total a cargar las cajas llevan su equivalencia en unidades; en cada entrega, cuánto trae la caja.
+function repCantidad(it, enTotal) {
+  const p = prodInfo(it.prod), q = round2(Number(it.qty) || 0);
+  const pl = (uno, varios) => (q === 1 ? uno : varios);
+  if (it.fetear) return q + ' kg';
+  if (!p || !p.u) return '× ' + q;
+  if (p.u === 'caja') {
+    if (it.unidades) return q + ' ' + pl('unidad suelta', 'unidades sueltas') + ' (no cajas)';
+    return q + ' ' + pl('CAJA', 'CAJAS') + (p.box ? (enTotal ? ' (= ' + round2(q * p.box) + ' unidades)' : ' de ' + p.box) : '');
+  }
+  if (p.u === 'kg') return q + ' kg';
+  if (p.u === 'unidad') {
+    if (p.box > 1) {
+      const cajas = q / p.box;
+      return Number.isInteger(cajas)
+        ? q + ' unidades (= ' + cajas + ' ' + (cajas === 1 ? 'caja' : 'cajas') + ' de ' + p.box + ')'
+        : q + ' ' + pl('unidad suelta', 'unidades sueltas') + ' (la caja trae ' + p.box + ')';
+    }
+    return q + ' ' + pl('unidad', 'unidades');
+  }
+  return q + ' ' + p.u;
 }
 
 function textoHojaReparto() {
@@ -3745,7 +3772,7 @@ function textoHojaReparto() {
   L.push('');
   L.push('=== TOTAL A CARGAR EN LA CAMIONETA ===');
   totals.forEach(t => {
-    L.push('- ' + itemLineLabel(t) + '  ' + t.prod + repTagsTexto(t));
+    L.push('- ' + repCantidad(t, true) + '  ' + t.prod + repTagsTexto(t));
   });
   L.push('');
   L.push('=== ENTREGAS ===');
@@ -3757,7 +3784,7 @@ function textoHojaReparto() {
       // Acá va la etiqueta corta ("1 caja" y no "1 caja (= 72 un.)"): es lo
       // que se entrega en la puerta. La equivalencia en unidades sirve para
       // cargar la camioneta, y por eso queda arriba, en el total.
-      L.push('   · ' + itemLabelCorto(it) + ' ' + it.prod + repTagsTexto(it));
+      L.push('   · ' + repCantidad(it, false) + ' ' + it.prod + repTagsTexto(it));
     });
     if (p.notas) L.push('   Obs: ' + p.notas);
   });
