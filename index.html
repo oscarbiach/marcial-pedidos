@@ -1512,6 +1512,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="marca/pedidos.css">
 <link rel="stylesheet" href="seguimiento-clientes.css">
 <link rel="stylesheet" href="whatsapp-inbox.css">
+<link rel="stylesheet" href="stock.css">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1577,6 +1578,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="reparto" onclick="goTab('reparto')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg>Reparto</button>
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
       <button data-tab="whatsapp" onclick="goTab('whatsapp')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg>WhatsApp</button>
+      <button data-tab="stock" onclick="goTab('stock')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg>Stock</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1721,6 +1723,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     </div>
     <div id="tab-whatsapp" class="tab-panel"><div id="wa-raiz" class="wa"></div></div>
 
+    <!-- STOCK: recuento, stock actual y movimientos. Solo Oscar y Joaquín (stock.js) -->
+    <div id="tab-stock" class="tab-panel"><div id="st-raiz"></div></div>
+
   </main>
 
   <!-- Navegación inferior (solo mobile) -->
@@ -1730,6 +1735,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="reparto" class="bn-item" onclick="goTab('reparto')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg></span>Reparto</button>
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
     <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg></span>WhatsApp</button>
+    <button data-tab="stock" class="bn-item" onclick="goTab('stock')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></span>Stock</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -2549,6 +2555,7 @@ window.addEventListener('load', async () => {
     pendingWho = savedWho;
     document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(savedWho) + '</span>';
     if (window.SegUI) SegUI.aplicarAcceso();
+    if (window.StockUI) StockUI.aplicarAcceso();
     // Si hay copia guardada, la app abre YA con los últimos datos y se
     // actualiza de fondo. Si no (primera vez), espera al servidor.
     const cache = leerCache();
@@ -2630,6 +2637,7 @@ async function submitPin() {
   localStorage.setItem('dm_ped_who', state.who);
   document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(state.who) + '</span>';
   if (window.SegUI) SegUI.aplicarAcceso();
+  if (window.StockUI) StockUI.aplicarAcceso();
   document.getElementById('whoModal').classList.remove('open');
   document.getElementById('loading').style.display = 'flex';
   loadData();
@@ -2876,13 +2884,15 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes', whatsapp:'WhatsApp' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock' };
 
 function setTab(tab) {
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
   // Por ahora Clientes y WhatsApp son solo para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
   if ((tab === 'clientes' || tab === 'whatsapp') && esCelular()) tab = 'pedidos';
+  // Stock: solo Oscar y Joaquín (lo confirma la base con stock_es_admin; ver stock.js).
+  if (tab === 'stock' && !document.body.classList.contains('stock-visible')) tab = 'pedidos';
   activeTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -2912,6 +2922,7 @@ function setTab(tab) {
   if (tab === 'clientes' && window.SegUI) SegUI.abrir();
   document.body.classList.toggle('wa-ancho', tab === 'whatsapp');
   if (tab === 'whatsapp' && window.WhatsAppUI) WhatsAppUI.open();
+  if (tab === 'stock' && window.StockUI) StockUI.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
@@ -6292,5 +6303,6 @@ function abrirInstalar() {
 <script src="whatsapp-fotos.js"></script>
 <script src="whatsapp-oportunidades.js"></script>
 <script src="whatsapp-precios.js"></script>
+<script src="stock.js"></script>
 </body>
 </html>

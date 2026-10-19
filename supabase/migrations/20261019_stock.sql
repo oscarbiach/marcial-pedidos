@@ -10,6 +10,10 @@
 --   · stock_actual = último recuento cerrado + movimientos desde esa fecha.
 --
 -- Solo lo ven y lo tocan los usuarios de stock_acceso (Oscar y Joaquín).
+--
+-- Aplicada en 5 partes el 19/10/2026 (stock_1_acceso … stock_5). El catálogo
+-- inicial (507 productos con el stock que marcaba Dubix ese día) se cargó
+-- aparte; no forma parte de esta migración.
 
 -- ── Quién tiene acceso ─────────────────────────────────────────────
 create table if not exists public.stock_acceso (
@@ -27,6 +31,8 @@ create or replace function public.stock_autor()
 returns text language sql stable security definer set search_path = public as $$
   select coalesce((select nombre from stock_acceso where user_id = auth.uid()), '?');
 $$;
+
+revoke execute on function public.stock_es_admin(), public.stock_autor() from public, anon;
 
 create policy stock_acceso_leer on public.stock_acceso
   for select to authenticated using (user_id = auth.uid());
@@ -144,7 +150,10 @@ mov as (
          coalesce(sum(m.cantidad) filter (where m.tipo in ('ajuste','merma')), 0) as ajustes
   from stock_productos p
   left join ultimo u on u.producto_id = p.id
-  left join stock_movimientos m on m.producto_id = p.id and (u.fecha is null or m.fecha >= u.fecha)
+  left join (select m0.* from stock_movimientos m0
+             left join stock_importaciones x on x.id = m0.importacion_id
+             where x.id is null or not x.anulada) m
+         on m.producto_id = p.id and (u.fecha is null or m.fecha >= u.fecha)
   group by p.id
 )
 select p.id, p.codigo, p.nombre, p.marca, p.unidad, p.activo, p.stock_dubix, p.dubix_leido_en,
@@ -226,8 +235,9 @@ create or replace function public.stock_anular_importacion(p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not stock_es_admin() then raise exception 'Sin permiso'; end if;
-  delete from stock_movimientos where importacion_id = p_id;
-  update stock_importaciones set anulada = true where id = p_id;
+  -- No se borran filas: la importación queda marcada y stock_actual la ignora.
+  update stock_importaciones set anulada = true where id = p_id and not anulada;
+  if not found then raise exception 'La importación no existe o ya estaba anulada'; end if;
 end $$;
 
 revoke execute on function public.stock_cerrar_recuento(uuid), public.stock_anular_recuento(uuid),
