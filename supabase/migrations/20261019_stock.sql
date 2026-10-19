@@ -251,3 +251,24 @@ insert into public.stock_acceso (user_id, nombre)
 select id, case when lower(email) = 'bianchi.i.oscar@gmail.com' then 'Oscar' else 'Joaquin' end
   from auth.users where lower(email) in ('bianchi.i.oscar@gmail.com', 'joakocalvo321@gmail.com')
 on conflict (user_id) do nothing;
+
+-- ── Equivalencias y facturas por foto (stock_6, 19/10/2026) ─────────
+-- por_caja: cuántas unidades (o kg) de Dubix trae una caja. El recuento y
+-- los ingresos se cargan en cajas + sueltos y la app convierte.
+alter table public.stock_productos add column if not exists por_caja numeric check (por_caja is null or por_caja > 1);
+
+-- Renglón de factura de proveedor -> producto (se aprende al confirmar).
+create table if not exists public.stock_alias (
+  texto_key   text primary key,
+  producto_id uuid not null references public.stock_productos(id),
+  factor      numeric not null default 1 check (factor > 0),
+  autor       text not null default stock_autor(),
+  creado_en   timestamptz not null default now()
+);
+alter table public.stock_alias enable row level security;
+create policy stock_alias_leer on public.stock_alias for select to authenticated using (stock_es_admin());
+create policy stock_alias_crear on public.stock_alias for insert to authenticated with check (stock_es_admin());
+create policy stock_alias_editar on public.stock_alias for update to authenticated using (stock_es_admin()) with check (stock_es_admin());
+-- stock_actual se recreó agregando al final las columnas por_caja y costo.
+-- Los valores de por_caja (62 productos) salen de productos.unidades_por_caja de
+-- la app de pedidos y del nombre de cada producto; se cargaron aparte.

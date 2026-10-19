@@ -174,7 +174,8 @@
     let lista = base.filter(coincide);
     if (E.filtro === 'pendientes') lista = lista.filter(p => !E.items.has(p.id));
     if (E.filtro === 'contados') lista = E.prods.filter(p => E.items.has(p.id) && coincide(p));
-    if (!lista.length) return h + '<div class="st-vacio">' + (E.filtro === 'pendientes' ? '¡Listo! No queda nada por contar con este filtro.' : 'No hay productos con este filtro.') + '</div>';
+    const btnNuevo = E.q.trim().length > 1 ? '<button class="btn btn-outline st-nuevo" onclick="StockUI.productoNuevo(\'conteo\')">' + ico('plus') + 'No está en la lista: agregar «' + esc(E.q.trim()) + '»</button>' : '';
+    if (!lista.length) return h + '<div class="st-vacio">' + (E.q ? 'No encontré «' + esc(E.q) + '».' : (E.filtro === 'pendientes' ? '¡Listo! No queda nada por contar con este filtro.' : 'No hay productos con este filtro.')) + '</div>' + btnNuevo;
     const MAX = 250;
     let grupo = '';
     h += '<div class="st-lista">';
@@ -184,7 +185,7 @@
     });
     h += '</div>';
     if (lista.length > MAX) h += '<div class="st-vacio">Se muestran ' + MAX + ' de ' + lista.length + '. Buscá o elegí una marca para ver el resto.</div>';
-    return h;
+    return h + btnNuevo;
   }
   function filaConteo(p) {
     const it = E.items.get(p.id), pend = E.pendientes.has(p.id);
@@ -196,13 +197,20 @@
       if (Math.abs(d) > 0.0001) dif = '<span class="st-dif ' + (d < 0 ? 'neg' : 'pos') + '">' + (d > 0 ? '+' : '') + fmtN(d, p.unidad) + '</span>';
       else dif = '<span class="st-dif ok">' + ico('check') + '</span>';
     }
+    const f = Number(p.por_caja) || 0, coma = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
+    const inp = (k, v, ph) => '<input class="st-num' + (f ? ' st-num--chico' : '') + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-pid="' + p.id + '" data-k="' + k + '" value="' + v + '" placeholder="' + ph + '" onchange="StockUI.contar(this)" onkeydown="if(event.key===\'Enter\'){this.blur();StockUI.siguiente(this)}">';
+    let campos;
+    if (f) {
+      const cj = val === null ? '' : Math.floor(Number(val) / f + 1e-9), su = val === null ? '' : coma(Number(val) - cj * f);
+      campos = '<label class="st-par">' + inp('cj', cj, '0') + '<small>cajas</small></label><label class="st-par">' + inp('su', su, '0') + '<small>' + (p.unidad === 'kg' ? 'kg' : 'sueltos') + '</small></label>';
+    } else {
+      campos = '<label class="st-par">' + inp('n', val === null ? '' : coma(Number(val)), '—') + '<small>' + ({ u: 'unid.', kg: 'kg', caja: 'cajas' })[p.unidad] + '</small></label>';
+    }
     return '<div class="st-fila' + (it ? ' contado' : '') + (pend ? ' pend' : '') + '">' +
       '<div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
-      '<div class="st-meta">' + (p.codigo ? esc(p.codigo) + ' · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
-      (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
-      '<div class="st-fila-in">' + dif +
-      '<input class="st-num" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-pid="' + p.id + '" value="' + (val === null ? '' : String(val).replace('.', ',')) + '" placeholder="—" onchange="StockUI.contar(this)" onkeydown="if(event.key===\'Enter\'){this.blur();StockUI.siguiente(this)}">' +
-      '<button class="st-uni" title="Cambiar unidad" onclick="StockUI.cambiarUnidad(\'' + p.id + '\')">' + UNI[p.unidad] + '</button></div></div>';
+      '<div class="st-meta">' + (f ? '<b>Caja = ' + fmtN(f) + ' ' + (p.unidad === 'kg' ? 'kg' : 'u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
+      (val !== null && f ? ' · total ' + fmtN(val, p.unidad) : '') + (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
+      '<div class="st-fila-in">' + dif + campos + '</div></div>';
   }
 
   async function abrirRecuento() {
@@ -215,7 +223,15 @@
 
   async function contar(input) {
     const pid = input.dataset.pid, p = E.porId.get(pid); if (!p || !E.rec) return;
-    const v = leerNum(input.value);
+    let v = leerNum(input.value);
+    const f = Number(p.por_caja) || 0;
+    if (f) {
+      const fila = input.closest('.st-fila');
+      const cj = leerNum((fila.querySelector('[data-k="cj"]') || {}).value), su = leerNum((fila.querySelector('[data-k="su"]') || {}).value);
+      if (Number.isNaN(cj) || Number.isNaN(su)) v = NaN;
+      else v = (cj === null && su === null) ? null : (cj || 0) * f + (su || 0);
+      if (input.dataset.k === 'cj' && cj !== null && su === null) { const s2 = fila.querySelector('[data-k="su"]'); if (s2) s2.value = '0'; }
+    }
     if (Number.isNaN(v) || (v !== null && v < 0)) { avisar('Número inválido'); input.value = ''; return; }
     if (v === null) {                       // vació el campo: se borra el conteo
       if (E.items.has(pid)) {
@@ -379,7 +395,9 @@
 
   // ── Movimientos ────────────────────────────────────────────────────
   function vistaMovimientos() {
-    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.nuevoMovimiento()">' + ico('package') + 'Cargar ingreso / merma</button>' +
+    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.elegirFoto()">' + ico('image') + 'Ingreso con foto de factura</button>' +
+      '<input type="file" id="st-foto" accept="image/*,application/pdf" multiple hidden onchange="StockUI.leerFoto(this)">' +
+      '<button class="btn btn-outline" onclick="StockUI.nuevoMovimiento()">' + ico('package') + 'Ingreso a mano / merma</button>' +
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar ventas de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
@@ -401,6 +419,7 @@
   // Ingreso de mercadería (varias líneas, como un remito), merma o ajuste.
   function nuevoMovimiento(pid) {
     E.lineas = pid ? [{ pid, cant: '' }] : [];
+    E.sinProd = []; E.asignando = null; E.movFecha = null; E.movNota = null;
     E.movTipo = 'ingreso';
     pintarMovimiento();
   }
@@ -408,9 +427,18 @@
     const tipos = [['ingreso', 'Ingreso'], ['merma', 'Merma'], ['ajuste', 'Ajuste ±']];
     let b = '<div class="st-chips">' + tipos.map(([k, t]) => '<button class="st-chip' + (E.movTipo === k ? ' on' : '') + '" onclick="StockUI.movTipo(\'' + k + '\')">' + t + '</button>').join('') + '</div>';
     b += '<p class="st-ayuda">' + ({ ingreso: 'Mercadería que entró al depósito (un remito de proveedor puede tener varias líneas).', merma: 'Lo que se tiró, se rompió o venció. Se resta.', ajuste: 'Corrección manual: positivo suma, negativo resta.' })[E.movTipo] + '</p>';
+    if (E.sinProd && E.sinProd.length) {
+      b += '<div class="st-nota st-nota--error">' + ico('circle-alert') + '<div><b>' + E.sinProd.length + ' renglón(es) de la factura sin producto.</b> Tocá «Buscar» y elegí cuál es, o «No va» si no es mercadería.' +
+        E.sinProd.map((x, i) => '<div class="st-sinp' + (E.asignando === i ? ' on' : '') + '"><span>' + esc(x.texto) + (x.dudosa ? ' <em>(se lee mal)</em>' : '') + '</span>' +
+          '<button class="st-link" onclick="StockUI.buscarPara(' + i + ')">Buscar</button><button class="st-link st-link--peligro" onclick="StockUI.ignorarLinea(' + i + ')">No va</button></div>').join('') + '</div></div>';
+    }
     b += '<div class="st-lineas">' + E.lineas.map((l, i) => {
       const p = E.porId.get(l.pid);
-      return '<div class="st-linea"><span>' + esc(p ? p.nombre : '?') + '</span><input class="st-num" inputmode="decimal" placeholder="' + (p ? UNI[p.unidad] : '') + '" value="' + escAttr(l.cant) + '" oninput="StockUI.lineaCant(' + i + ',this.value)"><button class="st-x" onclick="StockUI.quitarLinea(' + i + ')">' + ico('x') + '</button></div>';
+      const f = p && Number(p.por_caja);
+      return '<div class="st-linea"><span>' + esc(p ? p.nombre : '?') + (l.ref ? '<small>Factura: ' + esc(l.ref) + '</small>' : '') + '</span>' +
+        (f ? '<label class="st-par"><input class="st-num st-num--chico" inputmode="decimal" placeholder="0" value="' + escAttr(l.cj || '') + '" oninput="StockUI.lineaCant(' + i + ',this.value,\'cj\')"><small>cajas</small></label>' : '') +
+        '<label class="st-par"><input class="st-num' + (f ? ' st-num--chico' : '') + '" inputmode="decimal" placeholder="0" value="' + escAttr(l.cant) + '" oninput="StockUI.lineaCant(' + i + ',this.value)"><small>' + (p && p.unidad === 'kg' ? 'kg' : (f ? 'sueltos' : 'unid.')) + '</small></label>' +
+        '<button class="st-x" onclick="StockUI.quitarLinea(' + i + ')">' + ico('x') + '</button></div>';
     }).join('') + '</div>';
     b += '<div class="st-ac"><input class="search-input" id="st-ac-q" placeholder="Agregar producto…" autocomplete="off" oninput="StockUI.sugerir(this.value)"><div id="st-ac-res" class="st-ac-res"></div></div>';
     b += '<div class="st-dos"><div class="field"><label>Fecha</label><input type="date" id="st-mov-fecha" value="' + hoy() + '" max="' + hoy() + '"></div>' +
@@ -424,24 +452,32 @@
     if (q.length < 2) { res.innerHTML = ''; return; }
     const w = q.split(/\s+/);
     const l = E.prods.filter(p => p.activo && w.every(x => (p.nombre + ' ' + (p.codigo || '')).toLowerCase().includes(x))).slice(0, 8);
-    res.innerHTML = l.map(p => '<button onclick="StockUI.agregarLinea(\'' + p.id + '\')">' + esc(p.nombre) + '<small>' + esc(p.marca) + (p.codigo ? ' · ' + esc(p.codigo) : '') + '</small></button>').join('') || '<div class="st-ayuda">Sin resultados</div>';
+    res.innerHTML = l.map(p => '<button onclick="StockUI.agregarLinea(\'' + p.id + '\')">' + esc(p.nombre) + '<small>' + esc(p.marca) + (p.codigo ? ' · ' + esc(p.codigo) : '') + '</small></button>').join('') +
+      '<button class="st-ac-nuevo" onclick="StockUI.productoNuevo(\'ingreso\')">' + ico('plus') + ' Producto nuevo: «' + esc(q) + '»</button>';
   }
-  function guardarCamposMov() { E.movFecha = ($('st-mov-fecha') || {}).value; E.movNota = ($('st-mov-nota') || {}).value; }
+  function guardarCamposMov() { if ($('st-mov-fecha')) E.movFecha = $('st-mov-fecha').value; if ($('st-mov-nota')) E.movNota = $('st-mov-nota').value; }
   function restaurarCamposMov() { if (E.movFecha && $('st-mov-fecha')) $('st-mov-fecha').value = E.movFecha; if (E.movNota && $('st-mov-nota')) $('st-mov-nota').value = E.movNota; }
   async function guardarMovimiento() {
     const fecha = $('st-mov-fecha').value || hoy(), nota = $('st-mov-nota').value.trim() || null;
     const filas = [];
     for (const l of E.lineas) {
-      let v = leerNum(l.cant);
-      if (v === null) continue;
+      const p = E.porId.get(l.pid), f = p && Number(p.por_caja);
+      const su = leerNum(l.cant), cj = f ? leerNum(l.cj) : null;
+      if (Number.isNaN(su) || Number.isNaN(cj)) return avisar('Revisá las cantidades');
+      if (su === null && cj === null) continue;
+      let v = (cj || 0) * (f || 0) + (su || 0);
       if (Number.isNaN(v) || v === 0) return avisar('Revisá las cantidades');
       if (E.movTipo === 'ingreso') v = Math.abs(v);
       if (E.movTipo === 'merma') v = -Math.abs(v);
       filas.push({ producto_id: l.pid, tipo: E.movTipo, cantidad: v, fecha, nota, autor: st().who });
     }
     if (!filas.length) return avisar('Agregá al menos un producto con cantidad');
+    if (E.sinProd && E.sinProd.length) return avisar('Quedan renglones de la factura sin producto: buscalos o marcá «No va»');
     const { error } = await sb.from('stock_movimientos').insert(filas);
     if (error) return avisar('Error: ' + errTxt(error));
+    const alias = E.lineas.filter(l => l.aliasKey).map(l => ({ texto_key: l.aliasKey, producto_id: l.pid, autor: st().who }));
+    if (alias.length) await sb.from('stock_alias').upsert(alias, { onConflict: 'texto_key' });
+    E.sinProd = []; E.asignando = null;
     cerrarModal();
     avisar(filas.length + ' movimiento(s) guardados');
     cargar(true);
@@ -552,6 +588,132 @@
     cargar(true);
   }
 
+  // ── Ingreso con foto de factura / remito ───────────────────────────
+  function elegirFoto() { const i = $('st-foto'); if (i) { i.value = ''; i.click(); } }
+  function achicar(file) {
+    return new Promise((ok, mal) => {
+      if (file.type === 'application/pdf') {
+        const r = new FileReader(); r.onload = () => ok({ tipo: 'application/pdf', datos: String(r.result).split(',')[1] }); r.onerror = mal; r.readAsDataURL(file); return;
+      }
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const max = 2000, k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok({ tipo: 'image/jpeg', datos: c.toDataURL('image/jpeg', 0.85).split(',')[1] });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo abrir la foto')); };
+      img.src = url;
+    });
+  }
+  const palabras = t => sinTilde(t).replace(/[^a-z0-9ñ ]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+  function parecido(a, b) {
+    const A = new Set(palabras(a)), B = new Set(palabras(b)); if (!A.size || !B.size) return 0;
+    let c = 0; A.forEach(w => { if (B.has(w)) c++; });
+    return c / Math.min(A.size, B.size);
+  }
+  async function leerFoto(input) {
+    const files = [...(input.files || [])].slice(0, 4); if (!files.length) return;
+    modal('Leyendo la factura…', '<div class="st-vacio">' + ico('refresh-cw') + ' Esto tarda unos 20 segundos. No cierres la app.</div>', [['Cancelar', 'btn-secondary', cerrarModal]]);
+    let res;
+    try {
+      const imagenes = await Promise.all(files.map(achicar));
+      const { data, error } = await sb.functions.invoke('stock-factura', { body: { imagenes } });
+      if (error) {
+        let m = errTxt(error);
+        try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch (e) { /* nada */ }
+        throw new Error(m);
+      }
+      res = data;
+    } catch (e) {
+      return modal('No se pudo leer', '<p>' + esc(errTxt(e)) + '</p><p class="st-ayuda">Podés cargar el ingreso a mano con «Ingreso a mano / merma».</p>', [['Entendido', 'btn-primary', cerrarModal]]);
+    }
+    const { data: al } = await sb.from('stock_alias').select('texto_key,producto_id').limit(5000);
+    const alias = new Map((al || []).map(a => [a.texto_key, a.producto_id]));
+    const activos = E.prods.filter(p => p.activo);
+    E.lineas = []; E.sinProd = []; E.asignando = null; E.movTipo = 'ingreso';
+    (res.lineas || []).forEach(l => {
+      const texto = (l.codigo ? l.codigo + ' · ' : '') + l.descripcion;
+      const key = sinTilde((l.codigo || '') + '|' + l.descripcion).replace(/\s+/g, ' ').trim();
+      let p = alias.has(key) ? E.porId.get(alias.get(key)) : null;
+      if (!p && l.codigo) p = activos.find(x => x.codigo && x.codigo.toLowerCase() === String(l.codigo).toLowerCase());
+      if (!p) {
+        let mejor = null, pts = 0;
+        activos.forEach(x => { const s = parecido(l.descripcion, x.nombre); if (s > pts) { pts = s; mejor = x; } });
+        if (pts >= 0.6 && !l.dudosa) p = mejor;
+      }
+      const ref = texto + ' — ' + fmtN(l.cantidad) + ' ' + ({ caja: 'cj', unidad: 'u', kg: 'kg' })[l.unidad] + (l.kilos ? ' (' + fmtN(l.kilos, 'kg') + ' kg)' : '');
+      const linea = { texto, ref, cantidad: l.cantidad, unidad: l.unidad, kilos: l.kilos, dudosa: !!l.dudosa, aliasKey: key };
+      if (p) E.lineas.push(armarLinea(linea, p)); else E.sinProd.push(linea);
+    });
+    const f = res.fecha && /^\d{4}-\d{2}-\d{2}$/.test(res.fecha) && res.fecha <= hoy() ? res.fecha : hoy();
+    E.movFecha = f;
+    E.movNota = ['Factura', res.numero, res.proveedor].filter(Boolean).join(' ').slice(0, 300);
+    pintarMovimiento(); restaurarCamposMov();
+  }
+  // Pasa la cantidad de la factura a cajas / sueltos / kilos del producto.
+  function armarLinea(x, p) {
+    const f = Number(p.por_caja) || 0, coma = v => v === null || v === undefined ? '' : String(v).replace('.', ',');
+    const l = { pid: p.id, cant: '', cj: '', ref: x.ref, aliasKey: x.aliasKey };
+    if (p.unidad === 'kg' && x.kilos) l.cant = coma(x.kilos);
+    else if (x.unidad === 'caja' && f) l.cj = coma(x.cantidad);
+    else l.cant = coma(x.cantidad);
+    return l;
+  }
+  function buscarPara(i) {
+    guardarCamposMov(); E.asignando = i; pintarMovimiento(); restaurarCamposMov();
+    const q = $('st-ac-q'), x = E.sinProd[i];
+    if (q && x) { q.value = palabras(x.texto.replace(/^.*? · /, '')).slice(0, 3).join(' '); q.focus(); sugerir(q.value); }
+  }
+  function ignorarLinea(i) { guardarCamposMov(); E.sinProd.splice(i, 1); E.asignando = null; pintarMovimiento(); restaurarCamposMov(); }
+  function agregarLinea(pid) {
+    guardarCamposMov();
+    const p = E.porId.get(pid);
+    if (E.asignando !== null && E.asignando !== undefined && E.sinProd[E.asignando] && p) {
+      E.lineas.push(armarLinea(E.sinProd[E.asignando], p));
+      E.sinProd.splice(E.asignando, 1); E.asignando = null;
+    } else if (!E.lineas.some(l => l.pid === pid)) E.lineas.push({ pid, cant: '' });
+    pintarMovimiento(); restaurarCamposMov();
+  }
+
+  // ── Producto que no está en el catálogo ────────────────────────────
+  // Regla: se carga con el nombre REAL del producto (no como si fuera otro).
+  // Después hay que darlo de alta en Dubix con el mismo nombre.
+  function productoNuevo(desde) {
+    const q = desde === 'ingreso' ? (($('st-ac-q') || {}).value || '').trim() : E.q.trim();
+    if (desde === 'ingreso') guardarCamposMov();
+    E.nuevoDesde = desde;
+    const ms = marcas(E.prods.filter(p => p.activo));
+    const b = '<p class="st-ayuda">Ponele el nombre real, como figura en el envase. Después hay que crearlo en Dubix con el mismo nombre.</p>' +
+      '<div class="field"><label>Nombre</label><input id="st-np-nom" value="' + escAttr(q) + '" maxlength="120"></div>' +
+      '<div class="field"><label>Marca / proveedor</label><input id="st-np-marca" list="st-np-marcas" placeholder="Ej: Nahuel"><datalist id="st-np-marcas">' + ms.map(m => '<option value="' + escAttr(m) + '">').join('') + '</datalist></div>' +
+      '<div class="st-dos"><div class="field"><label>Se cuenta en</label><select id="st-np-uni"><option value="u">Unidades</option><option value="kg">Kilos</option></select></div>' +
+      '<div class="field"><label>Unidades por caja (si viene en caja)</label><input id="st-np-caja" inputmode="numeric" placeholder="Ej: 12"></div></div>' +
+      (desde === 'conteo' && E.rec ? '<div class="field"><label>Cuánto hay (en unidades o kilos)</label><input id="st-np-cant" inputmode="decimal" placeholder="Ej: 8"></div>' : '');
+    modal('Producto nuevo', b, [['Cancelar', 'btn-secondary', () => { cerrarModal(); if (desde === 'ingreso') pintarMovimiento(), restaurarCamposMov(); }], ['Agregar', 'btn-primary', guardarProductoNuevo]]);
+  }
+  async function guardarProductoNuevo() {
+    const nombre = $('st-np-nom').value.trim(), marca = $('st-np-marca').value.trim() || 'Otros';
+    const unidad = $('st-np-uni').value, caja = leerNum($('st-np-caja').value);
+    if (nombre.length < 3) return avisar('Poné el nombre');
+    if (Number.isNaN(caja) || (caja !== null && caja <= 1)) return avisar('Unidades por caja: poné un número mayor a 1 o dejalo vacío');
+    const ya = E.prods.find(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase());
+    if (ya) return avisar('Ya existe: buscalo como «' + ya.nombre + '»');
+    const { data, error } = await sb.from('stock_productos').insert({ nombre, marca, unidad, por_caja: caja }).select('id').single();
+    if (error) return avisar('Error: ' + errTxt(error));
+    const cant = $('st-np-cant') ? leerNum($('st-np-cant').value) : null;
+    if (E.nuevoDesde === 'conteo' && E.rec && cant !== null && !Number.isNaN(cant) && cant >= 0)
+      await sb.from('stock_recuento_items').insert({ recuento_id: E.rec.id, producto_id: data.id, contado: cant, autor: st().who });
+    avisar('Agregado: ' + nombre);
+    if (E.nuevoDesde === 'ingreso') {
+      await cargar(true);
+      agregarLinea(data.id);
+    } else {
+      cerrarModal(); E.filtro = 'contados'; await cargar(true);
+    }
+  }
+
   // ── Modal propio (no pisa los de la app) ───────────────────────────
   let acciones = [];
   function modal(titulo, cuerpo, botones) {
@@ -600,10 +762,10 @@
     abrirRecuento, contar, siguiente, cambiarUnidad, reintentar, confirmarCierre, anularRecuento, descargarAjuste,
     nuevoMovimiento, sugerir, borrarMov,
     movTipo(t) { guardarCamposMov(); E.movTipo = t; pintarMovimiento(); restaurarCamposMov(); },
-    agregarLinea(pid) { guardarCamposMov(); if (!E.lineas.some(l => l.pid === pid)) E.lineas.push({ pid, cant: '' }); pintarMovimiento(); restaurarCamposMov(); const ins = document.querySelectorAll('.st-linea input'); if (ins.length) ins[ins.length - 1].focus(); },
+    agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
-    lineaCant(i, v) { if (E.lineas[i]) E.lineas[i].cant = v; },
-    elegirCsv, leerCsv, anularImp, _acc,
+    lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo,
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();
