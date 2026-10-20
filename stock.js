@@ -439,7 +439,9 @@
   function vistaStock() {
     const base = E.prods.filter(p => p.activo && (E.alcance === 'todos' || enAlcance(p)));
     const contados = base.filter(p => p.stock !== null);
-    let h = '<div class="st-resumen"><div><b>' + contados.length + '</b><span>productos con stock real</span></div>' +
+    const ui = E.imps.find(i => !i.anulada);
+    let h = '<p class="st-ayuda">' + ico('clock') + ' ' + (ui ? 'Actualizado con Dubix hasta el <b>' + fmtF(ui.hasta) + '</b> (importado ' + new Date(ui.creado_en).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ')' : 'Todavía no se importaron movimientos de Dubix desde el recuento') + '. Para ponerlo al día: Movimientos → Importar movimientos de Dubix.</p>';
+    h += '<div class="st-resumen"><div><b>' + contados.length + '</b><span>productos con stock real</span></div>' +
       '<div><b>' + (base.length - contados.length) + '</b><span>sin contar todavía</span></div>' +
       '<div><b>' + contados.filter(p => Number(p.stock) <= 0).length + '</b><span>en cero o negativo</span></div></div>';
     h += barraBusqueda(false);
@@ -472,7 +474,7 @@
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
     h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → <b>Exportar detalle de movimientos</b>. Subí ese archivo acá (trae compras y ventas juntas). ' +
-      (E.cerrados[0] || ult ? '<b>En Dubix elegí desde el ' + fmtF(ult ? sumarDia(ult.hasta) : E.cerrados[0].fecha) + ' hasta ayer.</b>' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
+      (E.cerrados[0] || ult ? '<b>Todos los días al cerrar. En Dubix elegí desde el ' + fmtF(ult ? (ult.hasta === hoy() ? ult.desde : sumarDia(ult.hasta)) : E.cerrados[0].fecha) + ' hasta hoy.</b> Si lo hacés de nuevo el mismo día, el archivo nuevo reemplaza al anterior.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
     h += '<div class="st-card"><h4>Ventas importadas</h4>' + (E.imps.length ? E.imps.map(x =>
       '<div class="st-hist' + (x.anulada ? ' anulada' : '') + '"><span><b>' + fmtF(x.desde) + (x.hasta !== x.desde ? ' al ' + fmtF(x.hasta) : '') + '</b> · ' + x.filas + ' productos' + (x.sin_match ? ' · ' + x.sin_match + ' sin match' : '') + ' · ' + esc(x.autor) + (x.anulada ? ' · ANULADA' : '') + '</span>' +
       (x.anulada ? '' : '<button class="st-link st-link--peligro" onclick="StockUI.anularImp(\'' + x.id + '\')">Anular</button>') + '</div>').join('') : '<p class="st-ayuda">Nada todavía.</p>') + '</div>';
@@ -666,16 +668,20 @@
     return x.sin.map(s => ({ producto_id: ids.get((s.cod || '') + '|' + (s.det || s.cod)), ingresos: s.ing || 0, egresos: s.egr || 0, ...(s.fin !== null && s.fin !== undefined && !Number.isNaN(s.fin) ? { final: s.fin } : {}) })).filter(f => f.producto_id);
   }
   function pintarImport() {
-    const x = E.imp, ult = E.imps.find(i => !i.anulada);
+    const x = E.imp;
     if (x.tipo === 'dubix') {
       const ing = x.filas.filter(f => f.ingresos).length, egr = x.filas.filter(f => f.egresos).length;
+      const reemplaza = E.imps.filter(i => !i.anulada && i.desde >= x.desde && i.hasta <= x.hasta);
+      const ult = E.imps.find(i => !i.anulada && !reemplaza.includes(i));
       const esperado = ult ? sumarDia(ult.hasta) : (E.cerrados[0] ? E.cerrados[0].fecha : null);
       let b = '<p><b>Del ' + fmtF(x.desde) + ' al ' + fmtF(x.hasta) + '</b>: ' + x.filas.length + ' productos (' + ing + ' con entradas, ' + egr + ' con salidas).</p>';
+      if (reemplaza.length) b += '<p class="st-ayuda">Reemplaza lo que ya habías importado de ' + (x.desde === x.hasta ? 'este día' : 'estas fechas') + '. Está bien: el archivo nuevo trae todo.</p>';
       if (esperado && x.desde !== esperado) b += '<div class="st-nota st-nota--error">' + ico('circle-alert') + '<div>Este archivo tendría que empezar el <b>' + fmtF(esperado) + '</b> y empieza el ' + fmtF(x.desde) + '. Si no es a propósito, cancelá y exportalo de nuevo.</div></div>';
       if (!E.cerrados.length) b += '<div class="st-nota st-nota--error">' + ico('circle-alert') + '<div>Todavía no hay ningún recuento cerrado: estos movimientos no cambian el stock hasta que haya uno.</div></div>';
       b += listaSin(x);
       return modal('Importar movimientos de Dubix', b, [['Cancelar', 'btn-secondary', cerrarModal], ['Importar', 'btn-primary', confirmarDubix]]);
     }
+    const ult = E.imps.find(i => !i.anulada);
     const desde = ult ? sumarDia(ult.hasta) : (E.cerrados[0] ? E.cerrados[0].fecha : ayer());
     let b = '<p><b>' + esc(x.archivo) + '</b>: ' + x.filas.length + ' productos reconocidos (' + fmtN(x.total) + ' unidades/kg en total).</p>';
     if (x.sin.length) b += '<div class="st-nota">' + ico('triangle-alert') + '<div><b>' + x.sin.length + (x.sin.length === 1 ? ' fila no coincide' : ' filas no coinciden') + ' con el catálogo</b> y no se van a descontar:<ul>' +
