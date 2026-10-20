@@ -560,7 +560,11 @@
   }
 
   // ── Importar CSV "Productos Vendidos" de Dubix ─────────────────────
-  function elegirCsv() { const i = $('st-csv'); if (i) { i.value = ''; i.click(); } }
+  function elegirCsv() {
+    let i = $('st-csv');
+    if (!i) { i = document.createElement('input'); i.type = 'file'; i.id = 'st-csv'; i.accept = '.csv,text/csv,text/plain'; i.hidden = true; i.onchange = () => leerCsv(i); document.body.appendChild(i); }
+    i.value = ''; i.click();
+  }
   function leerArchivo(f, enc) {
     return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = mal; r.readAsText(f, enc); });
   }
