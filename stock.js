@@ -352,11 +352,11 @@
     avisar(p.nombre.slice(0, 30) + ' → se cuenta en ' + ({ u: 'unidades', kg: 'kilos', caja: 'cajas' })[sig]);
   }
 
-  function confirmarCierre() {
+  function confirmarCierre(sinKg) {
     const items = [...E.items.values()];
     if (!items.length) return avisar('Todavía no se contó nada');
     const faltan = items.filter(it => it.contado === null || it.contado === undefined).map(it => E.porId.get(it.producto_id)).filter(Boolean);
-    if (faltan.length) return pedirEquivalencias(faltan);
+    if (faltan.length && !sinKg) return pedirEquivalencias(faltan);
     let difs = 0, falt = 0;
     items.forEach(it => { const p = E.porId.get(it.producto_id), r = p && referencia(p); if (r !== null && it.contado !== null && Math.abs(Number(it.contado) - r) > 0.0001) difs++; });
     const base = E.prods.filter(enAlcance); falt = base.filter(p => !E.items.has(p.id)).length;
@@ -380,7 +380,7 @@
     modal('Antes de cerrar: kg por pieza',
       '<p class="st-ayuda">Estos productos los contaste en piezas. Poné cuánto pesa una pieza, más o menos, y la app los pasa a kilos.</p>' +
       lista.map(p => { const it = E.items.get(p.id); return '<div class="st-linea"><span>' + esc(p.nombre) + '<small>' + fmtN(it.piezas) + ' piezas' + (Number(it.sueltos) ? ' + ' + fmtN(it.sueltos, 'kg') + ' kg' : '') + '</small></span><label class="st-par"><input class="st-num st-num--chico" inputmode="decimal" data-eq="' + p.id + '" placeholder="kg"><small>kg/pieza</small></label></div>'; }).join(''),
-      [['Después', 'btn-secondary', cerrarModal], ['Guardar y seguir', 'btn-primary', async () => {
+      [['Cerrar sin kg (los cargo después)', 'btn-secondary', () => { cerrarModal(); confirmarCierre(true); }], ['Guardar y seguir', 'btn-primary', async () => {
         for (const el of document.querySelectorAll('[data-eq]')) {
           const v = leerNum(el.value), p = E.porId.get(el.dataset.eq);
           if (v === null) continue;
@@ -389,7 +389,7 @@
           if (error) return avisar('Error: ' + errTxt(error));
           p.por_caja = v; await recalcularItem(p);
         }
-        cerrarModal(); render(); confirmarCierre();
+        cerrarModal(); render(); confirmarCierre(true);
       }]]);
   }
   function anularRecuento() {
