@@ -291,3 +291,4 @@ create policy stock_alias_editar on public.stock_alias for update to authenticat
 
 -- stock_8 (20/10/2026): por_caja > 0 para poder guardar kg por pieza (productos en kg contados por piezas).
 -- stock_8b: stock_productos.sin_dubix (productos que todavía no existen en Dubix); stock_actual expone sin_dubix al final.
+-- stock_9 (20/10/2026): recuento_items.contado puede quedar vacío (piezas sin kg por pieza todavía); se guardan piezas y sueltos; no se puede cerrar con contado vacío.

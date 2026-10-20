@@ -187,33 +187,41 @@
     if (lista.length > MAX) h += '<div class="st-vacio">Se muestran ' + MAX + ' de ' + lista.length + '. Buscá o elegí una marca para ver el resto.</div>';
     return h + btnNuevo;
   }
+  const regDe = v => (v !== null && typeof v === 'object') ? v : { contado: v };
   function filaConteo(p) {
     const it = E.items.get(p.id), pend = E.pendientes.has(p.id);
     const ref = referencia(p), refTxt = p.stock !== null ? 'App' : 'Dubix';
-    const val = pend ? E.pendientes.get(p.id) : (it ? it.contado : null);
+    const r = pend ? regDe(E.pendientes.get(p.id)) : (it ? { contado: it.contado, piezas: it.piezas, sueltos: it.sueltos } : null);
+    const val = r && r.contado !== null && r.contado !== undefined ? Number(r.contado) : null;
+    const falta = r && val === null && Number(r.piezas) > 0;
     let dif = '';
     if (val !== null && ref !== null) {
-      const d = Number(val) - ref;
+      const d = val - ref;
       if (Math.abs(d) > 0.0001) dif = '<span class="st-dif ' + (d < 0 ? 'neg' : 'pos') + '">' + (d > 0 ? '+' : '') + fmtN(d, p.unidad) + '</span>';
       else dif = '<span class="st-dif ok">' + ico('check') + '</span>';
     }
-    const f = Number(p.por_caja) || 0, coma = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
-    const inp = (k, v, ph) => '<input class="st-num' + (f ? ' st-num--chico' : '') + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-pid="' + p.id + '" data-k="' + k + '" value="' + v + '" placeholder="' + ph + '" onchange="StockUI.contar(this)" onkeydown="if(event.key===\'Enter\'){this.blur();StockUI.siguiente(this)}">';
+    const f = Number(p.por_caja) || 0, kg = p.unidad === 'kg', coma = v => (v === null || v === undefined || v === '') ? '' : String(Math.round(Number(v) * 1000) / 1000).replace('.', ',');
+    const inp = (k, v, ph, chico) => '<input class="st-num' + (chico ? ' st-num--chico' : '') + '" inputmode="decimal" enterkeyhint="next" autocomplete="off" data-pid="' + p.id + '" data-k="' + k + '" value="' + v + '" placeholder="' + ph + '" onchange="StockUI.contar(this)" onkeydown="if(event.key===\'Enter\'){this.blur();StockUI.siguiente(this)}">';
     let campos;
-    if (f) {
-      const cj = val === null ? '' : Math.floor(Number(val) / f + 1e-9), su = val === null ? '' : coma(Number(val) - cj * f);
-      campos = '<label class="st-par">' + inp('cj', cj, '0') + '<small>' + (p.unidad === 'kg' ? 'piezas' : 'cajas') + '</small></label><label class="st-par">' + inp('su', su, '0') + '<small>' + (p.unidad === 'kg' ? 'kg sueltos' : 'sueltos') + '</small></label>';
+    if (kg) {
+      let pz = '', su = '';
+      if (r && r.piezas !== null && r.piezas !== undefined) { pz = coma(r.piezas); su = coma(r.sueltos); }
+      else if (val !== null) { if (f) { pz = Math.floor(val / f + 1e-9); su = coma(val - pz * f); } else su = coma(val); }
+      campos = '<label class="st-par">' + inp('pz', pz, '0', true) + '<small>piezas</small></label><label class="st-par">' + inp('su', su, '0', true) + '<small>kg sueltos</small></label>';
+    } else if (f) {
+      const cj = val === null ? '' : Math.floor(val / f + 1e-9), su = val === null ? '' : coma(val - cj * f);
+      campos = '<label class="st-par">' + inp('cj', cj, '0', true) + '<small>cajas</small></label><label class="st-par">' + inp('su', su, '0', true) + '<small>sueltos</small></label>';
     } else {
-      campos = '<label class="st-par">' + inp('n', val === null ? '' : coma(Number(val)), '—') + '<small>' + ({ u: 'unid.', kg: 'kg', caja: 'cajas' })[p.unidad] + '</small></label>' +
-        (p.unidad === 'kg' ? '<button class="st-mini" onclick="StockUI.factor(\'' + p.id + '\')">por piezas</button>' : (p.unidad === 'u' ? '<button class="st-mini" onclick="StockUI.factor(\'' + p.id + '\')">por caja</button>' : ''));
+      campos = '<label class="st-par">' + inp('n', val === null ? '' : coma(val), '—') + '<small>' + ({ u: 'unid.', caja: 'cajas' })[p.unidad] + '</small></label>' +
+        (p.unidad === 'u' ? '<button class="st-mini" onclick="StockUI.factor(\'' + p.id + '\')">por caja</button>' : '');
     }
-    return '<div class="st-fila' + (it ? ' contado' : '') + (pend ? ' pend' : '') + '">' +
+    const facTxt = kg ? (f ? '1 pieza ≈ ' + fmtN(f, 'kg') + ' kg' : 'kg por pieza: sin cargar') : (f ? 'Caja = ' + fmtN(f) + ' u' : '');
+    return '<div class="st-fila' + (it ? ' contado' : '') + (pend ? ' pend' : '') + (falta ? ' falta' : '') + '">' +
       '<div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
-      '<div class="st-meta">' + (p.sin_dubix ? '<span class="st-sd">Sin Dubix</span> ' : '') + (f ? '<b class="st-fac" onclick="StockUI.factor(\'' + p.id + '\')">' + (p.unidad === 'kg' ? '1 pieza ≈ ' + fmtN(f, 'kg') + ' kg' : 'Caja = ' + fmtN(f) + ' u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
-      (val !== null && f ? ' · total ' + fmtN(val, p.unidad) : '') + (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
+      '<div class="st-meta">' + (p.sin_dubix ? '<span class="st-sd">Sin Dubix</span> ' : '') + (facTxt ? '<b class="st-fac" onclick="StockUI.factor(\'' + p.id + '\')">' + facTxt + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
+      (val !== null && (f || kg) ? ' · total ' + fmtN(val, p.unidad) + ' ' + UNI[p.unidad] : '') + (falta ? ' · <span class="st-falta">falta kg por pieza</span>' : '') + (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
       '<div class="st-fila-in">' + dif + campos + '</div></div>';
   }
-
   async function abrirRecuento() {
     const f = ($('st-rec-fecha') || {}).value || hoy();
     const { error } = await sb.from('stock_recuentos').insert({ fecha: f, autor: st().who });
@@ -224,17 +232,25 @@
 
   async function contar(input) {
     const pid = input.dataset.pid, p = E.porId.get(pid); if (!p || !E.rec) return;
-    let v = leerNum(input.value);
-    const f = Number(p.por_caja) || 0;
-    if (f) {
-      const fila = input.closest('.st-fila');
-      const cj = leerNum((fila.querySelector('[data-k="cj"]') || {}).value), su = leerNum((fila.querySelector('[data-k="su"]') || {}).value);
-      if (Number.isNaN(cj) || Number.isNaN(su)) v = NaN;
-      else v = (cj === null && su === null) ? null : (cj || 0) * f + (su || 0);
+    const f = Number(p.por_caja) || 0, fila = input.closest('.st-fila');
+    const leer = k => leerNum((fila.querySelector('[data-k="' + k + '"]') || {}).value);
+    let reg;
+    if (p.unidad === 'kg') {
+      const pz = leer('pz'), su = leer('su');
+      if (Number.isNaN(pz) || Number.isNaN(su) || (pz !== null && pz < 0) || (su !== null && su < 0)) { avisar('Número inválido'); input.value = ''; return; }
+      if (pz === null && su === null) reg = null;
+      else reg = { piezas: pz, sueltos: su, contado: f ? (pz || 0) * f + (su || 0) : (pz ? null : (su || 0)) };
+    } else if (f) {
+      const cj = leer('cj'), su = leer('su');
+      if (Number.isNaN(cj) || Number.isNaN(su) || (cj !== null && cj < 0) || (su !== null && su < 0)) { avisar('Número inválido'); input.value = ''; return; }
       if (input.dataset.k === 'cj' && cj !== null && su === null) { const s2 = fila.querySelector('[data-k="su"]'); if (s2) s2.value = '0'; }
+      reg = (cj === null && su === null) ? null : { contado: (cj || 0) * f + (su || 0) };
+    } else {
+      const v = leerNum(input.value);
+      if (Number.isNaN(v) || (v !== null && v < 0)) { avisar('Número inválido'); input.value = ''; return; }
+      reg = v === null ? null : { contado: v };
     }
-    if (Number.isNaN(v) || (v !== null && v < 0)) { avisar('Número inválido'); input.value = ''; return; }
-    if (v === null) {                       // vació el campo: se borra el conteo
+    if (reg === null) {                       // vació los campos: se borra el conteo
       if (E.items.has(pid)) {
         const { error } = await sb.from('stock_recuento_items').delete().eq('recuento_id', E.rec.id).eq('producto_id', pid);
         if (error) return avisar('No se pudo borrar: ' + errTxt(error));
@@ -243,12 +259,13 @@
       E.pendientes.delete(pid);
       return refrescarFila(pid);
     }
-    E.pendientes.set(pid, v);
+    E.pendientes.set(pid, reg);
     refrescarFila(pid);
-    await guardar(pid, v);
+    await guardar(pid, reg);
   }
   async function guardar(pid, v) {
-    const fila = { recuento_id: E.rec.id, producto_id: pid, contado: v, autor: st().who, contado_en: new Date().toISOString() };
+    const r = regDe(v);
+    const fila = { recuento_id: E.rec.id, producto_id: pid, contado: r.contado === undefined ? null : r.contado, piezas: r.piezas === undefined ? null : r.piezas, sueltos: r.sueltos === undefined ? null : r.sueltos, autor: st().who, contado_en: new Date().toISOString() };
     try {
       const { data, error } = await sb.from('stock_recuento_items').upsert(fila, { onConflict: 'recuento_id,producto_id' }).select().single();
       if (error) throw error;
@@ -299,6 +316,14 @@
     const todos = [...raiz().querySelectorAll('input.st-num')], i = todos.indexOf(input);
     if (i >= 0 && todos[i + 1]) todos[i + 1].focus();
   }
+  async function recalcularItem(p) {
+    const it = E.items.get(p.id);
+    if (!E.rec || !it || p.unidad !== 'kg' || it.piezas === null || it.piezas === undefined) return;
+    const f = Number(p.por_caja) || 0;
+    const contado = f ? Number(it.piezas) * f + Number(it.sueltos || 0) : (Number(it.piezas) ? null : Number(it.sueltos || 0));
+    const { data, error } = await sb.from('stock_recuento_items').update({ contado }).eq('recuento_id', E.rec.id).eq('producto_id', p.id).select().single();
+    if (!error && data) E.items.set(p.id, data);
+  }
   // Piezas (kg por pieza, aprox.) o unidades por caja: se guarda en por_caja.
   function factor(pid) {
     const p = E.porId.get(pid); if (!p) return;
@@ -311,7 +336,9 @@
         if (v !== null && (Number.isNaN(v) || v <= 0 || (!kg && v <= 1))) return avisar('Número inválido');
         const { error } = await sb.from('stock_productos').update({ por_caja: v }).eq('id', pid);
         if (error) return avisar('Error: ' + errTxt(error));
-        p.por_caja = v; cerrarModal();
+        p.por_caja = v;
+        await recalcularItem(p);
+        cerrarModal();
         if (E.vista === 'recuento' && raiz().querySelector('input[data-pid="' + pid + '"]')) refrescarFila(pid); else render();
       }]]);
   }
@@ -328,8 +355,10 @@
   function confirmarCierre() {
     const items = [...E.items.values()];
     if (!items.length) return avisar('Todavía no se contó nada');
+    const faltan = items.filter(it => it.contado === null || it.contado === undefined).map(it => E.porId.get(it.producto_id)).filter(Boolean);
+    if (faltan.length) return pedirEquivalencias(faltan);
     let difs = 0, falt = 0;
-    items.forEach(it => { const p = E.porId.get(it.producto_id), r = p && referencia(p); if (r !== null && Math.abs(Number(it.contado) - r) > 0.0001) difs++; });
+    items.forEach(it => { const p = E.porId.get(it.producto_id), r = p && referencia(p); if (r !== null && it.contado !== null && Math.abs(Number(it.contado) - r) > 0.0001) difs++; });
     const base = E.prods.filter(enAlcance); falt = base.filter(p => !E.items.has(p.id)).length;
     modal('Cerrar recuento del ' + fmtF(E.rec.fecha),
       '<p>Se cierra con <b>' + items.length + '</b> productos contados' + (difs ? ', <b>' + difs + '</b> con diferencia' : '') + '.</p>' +
@@ -346,6 +375,22 @@
     avisar('Recuento cerrado');
     await cargar();
     descargarAjuste(id);
+  }
+  function pedirEquivalencias(lista) {
+    modal('Antes de cerrar: kg por pieza',
+      '<p class="st-ayuda">Estos productos los contaste en piezas. Poné cuánto pesa una pieza, más o menos, y la app los pasa a kilos.</p>' +
+      lista.map(p => { const it = E.items.get(p.id); return '<div class="st-linea"><span>' + esc(p.nombre) + '<small>' + fmtN(it.piezas) + ' piezas' + (Number(it.sueltos) ? ' + ' + fmtN(it.sueltos, 'kg') + ' kg' : '') + '</small></span><label class="st-par"><input class="st-num st-num--chico" inputmode="decimal" data-eq="' + p.id + '" placeholder="kg"><small>kg/pieza</small></label></div>'; }).join(''),
+      [['Después', 'btn-secondary', cerrarModal], ['Guardar y seguir', 'btn-primary', async () => {
+        for (const el of document.querySelectorAll('[data-eq]')) {
+          const v = leerNum(el.value), p = E.porId.get(el.dataset.eq);
+          if (v === null) continue;
+          if (Number.isNaN(v) || v <= 0) return avisar('Revisá: ' + p.nombre);
+          const { error } = await sb.from('stock_productos').update({ por_caja: v }).eq('id', p.id);
+          if (error) return avisar('Error: ' + errTxt(error));
+          p.por_caja = v; await recalcularItem(p);
+        }
+        cerrarModal(); render(); confirmarCierre();
+      }]]);
   }
   function anularRecuento() {
     modal('Anular recuento', '<p>Se descarta el recuento del ' + fmtF(E.rec.fecha) + ' con ' + E.items.size + ' productos contados. No cambia el stock.</p>',
