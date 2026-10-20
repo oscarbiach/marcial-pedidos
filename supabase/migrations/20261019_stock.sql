@@ -281,3 +281,10 @@ create policy stock_alias_editar on public.stock_alias for update to authenticat
 -- puede empezar antes del recuento y terminar ese día o después
 -- (importar: r.fecha > p_desde and r.fecha <= p_hasta;
 --  cerrar: x.desde < v_fecha and x.hasta >= v_fecha).
+
+-- ── stock_7 (20/10/2026): reporte "Stock entre Fechas" de Dubix y recuento al mediodía ──
+-- stock_importar_dubix: carga ingresos (compras) y egresos (ventas) por producto del período,
+--   fechados el último día; actualiza stock_dubix con el Stock Final.
+-- stock_recuento_items.ajuste_manana + stock_recuentos.manana_aplicada + stock_recuento_manana():
+--   un recuento hecho después del reparto de la mañana suma lo que salió (y resta lo que entró)
+--   ese día según Dubix exportado al cerrar; stock_actual usa contado + ajuste_manana.
