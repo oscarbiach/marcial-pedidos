@@ -130,3 +130,8 @@ body:not(.stock-visible) [data-tab="stock"], body:not(.stock-visible) #tab-stock
 .st-card--aviso h4 { display: flex; align-items: center; gap: 6px; color: var(--m-aviso-tinta); }
 .st-card--aviso h4 .ico { width: 18px; height: 18px; }
 .st-card--aviso .btn { width: 100%; min-height: 48px; margin: 6px 0; }
+
+.st-mini { border: 0; background: none; color: var(--m-azul-500); font: 700 11px var(--m-fuente); padding: 4px 2px; cursor: pointer; white-space: nowrap; }
+.st-fac { cursor: pointer; text-decoration: underline dotted; }
+.st-piezas { display: block; font-size: 11px; color: var(--m-tinta-3); font-weight: 700; }
+.st-fila-in { flex-wrap: nowrap; }

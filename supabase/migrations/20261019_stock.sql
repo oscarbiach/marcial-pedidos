@@ -288,3 +288,5 @@ create policy stock_alias_editar on public.stock_alias for update to authenticat
 -- stock_recuento_items.ajuste_manana + stock_recuentos.manana_aplicada + stock_recuento_manana():
 --   un recuento hecho después del reparto de la mañana suma lo que salió (y resta lo que entró)
 --   ese día según Dubix exportado al cerrar; stock_actual usa contado + ajuste_manana.
+
+-- stock_8 (20/10/2026): por_caja > 0 para poder guardar kg por pieza (productos en kg contados por piezas).

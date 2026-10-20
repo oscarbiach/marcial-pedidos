@@ -202,13 +202,14 @@
     let campos;
     if (f) {
       const cj = val === null ? '' : Math.floor(Number(val) / f + 1e-9), su = val === null ? '' : coma(Number(val) - cj * f);
-      campos = '<label class="st-par">' + inp('cj', cj, '0') + '<small>cajas</small></label><label class="st-par">' + inp('su', su, '0') + '<small>' + (p.unidad === 'kg' ? 'kg' : 'sueltos') + '</small></label>';
+      campos = '<label class="st-par">' + inp('cj', cj, '0') + '<small>' + (p.unidad === 'kg' ? 'piezas' : 'cajas') + '</small></label><label class="st-par">' + inp('su', su, '0') + '<small>' + (p.unidad === 'kg' ? 'kg sueltos' : 'sueltos') + '</small></label>';
     } else {
-      campos = '<label class="st-par">' + inp('n', val === null ? '' : coma(Number(val)), '—') + '<small>' + ({ u: 'unid.', kg: 'kg', caja: 'cajas' })[p.unidad] + '</small></label>';
+      campos = '<label class="st-par">' + inp('n', val === null ? '' : coma(Number(val)), '—') + '<small>' + ({ u: 'unid.', kg: 'kg', caja: 'cajas' })[p.unidad] + '</small></label>' +
+        (p.unidad === 'kg' ? '<button class="st-mini" onclick="StockUI.factor(\'' + p.id + '\')">por piezas</button>' : (p.unidad === 'u' ? '<button class="st-mini" onclick="StockUI.factor(\'' + p.id + '\')">por caja</button>' : ''));
     }
     return '<div class="st-fila' + (it ? ' contado' : '') + (pend ? ' pend' : '') + '">' +
       '<div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
-      '<div class="st-meta">' + (f ? '<b>Caja = ' + fmtN(f) + ' ' + (p.unidad === 'kg' ? 'kg' : 'u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
+      '<div class="st-meta">' + (f ? '<b class="st-fac" onclick="StockUI.factor(\'' + p.id + '\')">' + (p.unidad === 'kg' ? '1 pieza ≈ ' + fmtN(f, 'kg') + ' kg' : 'Caja = ' + fmtN(f) + ' u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
       (val !== null && f ? ' · total ' + fmtN(val, p.unidad) : '') + (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
       '<div class="st-fila-in">' + dif + campos + '</div></div>';
   }
@@ -297,6 +298,22 @@
   function siguiente(input) {
     const todos = [...raiz().querySelectorAll('input.st-num')], i = todos.indexOf(input);
     if (i >= 0 && todos[i + 1]) todos[i + 1].focus();
+  }
+  // Piezas (kg por pieza, aprox.) o unidades por caja: se guarda en por_caja.
+  function factor(pid) {
+    const p = E.porId.get(pid); if (!p) return;
+    const kg = p.unidad === 'kg';
+    modal(kg ? 'Contar por piezas' : 'Contar por cajas',
+      '<p><b>' + esc(p.nombre) + '</b></p><p class="st-ayuda">' + (kg ? 'Dubix lo lleva en kilos. Si ponés cuánto pesa una pieza (más o menos), contás piezas y la app lo pasa a kilos. Si una pieza no está entera, la pesás y la ponés en "kg sueltos".' : 'Cuántas unidades trae una caja cerrada.') + '</p>' +
+      '<div class="field"><label>' + (kg ? 'Kilos por pieza (aprox.)' : 'Unidades por caja') + '</label><input id="st-fac" inputmode="decimal" value="' + (p.por_caja ? String(p.por_caja).replace('.', ',') : '') + '" placeholder="' + (kg ? 'Ej: 4,5' : 'Ej: 12') + '"></div>',
+      [['Cancelar', 'btn-secondary', cerrarModal], ['Guardar', 'btn-primary', async () => {
+        const v = leerNum($('st-fac').value);
+        if (v !== null && (Number.isNaN(v) || v <= 0 || (!kg && v <= 1))) return avisar('Número inválido');
+        const { error } = await sb.from('stock_productos').update({ por_caja: v }).eq('id', pid);
+        if (error) return avisar('Error: ' + errTxt(error));
+        p.por_caja = v; cerrarModal();
+        if (E.vista === 'recuento' && raiz().querySelector('input[data-pid="' + pid + '"]')) refrescarFila(pid); else render();
+      }]]);
   }
   async function cambiarUnidad(pid) {
     const p = E.porId.get(pid); if (!p) return;
@@ -392,7 +409,8 @@
       h += '<div class="st-fila st-fila--stock"><div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
         '<div class="st-meta">' + (p.ultimo_recuento ? 'Contado ' + fmtF(p.ultimo_recuento) + ': ' + fmtN(p.contado_ultimo, p.unidad) + (Number(p.ventas) ? ' · vendido ' + fmtN(-p.ventas, p.unidad) : '') + (Number(p.ingresos) ? ' · entró ' + fmtN(p.ingresos, p.unidad) : '') + (Number(p.ajustes) ? ' · ajustes ' + fmtN(p.ajustes, p.unidad) : '') : 'Sin contar') +
         ' · Dubix: ' + fmtN(p.stock_dubix, p.unidad) + '</div></div>' +
-        '<div class="st-stock' + (s === null ? ' nulo' : s <= 0 ? ' neg' : '') + '">' + (s === null ? '—' : fmtN(s, p.unidad)) + '<small>' + UNI[p.unidad] + '</small></div>' +
+        '<div class="st-stock' + (s === null ? ' nulo' : s <= 0 ? ' neg' : '') + '">' + (s === null ? '—' : fmtN(s, p.unidad)) + '<small>' + UNI[p.unidad] + '</small>' +
+        (s !== null && p.unidad === 'kg' && Number(p.por_caja) ? '<small class="st-piezas">≈ ' + fmtN(Math.round(s / Number(p.por_caja) * 10) / 10) + ' piezas</small>' : '') + '</div>' +
         '<button class="st-mas" title="Cargar movimiento" onclick="StockUI.nuevoMovimiento(\'' + p.id + '\')">' + ico('plus') + '</button></div>';
     });
     h += '</div>';
@@ -863,7 +881,7 @@
     agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
     lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
-    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t),
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t),
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();
