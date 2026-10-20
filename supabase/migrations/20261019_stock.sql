@@ -290,3 +290,4 @@ create policy stock_alias_editar on public.stock_alias for update to authenticat
 --   ese día según Dubix exportado al cerrar; stock_actual usa contado + ajuste_manana.
 
 -- stock_8 (20/10/2026): por_caja > 0 para poder guardar kg por pieza (productos en kg contados por piezas).
+-- stock_8b: stock_productos.sin_dubix (productos que todavía no existen en Dubix); stock_actual expone sin_dubix al final.

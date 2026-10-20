@@ -209,7 +209,7 @@
     }
     return '<div class="st-fila' + (it ? ' contado' : '') + (pend ? ' pend' : '') + '">' +
       '<div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
-      '<div class="st-meta">' + (f ? '<b class="st-fac" onclick="StockUI.factor(\'' + p.id + '\')">' + (p.unidad === 'kg' ? '1 pieza ≈ ' + fmtN(f, 'kg') + ' kg' : 'Caja = ' + fmtN(f) + ' u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
+      '<div class="st-meta">' + (p.sin_dubix ? '<span class="st-sd">Sin Dubix</span> ' : '') + (f ? '<b class="st-fac" onclick="StockUI.factor(\'' + p.id + '\')">' + (p.unidad === 'kg' ? '1 pieza ≈ ' + fmtN(f, 'kg') + ' kg' : 'Caja = ' + fmtN(f) + ' u') + '</b> · ' : '') + refTxt + ': ' + fmtN(ref, p.unidad) + ' ' + UNI[p.unidad] +
       (val !== null && f ? ' · total ' + fmtN(val, p.unidad) : '') + (it ? ' · ' + esc(it.autor) : '') + '</div></div>' +
       '<div class="st-fila-in">' + dif + campos + '</div></div>';
   }
@@ -816,7 +816,7 @@
     if (Number.isNaN(caja) || (caja !== null && caja <= 1)) return avisar('Unidades por caja: poné un número mayor a 1 o dejalo vacío');
     const ya = E.prods.find(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase());
     if (ya) return avisar('Ya existe: buscalo como «' + ya.nombre + '»');
-    const { data, error } = await sb.from('stock_productos').insert({ nombre, marca, unidad, por_caja: caja }).select('id').single();
+    const { data, error } = await sb.from('stock_productos').insert({ nombre, marca, unidad, por_caja: caja, sin_dubix: true }).select('id').single();
     if (error) return avisar('Error: ' + errTxt(error));
     const cant = $('st-np-cant') ? leerNum($('st-np-cant').value) : null;
     if (E.nuevoDesde === 'conteo' && E.rec && cant !== null && !Number.isNaN(cant) && cant >= 0)
