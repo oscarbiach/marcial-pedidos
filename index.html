@@ -146,6 +146,44 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
    el centrado lo cuenta como parte de la caja y la deja más arriba de lo
    que corresponde. Vale para celular y PC. */
 #tab-cargar .form-card { margin-bottom:0; }
+
+/* ── Pedidos para cargar (pedidos-a-cargar.js): lo que antes llegaba al grupo «Ventas» ── */
+/* Color propio (ámbar) para no confundirse con la tarjeta del formulario ni con el panel del cliente. */
+.pac { --pac-fondo:#FFF6E5; --pac-borde:#F2B84B; --pac-tinta:#6B4300; --pac-fuerte:#D9730D;
+  background:var(--pac-fondo); border:1px solid var(--pac-borde); border-radius:14px; padding:10px; color:var(--pac-tinta); font-size:13px; }
+.pac-cab { display:flex; align-items:center; gap:7px; padding:2px 4px 8px; font-weight:800; font-size:12px; letter-spacing:.4px; text-transform:uppercase; }
+.pac-tit { flex:1; }
+.pac-n { min-width:22px; padding:1px 8px; border-radius:999px; background:#fff; color:var(--pac-tinta); font-size:12px; text-align:center; }
+.pac-n--hay { background:var(--pac-fuerte); color:#fff; }
+.pac-lista { display:grid; gap:7px; }
+.pac-vacio { margin:2px 4px 4px; font-size:12.5px; opacity:.8; }
+.pac-error { color:#b42318; opacity:1; }
+.pac-it { padding:8px 10px; background:#fff; border:1px solid #F6D9A4; border-left:4px solid var(--pac-borde); border-radius:10px; }
+.pac-it--activo { border-color:var(--pac-fuerte); box-shadow:0 0 0 2px var(--pac-fuerte); }
+.pac-meta { font-size:11.5px; opacity:.85; }
+.pac-tg { color:#1d6fa5; font-weight:700; }   /* llegó por el bot de Telegram */
+.pac-cli { margin-top:2px; font-weight:800; font-size:13.5px; color:var(--navy); }
+.pac-txt { margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; line-height:1.4; color:var(--navy); }
+.pac-acc { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:7px; }
+.pac-btn { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:3px 10px; border:1px solid #EBC98A; border-radius:8px; background:#fff; color:var(--pac-tinta); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
+.pac-btn--prim { background:var(--pac-fuerte); border-color:var(--pac-fuerte); color:#fff; }
+.pac-btn:disabled, .pac-link:disabled { opacity:.55; cursor:default; }
+.pac-link { border:0; background:none; padding:4px 2px; color:inherit; font:inherit; font-size:12px; text-decoration:underline; cursor:pointer; opacity:.85; }
+.pac-acc .pac-link { margin-left:auto; }
+.pac-btn:focus-visible, .pac-link:focus-visible, .pac-nuevo summary:focus-visible { outline:2px solid var(--pac-fuerte, #D9730D); outline-offset:2px; }
+.pac-en-carga { margin:6px 0 0; font-size:12px; font-weight:700; color:var(--pac-fuerte); }
+.pac-aviso { margin:6px 4px 0; font-size:12.5px; }
+.pac-aviso:empty { display:none; }
+/* Celular: solo el formulario para mandar el pedido, plegado en un renglón arriba de la carga. */
+.pac-nuevo { margin-bottom:10px; background:#FFF6E5; border:1px solid #F2B84B; border-radius:12px; color:#6B4300; }
+.pac-nuevo summary { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; cursor:pointer; font-weight:700; font-size:14.5px; list-style:none; }
+.pac-nuevo summary::-webkit-details-marker { display:none; }
+.pac-form { display:grid; gap:10px; padding:2px 14px 14px; }
+.pac-form label { display:grid; gap:5px; font-size:13px; font-weight:700; }
+.pac-form label i { font-style:normal; font-weight:500; }
+.pac-form #pac-enviar { background:#D9730D; border-color:#D9730D; }
+.pac-form input, .pac-form textarea { width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #EBC98A; border-radius:10px; background:#fff; font:inherit; font-size:16px; color:var(--navy); }
+.pac-form .pac-aviso { margin:0; }
 .order-card {
   position:relative;
   background:#fff; border-radius:18px; overflow:hidden;
@@ -718,7 +756,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
      separados en vez de estirados a lo ancho de la pantalla. Si el
      pedido crece y no entra, deja de centrarse y scrollea normal. */
   #tab-cargar.active {
-    display:flex; align-items:center; justify-content:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
     /* Mismo criterio que en celular: el alto libre se mide (acá la barra
        inferior no existe, así que es todo lo que hay debajo del header) y
        los márgenes negativos anulan el padding de main (24 y 60). */
@@ -728,6 +766,13 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   #tab-cargar .form-card {
     width:100%; max-width:660px; padding:32px 34px; border-radius:16px;
   }
+  /* «Para cargar» va a la izquierda del formulario: en columna mientras no
+     haya lugar al costado (debajo de 1320px)... */
+  #tab-cargar.active:has(> .pac) {
+    display:grid; grid-template-columns:minmax(200px,250px) minmax(0,660px);
+    justify-content:center; align-content:center; align-items:start; gap:20px;
+  }
+  #tab-cargar .pac { max-height:78vh; overflow-y:auto; position:sticky; top:12px; }
   #tab-cargar .field { margin-bottom:20px; }
   #tab-cargar .field label { font-size:12.5px; margin-bottom:8px; }
   #tab-cargar .field input,
@@ -800,6 +845,13 @@ input[type="time"]::-webkit-calendar-picker-indicator {
    panel entre entero al costado es ~1272px. */
 @media(min-width:1320px) {
   #tab-cargar.active { position:relative; }
+  /* ...y con lugar, flotando a la izquierda como el panel del cliente a la
+     derecha, sin correr el formulario del centro. */
+  #tab-cargar.active:has(> .pac) { display:flex; align-items:center; }
+  #tab-cargar .pac {
+    position:absolute; top:50%; right:calc(50% + 348px); transform:translateY(-50%);
+    width:268px;
+  }
   #histCli {
     position:absolute; top:50%; left:calc(50% + 348px);
     transform:translateY(-50%);
@@ -2922,6 +2974,8 @@ function setTab(tab) {
   if (tab === 'clientes' && window.SegUI) SegUI.abrir();
   document.body.classList.toggle('wa-ancho', tab === 'whatsapp');
   if (tab === 'whatsapp' && window.WhatsAppUI) WhatsAppUI.open();
+  // Cargar: trae al día los «Pedidos para cargar» (pedidos-a-cargar.js).
+  if (window.PedidosACargar) { if (tab === 'cargar') PedidosACargar.alMostrar(); else PedidosACargar.alSalir(); }
   if (tab === 'stock' && window.StockUI) StockUI.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
@@ -3024,7 +3078,10 @@ function submitCargarPedido() {
   // No se espera al servidor: el pedido entra en la cola, aparece en la
   // lista al toque y el formulario queda limpio para el siguiente. El
   // envío corre solo, de fondo.
-  encolarPedido({ cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who });
+  const nuevo = { cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who };
+  encolarPedido(nuevo);
+  // Si venía de «Pedidos para cargar» («Cargar este»), ese pedido queda marcado como cargado.
+  if (window.PedidosACargar) PedidosACargar.alGuardar(nuevo.id);
 
   resetCargarForm();
   // El cliente del próximo pedido queda listo para tipear: en el celular
@@ -3735,58 +3792,42 @@ function repTagsTexto(it) {
   return t.length ? ' [' + t.join(' - ') + ']' : '';
 }
 
-// Cantidad para el texto de la hoja (pedido del usuario, 19/10/2026): siempre con la palabra completa
-// (CAJAS, unidades sueltas, kg), para que quien carga no confunda cajas con bolsas o paquetes sueltos.
-// En el total a cargar las cajas llevan su equivalencia en unidades; en cada entrega, cuánto trae la caja.
-function repCantidad(it, enTotal) {
+// Cantidad para el texto de la hoja (pedido del usuario, 21/10/2026): corta y sin vueltas.
+// Lo que va en caja dice «caja/cajas»; lo suelto, «u» pegada al número («1u»); lo pesado, «kg».
+function repCantidad(it) {
   const p = prodInfo(it.prod), q = round2(Number(it.qty) || 0);
-  const pl = (uno, varios) => (q === 1 ? uno : varios);
+  const cajas = n => n + ' ' + (n === 1 ? 'caja' : 'cajas');
   if (it.fetear) return q + ' kg';
-  if (!p || !p.u) return '× ' + q;
-  if (p.u === 'caja') {
-    if (it.unidades) return q + ' ' + pl('unidad suelta', 'unidades sueltas') + ' (no cajas)';
-    return q + ' ' + pl('CAJA', 'CAJAS') + (p.box ? (enTotal ? ' (= ' + round2(q * p.box) + ' unidades)' : ' de ' + p.box) : '');
-  }
+  if (!p || !p.u) return q + 'u';
+  if (p.u === 'caja') return it.unidades ? q + 'u' : cajas(q);
   if (p.u === 'kg') return q + ' kg';
   if (p.u === 'unidad') {
-    if (p.box > 1) {
-      const cajas = q / p.box;
-      return Number.isInteger(cajas)
-        ? q + ' unidades (= ' + cajas + ' ' + (cajas === 1 ? 'caja' : 'cajas') + ' de ' + p.box + ')'
-        : q + ' ' + pl('unidad suelta', 'unidades sueltas') + ' (la caja trae ' + p.box + ')';
+    if (p.box > 1 && q >= p.box && Number.isInteger(q)) {
+      const c = Math.floor(q / p.box), resto = q - c * p.box;
+      return cajas(c) + (resto ? ' + ' + resto + 'u' : '');
     }
-    return q + ' ' + pl('unidad', 'unidades');
+    return q + 'u';
   }
   return q + ' ' + p.u;
 }
 
+// Hoja para el repartidor: una entrega por cliente, en el orden del recorrido.
+// La observación va como cita en cursiva de WhatsApp («> _Obs: …_»).
 function textoHojaReparto() {
   const peds = repElegidos();
   if (!peds.length) return '';
-  const totals = totalsOf(peds);
   const L = [];
 
   L.push('HOJA DE REPARTO - ' + fmtDate(state.today || hoyArg()));
   L.push('Armó: ' + (state.who || '—') + ' | ' + peds.length +
          ' pedido' + (peds.length !== 1 ? 's' : ''));
-  L.push('');
-  L.push('=== TOTAL A CARGAR EN LA CAMIONETA ===');
-  totals.forEach(t => {
-    L.push('- ' + repCantidad(t, true) + '  ' + t.prod + repTagsTexto(t));
-  });
-  L.push('');
-  L.push('=== ENTREGAS ===');
   peds.forEach((p, i) => {
     const dir = String(p.direccion || '').trim() || '(sin dirección)';
     L.push('');
     L.push((i + 1) + ') ' + p.cliente + ' - ' + dir);
-    p.items.forEach(it => {
-      // Acá va la etiqueta corta ("1 caja" y no "1 caja (= 72 un.)"): es lo
-      // que se entrega en la puerta. La equivalencia en unidades sirve para
-      // cargar la camioneta, y por eso queda arriba, en el total.
-      L.push('   · ' + repCantidad(it, false) + ' ' + it.prod + repTagsTexto(it));
-    });
-    if (p.notas) L.push('   Obs: ' + p.notas);
+    p.items.forEach(it => L.push('   · ' + repCantidad(it) + ' ' + it.prod + repTagsTexto(it)));
+    const obs = String(p.notas || '').replace(/\s+/g, ' ').trim();
+    if (obs) L.push('> _Obs: ' + obs + '_');
   });
   return L.join('\n');
 }
@@ -6331,5 +6372,6 @@ function abrirInstalar() {
 <script src="whatsapp-oportunidades.js"></script>
 <script src="whatsapp-precios.js"></script>
 <script src="stock.js"></script>
+<script src="pedidos-a-cargar.js"></script>
 </body>
 </html>
