@@ -480,13 +480,15 @@
       h += '<div class="st-card"><h4>' + ico('triangle-alert') + ' Productos de pedidos sin vincular</h4><p class="st-ayuda">Estos renglones de pedidos no descuentan stock. Tocá uno y elegí a qué producto de stock corresponde.</p>' +
         E.sinVinc.map((x, i) => '<button class="st-hist st-hist--btn" onclick="StockUI.vincular(' + i + ')"><span><b>' + esc(x.producto) + '</b> · ' + x.renglones + ' renglón(es)' + (x.pendiente ? ' · pendiente' : '') + '</span>' + ico('link') + '</button>').join('') + '</div>';
     }
-    const dif = E.control.filter(x => Math.abs(Number(x.diferencia)) > 0.05).sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia));
+    const dif = E.control.filter(x => Math.abs(Number(x.diferencia)) > 0.05 || Math.abs(Number(x.dif_compras || 0)) > 0.05).sort((a, b) => (Math.abs(b.diferencia) + Math.abs(b.dif_compras || 0)) - (Math.abs(a.diferencia) + Math.abs(a.dif_compras || 0)));
     const ok = E.control.length - dif.length;
     h += '<div class="st-resumen"><div><b>' + ok + '</b><span>coinciden</span></div><div><b>' + dif.length + '</b><span>con diferencia</span></div></div>';
     if (!dif.length) return h + '<div class="st-vacio">Todo coincide.</div>';
     h += '<div class="st-lista">' + dif.map(x => '<div class="st-fila st-fila--stock"><div class="st-fila-info"><div class="st-nom">' + esc(x.nombre) + '</div>' +
-      '<div class="st-meta">Dubix ' + fmtN(x.dubix, x.unidad) + ' · App ' + fmtN(Math.round(x.app * 100) / 100, x.unidad) + (x.comprobantes ? '<br><small>' + esc(x.comprobantes.replace(/Dubix /g, '')) + '</small>' : '') + '</div></div>' +
-      '<div class="st-stock ' + (x.diferencia > 0 ? 'neg' : '') + '">' + (x.diferencia > 0 ? '+' : '') + fmtN(Math.round(x.diferencia * 100) / 100, x.unidad) + '<small>' + (x.diferencia > 0 ? 'falta en app' : 'falta en Dubix') + '</small></div></div>').join('') + '</div>';
+      '<div class="st-meta">Ventas: Dubix ' + fmtN(x.dubix, x.unidad) + ' · App ' + fmtN(Math.round(x.app * 100) / 100, x.unidad) +
+      (Math.abs(Number(x.dif_compras || 0)) > 0.05 ? '<br><b>Compras: Dubix ' + fmtN(x.compras_dubix, x.unidad) + ' · App (foto) ' + fmtN(x.compras_app, x.unidad) + (x.dif_compras > 0 ? ' → falta subir la factura a la app' : ' → en Dubix falta la factura') + '</b>' : '') +
+      (x.comprobantes ? '<br><small>' + esc(x.comprobantes.replace(/Dubix /g, '')) + '</small>' : '') + '</div></div>' +
+      (Math.abs(Number(x.diferencia)) > 0.05 ? '<div class="st-stock ' + (x.diferencia > 0 ? 'neg' : '') + '">' + (x.diferencia > 0 ? '+' : '') + fmtN(Math.round(x.diferencia * 100) / 100, x.unidad) + '<small>' + (x.diferencia > 0 ? 'falta en app' : 'falta en Dubix') + '</small></div>' : '') + '</div>').join('') + '</div>';
     return h;
   }
   function vincular(i) {
@@ -527,7 +529,7 @@
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar movimientos de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
-    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá: <b>de Dubix se toman solo las compras</b>; las ventas quedan para el Control (las salidas son los pedidos despachados de la app). ' +
+    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá: <b>sirve para el Control</b> (las salidas son los pedidos despachados y las entradas, las facturas de compra subidas con foto). ' +
       (E.cerrados[0] || ult ? '<b>Una vez por día, a la mañana. En Dubix elegí desde el ' + fmtF(ult ? (ult.tipo === 'detalle' ? ult.hasta : ult.desde) : E.cerrados[0].fecha) + ' hasta hoy.</b> Lo que ya estaba importado se saltea solo.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
     h += '<div class="st-card"><h4>Ventas importadas</h4>' + (E.imps.length ? E.imps.map(x =>
       '<div class="st-hist' + (x.anulada ? ' anulada' : '') + '"><span><b>' + fmtF(x.desde) + (x.hasta !== x.desde ? ' al ' + fmtF(x.hasta) : '') + '</b> · ' + x.filas + ' productos' + (x.sin_match ? ' · ' + x.sin_match + ' sin match' : '') + ' · ' + esc(x.autor) + (x.anulada ? ' · ANULADA' : '') + '</span>' +
@@ -599,6 +601,11 @@
     }
     if (!filas.length) return avisar('Agregá al menos un producto con cantidad');
     if (E.sinProd && E.sinProd.length) return avisar('Quedan renglones de la factura sin producto: buscalos o marcá «No va»');
+    if (E.movTipo === 'ingreso' && nota && /^factura/i.test(nota) && E.dupOk !== nota) {
+      const { data: ya } = await sb.from('stock_movimientos').select('fecha').eq('nota', nota).eq('tipo', 'ingreso').limit(1);
+      if (ya && ya.length) { E.dupOk = nota; return avisar('Ojo: «' + nota + '» ya se cargó el ' + fmtF(ya[0].fecha) + '. Si es otra factura, tocá Guardar de nuevo.'); }
+    }
+    E.dupOk = null;
     const { error } = await sb.from('stock_movimientos').insert(filas);
     if (error) return avisar('Error: ' + errTxt(error));
     const alias = E.lineas.filter(l => l.aliasKey).map(l => ({ texto_key: l.aliasKey, producto_id: l.pid, autor: st().who }));
