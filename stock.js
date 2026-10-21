@@ -473,8 +473,8 @@
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar movimientos de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
-    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → <b>Exportar detalle de movimientos</b>. Subí ese archivo acá (trae compras y ventas juntas). ' +
-      (E.cerrados[0] || ult ? '<b>Todos los días al cerrar. En Dubix elegí desde el ' + fmtF(ult ? (ult.hasta === hoy() ? ult.desde : sumarDia(ult.hasta)) : E.cerrados[0].fecha) + ' hasta hoy.</b> Si lo hacés de nuevo el mismo día, el archivo nuevo reemplaza al anterior.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
+    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá. ' +
+      (E.cerrados[0] || ult ? '<b>Una vez por día, a la mañana. En Dubix elegí desde el ' + fmtF(ult ? (ult.tipo === 'detalle' ? ult.hasta : ult.desde) : E.cerrados[0].fecha) + ' hasta hoy.</b> Lo que ya estaba importado se saltea solo.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
     h += '<div class="st-card"><h4>Ventas importadas</h4>' + (E.imps.length ? E.imps.map(x =>
       '<div class="st-hist' + (x.anulada ? ' anulada' : '') + '"><span><b>' + fmtF(x.desde) + (x.hasta !== x.desde ? ' al ' + fmtF(x.hasta) : '') + '</b> · ' + x.filas + ' productos' + (x.sin_match ? ' · ' + x.sin_match + ' sin match' : '') + ' · ' + esc(x.autor) + (x.anulada ? ' · ANULADA' : '') + '</span>' +
       (x.anulada ? '' : '<button class="st-link st-link--peligro" onclick="StockUI.anularImp(\'' + x.id + '\')">Anular</button>') + '</div>').join('') : '<p class="st-ayuda">Nada todavía.</p>') + '</div>';
@@ -574,7 +574,7 @@
     const f = input.files && input.files[0]; if (!f) return;
     let txt = await leerArchivo(f, 'utf-8');
     if (txt.includes('�')) txt = await leerArchivo(f, 'windows-1252');
-    const r = parsearEntreFechas(txt) || parsearVentas(txt);
+    const r = parsearDetalle(txt) || parsearEntreFechas(txt) || parsearVentas(txt);
     if (r.error) { E.modoManana = false; return modal('No se pudo leer el archivo', '<p>' + esc(r.error) + '</p>', [['Entendido', 'btn-primary', cerrarModal]]); }
     E.imp = { archivo: f.name, ...r };
     if (E.modoManana) return pintarManana();
@@ -593,6 +593,48 @@
   }
   const sinTilde = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   const fechaDubix = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : null; };
+  // Detalle de movimientos de Dubix (Stock entre Fechas → ⋮ → el archivo "detalles_stocks_entre_fechas"):
+  // una línea por comprobante con fecha y hora. Cada línea tiene una clave, así se puede subir el mismo período
+  // varias veces sin que se sume dos veces.
+  function parsearDetalle(txt) {
+    const lineas = txt.replace(/^﻿/, '').split(/\r?\n/);
+    let desde = null, hasta = null, h = -1;
+    lineas.forEach((l, i) => {
+      const c = separarLinea(l, ';'), k = sinTilde(c[0]);
+      if (k.startsWith('fecha desde')) desde = fechaDubix(c[1]);
+      if (k.startsWith('fecha hasta')) hasta = fechaDubix(c[1]);
+      const cc = c.map(sinTilde);
+      if (h < 0 && cc[0] === 'fecha' && cc.includes('referencia') && cc.includes('cantidad')) h = i;
+    });
+    if (h < 0) return null;
+    if (!desde || !hasta) return { error: 'El archivo no trae las fechas (Fecha desde / Fecha hasta). Exportalo de nuevo desde Stock entre Fechas.' };
+    const cols = separarLinea(lineas[h], ';').map(sinTilde);
+    const iF = 0, iT = cols.indexOf('tipo'), iR = cols.indexOf('referencia'), iC = cols.indexOf('cantidad'), iCod = cols.findIndex(x => x.startsWith('codigo')), iP = cols.indexOf('producto');
+    const porCod = new Map(), porNom = new Map();
+    E.prods.forEach(p => { if (p.codigo) porCod.set(p.codigo.trim().toLowerCase(), p); porNom.set(sinTilde(p.nombre), p); });
+    const movs = [], sinM = new Map(), filas = new Map(), vistas = new Map();
+    for (let i = h + 1; i < lineas.length; i++) {
+      if (!lineas[i].trim()) continue;
+      const c = separarLinea(lineas[i], ';');
+      const fh = (c[iF] || '').trim(), fecha = fh.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+      const cant = leerNum(c[iC]); if (cant === null || Number.isNaN(cant) || !cant) continue;
+      const cod = (c[iCod] || '').trim(), det = (c[iP] || '').trim(), ref = (c[iR] || '').trim(), tipo = (c[iT] || '').trim();
+      let clave = [fh, tipo, ref, cod || det, cant].join('|');
+      const n = (vistas.get(clave) || 0) + 1; vistas.set(clave, n); clave += '#' + n;
+      const m = { fecha, cantidad: cant, ref: (tipo + ' ' + ref).trim().slice(0, 120), clave };
+      const p = (cod && porCod.get(cod.toLowerCase())) || porNom.get(sinTilde(det));
+      if (p) {
+        movs.push({ ...m, producto_id: p.id });
+        const f = filas.get(p.id) || { producto_id: p.id, ingresos: 0, egresos: 0 };
+        if (cant > 0) f.ingresos += cant; else f.egresos += -cant; filas.set(p.id, f);
+      } else {
+        const k = cod + '|' + det, sx = sinM.get(k) || { cod, det, ing: 0, egr: 0, fin: null, movs: [] };
+        if (cant > 0) sx.ing += cant; else sx.egr += -cant; sx.movs.push(m); sinM.set(k, sx);
+      }
+    }
+    return { tipo: 'detalle', desde, hasta, movs, filas: [...filas.values()], sin: [...sinM.values()] };
+  }
   // Reporte de Dubix "Stock entre Fechas" (Inventario → Reportes → ⋮ → Exportar detalle de movimientos):
   // Código;Detalle;Stock Previo;Ingresos;Egresos;Stock Final, con "Fecha desde/hasta" arriba.
   function parsearEntreFechas(txt) {
@@ -669,6 +711,14 @@
   }
   function pintarImport() {
     const x = E.imp;
+    if (x.tipo === 'detalle') {
+      const ing = x.filas.filter(f => f.ingresos).length, egr = x.filas.filter(f => f.egresos).length;
+      let b = '<p><b>Del ' + fmtF(x.desde) + ' al ' + fmtF(x.hasta) + '</b>: ' + x.movs.length + ' movimientos de ' + x.filas.length + ' productos (' + ing + ' con entradas, ' + egr + ' con salidas).</p>' +
+        '<p class="st-ayuda">Lo que ya estaba importado se saltea solo: no se suma dos veces.</p>';
+      if (!E.cerrados.length) b += '<div class="st-nota st-nota--error">' + ico('circle-alert') + '<div>Todavía no hay ningún recuento cerrado: estos movimientos no cambian el stock hasta que haya uno.</div></div>';
+      b += listaSin(x);
+      return modal('Importar movimientos de Dubix', b, [['Cancelar', 'btn-secondary', cerrarModal], ['Importar', 'btn-primary', confirmarDetalle]]);
+    }
     if (x.tipo === 'dubix') {
       const ing = x.filas.filter(f => f.ingresos).length, egr = x.filas.filter(f => f.egresos).length;
       const reemplaza = E.imps.filter(i => !i.anulada && i.desde >= x.desde && i.hasta <= x.hasta);
@@ -716,6 +766,24 @@
     E.imp = null;
     cargar(true);
   }
+  async function confirmarDetalle() {
+    const x = E.imp;
+    let movs = [...x.movs], sinMatch = x.sin.length;
+    if ($('st-imp-crear') && $('st-imp-crear').checked && x.sin.length) {
+      try {
+        const nuevos = new Map();
+        x.sin.forEach(s => { const k = (s.cod || '') + '|' + (s.det || s.cod); if (!nuevos.has(k)) nuevos.set(k, { codigo: s.cod || null, nombre: s.det || s.cod, marca: 'Otros', unidad: s.movs.some(m => !Number.isInteger(m.cantidad)) ? 'kg' : 'u' }); });
+        const { data, error } = await sb.from('stock_productos').insert([...nuevos.values()]).select('id,codigo,nombre');
+        if (error) throw error;
+        const ids = new Map(data.map(d => [(d.codigo || '') + '|' + d.nombre, d.id]));
+        x.sin.forEach(s => { const id = ids.get((s.cod || '') + '|' + (s.det || s.cod)); if (id) s.movs.forEach(m => movs.push({ ...m, producto_id: id })); });
+        sinMatch = 0;
+      } catch (e) { return avisar('No se pudieron crear los productos: ' + errTxt(e)); }
+    }
+    const { data, error } = await sb.rpc('stock_importar_detalle', { p_archivo: x.archivo, p_desde: x.desde, p_hasta: x.hasta, p_movs: movs, p_sin_match: sinMatch });
+    if (error) return avisar(errTxt(error));
+    cerrarModal(); avisar('Listo: ' + data.nuevos + ' movimientos nuevos' + (data.total > data.nuevos ? ' (' + (data.total - data.nuevos) + ' ya estaban)' : '')); E.imp = null; cargar(true);
+  }
   async function confirmarDubix() {
     const x = E.imp;
     let filas = [...x.filas], sinMatch = x.sin.length;
@@ -733,7 +801,7 @@
     E.modoManana = false;
     const x = E.imp, r = recPendienteManana();
     if (!r) return avisar('No hay un recuento de hoy esperando el movimiento de la mañana');
-    if (x.tipo !== 'dubix') return modal('Archivo equivocado', '<p>Tiene que ser el reporte <b>Stock entre Fechas</b> de Dubix, con la fecha de hoy.</p>', [['Entendido', 'btn-primary', cerrarModal]]);
+    if (x.tipo !== 'dubix' && x.tipo !== 'detalle') return modal('Archivo equivocado', '<p>Tiene que ser el reporte <b>Stock entre Fechas</b> de Dubix, con la fecha de hoy.</p>', [['Entendido', 'btn-primary', cerrarModal]]);
     if (x.desde !== r.fecha || x.hasta !== r.fecha) return modal('Fechas equivocadas', '<p>El archivo es del ' + fmtF(x.desde) + ' al ' + fmtF(x.hasta) + '. Tiene que ser <b>solo de hoy (' + fmtF(r.fecha) + ')</b>: en Dubix poné desde y hasta la fecha de hoy.</p>', [['Entendido', 'btn-primary', cerrarModal]]);
     const n = x.filas.filter(f => f.egresos || f.ingresos).length;
     modal('Movimiento de esta mañana', '<p>Dubix dice que hoy, hasta ahora, se movieron <b>' + n + ' productos</b>. Se suman al recuento como si se hubiera contado antes del primer reparto.</p><p class="st-ayuda">Hacelo solo si todavía no se hicieron remitos del reparto de la tarde.</p>',
@@ -936,7 +1004,7 @@
     agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
     lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
-    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t),
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), _E: () => E,
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();
