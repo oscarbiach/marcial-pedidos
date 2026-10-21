@@ -140,3 +140,8 @@ body:not(.stock-visible) [data-tab="stock"], body:not(.stock-visible) #tab-stock
 
 .st-fila.falta { background: var(--m-aviso-fondo); }
 .st-falta { color: var(--m-aviso-tinta); font-weight: 800; }
+.st-disp { display: block; font-size: var(--m-t-xs); font-weight: 700; color: var(--m-tinta-2); margin-top: 2px; }
+.st-disp.neg { color: var(--m-error); }
+.st-hist--btn { width: 100%; background: none; border: 0; border-top: 1px solid var(--m-linea); text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.st-hist--btn.on { background: var(--m-acento-suave, rgba(0,0,0,.05)); }
+.st-vinc-res { max-height: 240px; overflow-y: auto; margin: 8px 0 12px; }

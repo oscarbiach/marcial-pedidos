@@ -73,14 +73,18 @@
     E.cargando = true;
     if (!silencioso) pintarCargando();
     try {
-      const [p, r, c, i, m] = await Promise.all([
+      const [p, r, c, i, m, k, sv] = await Promise.all([
         sb.from('stock_actual').select('*').order('marca').order('nombre').limit(3000),
         sb.from('stock_recuentos').select('*').eq('estado', 'abierto').maybeSingle(),
         sb.from('stock_recuentos').select('*').eq('estado', 'cerrado').order('fecha', { ascending: false }).limit(10),
         sb.from('stock_importaciones').select('*').order('creado_en', { ascending: false }).limit(15),
         sb.from('stock_movimientos').select('id,producto_id,tipo,cantidad,fecha,nota,autor,creado_en').is('importacion_id', null).order('creado_en', { ascending: false }).limit(40),
+        sb.from('stock_control').select('*').limit(3000),
+        sb.from('stock_sin_vincular').select('*').order('renglones', { ascending: false }).limit(300),
       ]);
-      for (const x of [p, r, c, i, m]) if (x.error) throw x.error;
+      for (const x of [p, r, c, i, m, k, sv]) if (x.error) throw x.error;
+      E.control = k.data || [];
+      E.sinVinc = sv.data || [];
       E.prods = p.data || [];
       E.porId = new Map(E.prods.map(x => [x.id, x]));
       E.rec = r.data || null;
@@ -110,7 +114,7 @@
     const r = raiz(); if (!r) return;
     const foco = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.pid;
     let h = '<div class="st-seg" role="tablist">' +
-      ['recuento:Recuento', 'stock:Stock', 'movimientos:Movimientos'].map(x => {
+      ['recuento:Recuento', 'stock:Stock', 'movimientos:Movimientos', 'control:Control'].map(x => {
         const [k, t] = x.split(':');
         return '<button role="tab" class="' + (E.vista === k ? 'on' : '') + '" onclick="StockUI.ver(\'' + k + '\')">' + t + '</button>';
       }).join('') + '</div>';
@@ -118,6 +122,7 @@
     if (E.pendientes.size) h += '<div class="st-alerta">' + ico('clock') + '<span>' + E.pendientes.size + ' conteo(s) sin guardar por falta de señal. Se reintenta solo.</span><button class="st-link" onclick="StockUI.reintentar()">Reintentar ya</button></div>';
     if (E.vista === 'recuento') h += vistaRecuento();
     else if (E.vista === 'stock') h += vistaStock();
+    else if (E.vista === 'control') h += vistaControl();
     else h += vistaMovimientos();
     r.innerHTML = h;
     if (foco) { const el = r.querySelector('input[data-pid="' + foco + '"]'); if (el) el.focus(); }
@@ -440,7 +445,8 @@
     const base = E.prods.filter(p => p.activo && (E.alcance === 'todos' || enAlcance(p)));
     const contados = base.filter(p => p.stock !== null);
     const ui = E.imps.find(i => !i.anulada);
-    let h = '<p class="st-ayuda">' + ico('clock') + ' ' + (ui ? 'Actualizado con Dubix hasta el <b>' + fmtF(ui.hasta) + '</b> (importado ' + new Date(ui.creado_en).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ')' : 'Todavía no se importaron movimientos de Dubix desde el recuento') + '. Para ponerlo al día: Movimientos → Importar movimientos de Dubix.</p>';
+    let h = '<p class="st-ayuda"><b>Salidas:</b> pedidos de la app marcados Despachado (al momento). <b>Entradas:</b> compras de Dubix' + (ui ? ', importadas hasta el <b>' + fmtF(ui.hasta) + '</b>' : '') + '. <b>Comprometido:</b> pedidos Pendientes. <b>Disponible</b> = stock − comprometido.' +
+      (E.sinVinc.length ? ' <a class="st-link" onclick="StockUI.ver(\'control\')">' + E.sinVinc.length + ' producto(s) de pedidos sin vincular</a>' : '') + '</p>';
     h += '<div class="st-resumen"><div><b>' + contados.length + '</b><span>productos con stock real</span></div>' +
       '<div><b>' + (base.length - contados.length) + '</b><span>sin contar todavía</span></div>' +
       '<div><b>' + contados.filter(p => Number(p.stock) <= 0).length + '</b><span>en cero o negativo</span></div></div>';
@@ -454,15 +460,63 @@
       if (p.marca !== grupo) { grupo = p.marca; h += '<div class="st-grupo">' + esc(grupo) + '</div>'; }
       const s = num(p.stock);
       h += '<div class="st-fila st-fila--stock"><div class="st-fila-info"><div class="st-nom">' + esc(p.nombre) + '</div>' +
-        '<div class="st-meta">' + (p.ultimo_recuento ? 'Contado ' + fmtF(p.ultimo_recuento) + ': ' + fmtN(p.contado_ultimo, p.unidad) + (Number(p.ventas) ? ' · vendido ' + fmtN(-p.ventas, p.unidad) : '') + (Number(p.ingresos) ? ' · entró ' + fmtN(p.ingresos, p.unidad) : '') + (Number(p.ajustes) ? ' · ajustes ' + fmtN(p.ajustes, p.unidad) : '') : 'Sin contar') +
-        ' · Dubix: ' + fmtN(p.stock_dubix, p.unidad) + '</div></div>' +
+        '<div class="st-meta">' + (p.ultimo_recuento ? 'Contado ' + fmtF(p.ultimo_recuento) + ': ' + fmtN(p.contado_ultimo, p.unidad) + (Number(p.ventas) ? ' · salió ' + fmtN(-p.ventas, p.unidad) : '') + (Number(p.ingresos) ? ' · entró ' + fmtN(p.ingresos, p.unidad) : '') + (Number(p.ajustes) ? ' · ajustes ' + fmtN(p.ajustes, p.unidad) : '') : 'Sin contar') +
+        (Number(p.comprometido) ? ' · <b>comprometido ' + fmtN(p.comprometido, p.unidad) + '</b>' : '') + (Number(p.sin_factor) ? ' · <span class="st-falta">falta kg por pieza</span>' : '') + '</div></div>' +
         '<div class="st-stock' + (s === null ? ' nulo' : s <= 0 ? ' neg' : '') + '">' + (s === null ? '—' : fmtN(s, p.unidad)) + '<small>' + UNI[p.unidad] + '</small>' +
-        (s !== null && p.unidad === 'kg' && Number(p.por_caja) ? '<small class="st-piezas">≈ ' + fmtN(Math.round(s / Number(p.por_caja) * 10) / 10) + ' piezas</small>' : '') + '</div>' +
+        (s !== null && p.unidad === 'kg' && Number(p.por_caja) ? '<small class="st-piezas">≈ ' + fmtN(Math.round(s / Number(p.por_caja) * 10) / 10) + ' piezas</small>' : '') +
+        (s !== null && Number(p.comprometido) ? '<small class="st-disp' + (s - Number(p.comprometido) < 0 ? ' neg' : '') + '">disp. ' + fmtN(Math.round((s - Number(p.comprometido)) * 100) / 100, p.unidad) + '</small>' : '') + '</div>' +
         '<button class="st-mas" title="Cargar movimiento" onclick="StockUI.nuevoMovimiento(\'' + p.id + '\')">' + ico('plus') + '</button></div>';
     });
     h += '</div>';
     if (lista.length > 300) h += '<div class="st-vacio">Se muestran 300 de ' + lista.length + '. Buscá para ver el resto.</div>';
     return h;
+  }
+
+
+  // ── Control contra Dubix ───────────────────────────────────────────
+  function vistaControl() {
+    let h = '<p class="st-ayuda">Lo que facturó Dubix contra lo que salió por la app (pedidos Despachado), desde el corte. Si Dubix tiene más, alguien entregó sin cargarlo en la app (o se facturó con otro código). Si la app tiene más, falta el remito o se cargó mal la cantidad.</p>';
+    if (E.sinVinc.length) {
+      h += '<div class="st-card"><h4>' + ico('triangle-alert') + ' Productos de pedidos sin vincular</h4><p class="st-ayuda">Estos renglones de pedidos no descuentan stock. Tocá uno y elegí a qué producto de stock corresponde.</p>' +
+        E.sinVinc.map((x, i) => '<button class="st-hist st-hist--btn" onclick="StockUI.vincular(' + i + ')"><span><b>' + esc(x.producto) + '</b> · ' + x.renglones + ' renglón(es)' + (x.pendiente ? ' · pendiente' : '') + '</span>' + ico('link') + '</button>').join('') + '</div>';
+    }
+    const dif = E.control.filter(x => Math.abs(Number(x.diferencia)) > 0.05).sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia));
+    const ok = E.control.length - dif.length;
+    h += '<div class="st-resumen"><div><b>' + ok + '</b><span>coinciden</span></div><div><b>' + dif.length + '</b><span>con diferencia</span></div></div>';
+    if (!dif.length) return h + '<div class="st-vacio">Todo coincide.</div>';
+    h += '<div class="st-lista">' + dif.map(x => '<div class="st-fila st-fila--stock"><div class="st-fila-info"><div class="st-nom">' + esc(x.nombre) + '</div>' +
+      '<div class="st-meta">Dubix ' + fmtN(x.dubix, x.unidad) + ' · App ' + fmtN(Math.round(x.app * 100) / 100, x.unidad) + (x.comprobantes ? '<br><small>' + esc(x.comprobantes.replace(/Dubix /g, '')) + '</small>' : '') + '</div></div>' +
+      '<div class="st-stock ' + (x.diferencia > 0 ? 'neg' : '') + '">' + (x.diferencia > 0 ? '+' : '') + fmtN(Math.round(x.diferencia * 100) / 100, x.unidad) + '<small>' + (x.diferencia > 0 ? 'falta en app' : 'falta en Dubix') + '</small></div></div>').join('') + '</div>';
+    return h;
+  }
+  function vincular(i) {
+    const x = E.sinVinc[i]; if (!x) return;
+    E.vinc = { x, sel: null };
+    modal('Vincular "' + x.producto + '"',
+      '<input class="st-buscar" id="st-vinc-q" placeholder="Buscar producto de stock…" oninput="StockUI.vincBuscar(this.value)" autocomplete="off">' +
+      '<div id="st-vinc-res" class="st-vinc-res"></div>' +
+      '<div class="field"><label>1 del pedido equivale a</label><div class="st-par"><input class="st-num" id="st-vinc-f" inputmode="decimal" value="1"><small id="st-vinc-u">de stock</small></div></div>',
+      [['Cancelar', 'btn-secondary', cerrarModal], ['Vincular', 'btn-primary', guardarVinculo]]);
+    const q = x.producto.replace(/[^a-záéíóúñ ]/gi, ' ').split(' ').filter(w => w.length > 3).slice(0, 1).join(' ');
+    $('st-vinc-q').value = q; vincBuscar(q);
+  }
+  function vincBuscar(q) {
+    const t = sinTilde(q || '').split(/\s+/).filter(Boolean);
+    const res = E.prods.filter(p => p.activo && t.every(w => sinTilde(p.marca + ' ' + p.nombre).includes(w))).slice(0, 12);
+    const el = $('st-vinc-res'); if (!el) return;
+    el.innerHTML = res.map(p => '<button class="st-hist st-hist--btn' + (E.vinc.sel === p.id ? ' on' : '') + '" onclick="StockUI.vincElegir(\'' + p.id + '\')"><span>' + esc(p.nombre) + ' <small>(' + UNI[p.unidad] + ')</small></span></button>').join('') || '<div class="st-vacio">Nada con ese texto.</div>';
+  }
+  function vincElegir(id) {
+    E.vinc.sel = id; const p = E.porId.get(id);
+    $('st-vinc-u').textContent = UNI[p.unidad] + ' de ' + p.nombre;
+    document.querySelectorAll('#st-vinc-res .st-hist--btn').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes(id)));
+  }
+  async function guardarVinculo() {
+    const v = E.vinc; if (!v || !v.sel) return avisar('Elegí un producto de stock');
+    const f = leerNum($('st-vinc-f').value); if (!f || Number.isNaN(f) || f <= 0) return avisar('Revisá la equivalencia');
+    const { error } = await sb.from('stock_vinculos_texto').upsert({ nombre: v.x.producto, stock_producto_id: v.sel, factor: f });
+    if (error) return avisar(errTxt(error));
+    cerrarModal(); avisar('Vinculado'); cargar(true);
   }
 
   // ── Movimientos ────────────────────────────────────────────────────
@@ -473,7 +527,7 @@
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar movimientos de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
     const ult = E.imps.find(x => !x.anulada);
-    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá. ' +
+    h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá: <b>de Dubix se toman solo las compras</b>; las ventas quedan para el Control (las salidas son los pedidos despachados de la app). ' +
       (E.cerrados[0] || ult ? '<b>Una vez por día, a la mañana. En Dubix elegí desde el ' + fmtF(ult ? (ult.tipo === 'detalle' ? ult.hasta : ult.desde) : E.cerrados[0].fecha) + ' hasta hoy.</b> Lo que ya estaba importado se saltea solo.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
     h += '<div class="st-card"><h4>Ventas importadas</h4>' + (E.imps.length ? E.imps.map(x =>
       '<div class="st-hist' + (x.anulada ? ' anulada' : '') + '"><span><b>' + fmtF(x.desde) + (x.hasta !== x.desde ? ' al ' + fmtF(x.hasta) : '') + '</b> · ' + x.filas + ' productos' + (x.sin_match ? ' · ' + x.sin_match + ' sin match' : '') + ' · ' + esc(x.autor) + (x.anulada ? ' · ANULADA' : '') + '</span>' +
@@ -622,7 +676,7 @@
       const cod = (c[iCod] || '').trim(), det = (c[iP] || '').trim(), ref = (c[iR] || '').trim(), tipo = (c[iT] || '').trim();
       let clave = [fh, tipo, ref, cod || det, cant].join('|');
       const n = (vistas.get(clave) || 0) + 1; vistas.set(clave, n); clave += '#' + n;
-      const m = { fecha, cantidad: cant, ref: (tipo + ' ' + ref).trim().slice(0, 120), clave };
+      const m = { fecha, cantidad: cant, ref: (tipo + ' ' + ref).trim().slice(0, 120), dtipo: tipo, clave };
       const p = (cod && porCod.get(cod.toLowerCase())) || porNom.get(sinTilde(det));
       if (p) {
         movs.push({ ...m, producto_id: p.id });
@@ -1004,7 +1058,7 @@
     agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
     lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
-    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), _E: () => E,
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), vincular, vincBuscar, vincElegir, _E: () => E,
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();
