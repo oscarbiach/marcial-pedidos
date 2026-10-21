@@ -3811,7 +3811,7 @@ function repCantidad(it) {
   return q + ' ' + p.u;
 }
 
-// Hoja para el repartidor: una entrega por cliente, en el orden del recorrido.
+// Hoja para el repartidor: una entrega por cliente (solo el nombre, sin dirección), en el orden del recorrido.
 // La observación va como cita en cursiva de WhatsApp («> _Obs: …_»).
 function textoHojaReparto() {
   const peds = repElegidos();
@@ -3822,9 +3822,9 @@ function textoHojaReparto() {
   L.push('Armó: ' + (state.who || '—') + ' | ' + peds.length +
          ' pedido' + (peds.length !== 1 ? 's' : ''));
   peds.forEach((p, i) => {
-    const dir = String(p.direccion || '').trim() || '(sin dirección)';
     L.push('');
-    L.push((i + 1) + ') ' + p.cliente + ' - ' + dir);
+    // En negrita de WhatsApp: sin asteriscos ni espacios en los bordes del nombre, que la cortarían.
+    L.push('*' + (i + 1) + ') ' + String(p.cliente || '').replace(/\*/g, '').trim() + '*');
     p.items.forEach(it => L.push('   · ' + repCantidad(it) + ' ' + it.prod + repTagsTexto(it)));
     const obs = String(p.notas || '').replace(/\s+/g, ' ').trim();
     if (obs) L.push('> _Obs: ' + obs + '_');
