@@ -523,11 +523,12 @@
 
   // ── Movimientos ────────────────────────────────────────────────────
   function vistaMovimientos() {
-    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.elegirFoto()">' + ico('image') + 'Ingreso con foto de factura</button>' +
+    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.elegirFoto()">' + ico('image') + 'Ingreso con captura de factura</button>' +
       '<input type="file" id="st-foto" accept="image/*,application/pdf" multiple hidden onchange="StockUI.leerFoto(this)">' +
       '<button class="btn btn-outline" onclick="StockUI.nuevoMovimiento()">' + ico('package') + 'Ingreso a mano / merma</button>' +
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar movimientos de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
+    h += '<p class="st-ayuda"><b>Compras:</b> en la PC, abrí la factura de compra en Dubix, apretá <b>Win + Shift + S</b>, marcá la factura y después <b>Ctrl + V</b> acá. En el celular: captura de pantalla y «Ingreso con captura de factura».</p>';
     const ult = E.imps.find(x => !x.anulada);
     h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá: <b>sirve para el Control</b> (las salidas son los pedidos despachados y las entradas, las facturas de compra subidas con foto). ' +
       (E.cerrados[0] || ult ? '<b>Una vez por día, a la mañana. En Dubix elegí desde el ' + fmtF(ult ? (ult.tipo === 'detalle' ? ult.hasta : ult.desde) : E.cerrados[0].fecha) + ' hasta hoy.</b> Lo que ya estaba importado se saltea solo.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
@@ -913,19 +914,60 @@
     let c = 0; A.forEach(w => { if (B.has(w)) c++; });
     return c / Math.min(A.size, B.size);
   }
+  // Lectura de la captura en el mismo celular/PC (gratis, sin servidor): Tesseract.js lee el texto y
+  // se arman los renglones con el formato de la factura de compra de Dubix:
+  // "PROD-019 Cremoso - Don solano 25,60 [kg] $5.619,83 0% 21% $174.079,85"
+  let tesseractListo = null;
+  function cargarTesseract() {
+    if (window.Tesseract) return Promise.resolve();
+    if (!tesseractListo) tesseractListo = new Promise((ok, mal) => {
+      const sc = document.createElement('script');
+      sc.src = 'vendor/tesseract/tesseract.min.js';
+      sc.onload = ok; sc.onerror = () => { tesseractListo = null; mal(new Error('No se pudo cargar el lector (¿hay internet?)')); };
+      document.head.appendChild(sc);
+    });
+    return tesseractListo;
+  }
+  function parsearCaptura(txt) {
+    const res = { lineas: [] };
+    const fe = txt.match(/(\d{2})\/(\d{2})\/(\d{4})/); if (fe) res.fecha = fe[3] + '-' + fe[2] + '-' + fe[1];
+    const nu = txt.match(/(Factura|Remito)[^\n\d]*(\d{4,5})[\s-]+(\d{8})/i); if (nu) res.numero = nu[2] + '-' + nu[3];
+    const pv = txt.match(/^(.{3,80}?)\s*\[\s*CUIT/im); if (pv) res.proveedor = pv[1].replace(/^[^A-Za-zÁÉÍÓÚÑáéíóúñ]+/, '').trim();
+    txt.split(/\r?\n/).forEach(l => {
+      const m = l.trim().match(/^([A-Za-z]{1,6}-?\d{1,5}|\d{1,5})\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*(?:,\d{1,3})?|\d+(?:[.,]\d{1,3})?)\s*[\[\(\{|]\s*([A-Za-z]{1,6})/);
+      if (!m) return;
+      const cant = leerNum(m[3]); if (!cant || Number.isNaN(cant)) return;
+      const u = m[4].toLowerCase();
+      res.lineas.push({ codigo: m[1].toUpperCase(), descripcion: m[2].trim(), cantidad: cant, unidad: u.startsWith('k') ? 'kg' : (u.startsWith('c') || u.startsWith('b')) ? 'caja' : 'unidad', kilos: u.startsWith('k') ? cant : null });
+    });
+    return res;
+  }
+  async function leerCaptura(files) {
+    await cargarTesseract();
+    const av = t => { const el = $('st-ocr-av'); if (el) el.textContent = t; };
+    const base = new URL('vendor/tesseract/', location.href).href;
+    const worker = await Tesseract.createWorker('eng', 1, { workerPath: base + 'worker.min.js', corePath: base, langPath: base, workerBlobURL: false, logger: m => { if (m.status === 'recognizing text') av('Leyendo… ' + Math.round(m.progress * 100) + '%'); else av('Preparando…'); } });
+    await worker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+    let txt = '';
+    try { for (const f of files) { const r = await worker.recognize(f); txt += '\n' + r.data.text; } } finally { await worker.terminate(); }
+    return parsearCaptura(txt);
+  }
+  // En la PC: captura con Win+Shift+S y Ctrl+V en Stock → Movimientos.
+  document.addEventListener('paste', e => {
+    const r = raiz();
+    if (!E.ok || E.vista !== 'movimientos' || !r || !r.offsetParent || $('st-ocr-av')) return;
+    const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(x => /^image\//.test(x.type));
+    if (!f) return;
+    e.preventDefault(); leerFoto({ files: [f] });
+  });
   async function leerFoto(input) {
     const files = [...(input.files || [])].slice(0, 4); if (!files.length) return;
-    modal('Leyendo la factura…', '<div class="st-vacio">' + ico('refresh-cw') + ' Esto tarda unos 20 segundos. No cierres la app.</div>', [['Cancelar', 'btn-secondary', cerrarModal]]);
+    modal('Leyendo la factura…', '<div class="st-vacio">' + ico('refresh-cw') + ' <span id="st-ocr-av">Preparando…</span><br>La primera vez tarda un poco más. No cierres la app.</div>', [['Cancelar', 'btn-secondary', cerrarModal]]);
     let res;
     try {
-      const imagenes = await Promise.all(files.map(achicar));
-      const { data, error } = await sb.functions.invoke('stock-factura', { body: { imagenes } });
-      if (error) {
-        let m = errTxt(error);
-        try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch (e) { /* nada */ }
-        throw new Error(m);
-      }
-      res = data;
+      if (files.some(f => f.type === 'application/pdf')) throw new Error('Subí una captura de pantalla (imagen), no un PDF.');
+      res = await leerCaptura(files);
+      if (!res.lineas.length) throw new Error('No encontré renglones de productos. Tiene que ser una captura de la factura de compra en Dubix, con la tabla de Detalles a la vista (código, producto y cantidad).');
     } catch (e) {
       return modal('No se pudo leer', '<p>' + esc(errTxt(e)) + '</p><p class="st-ayuda">Podés cargar el ingreso a mano con «Ingreso a mano / merma».</p>', [['Entendido', 'btn-primary', cerrarModal]]);
     }
@@ -1065,7 +1107,7 @@
     agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
     lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
-    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), vincular, vincBuscar, vincElegir, _E: () => E,
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), _parsearCaptura: t => parsearCaptura(t), vincular, vincBuscar, vincElegir, _E: () => E,
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();
