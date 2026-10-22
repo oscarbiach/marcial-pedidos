@@ -523,12 +523,13 @@
 
   // ── Movimientos ────────────────────────────────────────────────────
   function vistaMovimientos() {
-    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.elegirFoto()">' + ico('image') + 'Ingreso con captura de factura</button>' +
+    let h = '<div class="st-acciones"><button class="btn btn-primary" onclick="StockUI.pegarTexto()">' + ico('clipboard') + 'Pegar texto de factura (GPT)</button>' +
+      '<button class="btn btn-outline" onclick="StockUI.elegirFoto()">' + ico('image') + 'Ingreso con captura de Dubix</button>' +
       '<input type="file" id="st-foto" accept="image/*,application/pdf" multiple hidden onchange="StockUI.leerFoto(this)">' +
       '<button class="btn btn-outline" onclick="StockUI.nuevoMovimiento()">' + ico('package') + 'Ingreso a mano / merma</button>' +
       '<button class="btn btn-outline" onclick="StockUI.elegirCsv()">' + ico('upload') + 'Importar movimientos de Dubix</button>' +
       '<input type="file" id="st-csv" accept=".csv,text/csv,text/plain" hidden onchange="StockUI.leerCsv(this)"></div>';
-    h += '<p class="st-ayuda"><b>Compras:</b> en la PC, abrí la factura de compra en Dubix, apretá <b>Win + Shift + S</b>, marcá la factura y después <b>Ctrl + V</b> acá. En el celular: captura de pantalla y «Ingreso con captura de factura».</p>';
+    h += '<p class="st-ayuda"><b>Compras:</b> sacale foto al remito o factura, pasala por el GPT y pegá el texto con «Pegar texto de factura (GPT)» (en la PC también sirve Ctrl + V acá).</p>';
     const ult = E.imps.find(x => !x.anulada);
     h += '<p class="st-ayuda">En Dubix: Inventario → Reportes → <b>Stock entre Fechas</b> → fechas → ⋮ → exportar el archivo <b>detalles_stocks_entre_fechas</b> (el que trae una línea por remito o factura, con Fecha y Referencia). Subí ese archivo acá: <b>sirve para el Control</b> (las salidas son los pedidos despachados y las entradas, las facturas de compra subidas con foto). ' +
       (E.cerrados[0] || ult ? '<b>Una vez por día, a la mañana. En Dubix elegí desde el ' + fmtF(ult ? (ult.tipo === 'detalle' ? ult.hasta : ult.desde) : E.cerrados[0].fecha) + ' hasta hoy.</b> Lo que ya estaba importado se saltea solo.' : 'Todavía no hay recuento: primero hacé el recuento.') + '</p>';
@@ -952,12 +953,59 @@
     try { for (const f of files) { const r = await worker.recognize(f); txt += '\n' + r.data.text; } } finally { await worker.terminate(); }
     return parsearCaptura(txt);
   }
+
+  // Texto de la factura que devuelve el GPT de Joaquín. Formato:
+  //   Proveedor: Don Solano S.r.l.
+  //   Número: 00001-00000001
+  //   Fecha: 20/10/2026
+  //   PROD-019 | Cremoso - Don solano | 25,60 | kg
+  // También acepta ; o tabulaciones, y renglones sin código.
+  function parsearTexto(t) {
+    const res = { lineas: [] };
+    const g = re => { const m = t.match(re); return m ? m[1].trim() : null; };
+    res.proveedor = g(/^\s*\**proveedor\**\s*:\s*\**(.+?)\**\s*$/im);
+    res.numero = g(/^\s*\**(?:n[uú]mero|nro\.?|comprobante)\**\s*:\s*\**(.+?)\**\s*$/im);
+    const fe = g(/^\s*\**fecha\**\s*:\s*(.+)$/im) || '';
+    const f = fe.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (f) res.fecha = f[3] + '-' + f[2].padStart(2, '0') + '-' + f[1].padStart(2, '0');
+    t.split(/\r?\n/).forEach(l => {
+      if (/^\s*\**\s*(proveedor|n[uú]mero|nro|comprobante|fecha|total|subtotal|iva)\b/i.test(l)) return;
+      if (/^\s*\|?\s*:?-{3,}/.test(l)) return;
+      const c = l.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split(/\s*[|;\t]\s*/).map(x => x.trim());
+      if (c.length < 3) { const m = parsearCaptura(l).lineas[0]; if (m) res.lineas.push(m); return; }
+      let cod = '', desc, cant, uni = '';
+      if (c.length >= 4) [cod, desc, cant, uni] = c; else if (/\d/.test(c[1]) && !/\d/.test(c[2] || '')) [desc, cant, uni] = c; else [cod, desc, cant] = c;
+      if (/^c[oó]digo$/i.test(cod) || /^producto/i.test(desc || '')) return;
+      const n = leerNum(String(cant || '').replace(/[^\d.,-]/g, ''));
+      if (!desc || !n || Number.isNaN(n)) return;
+      const u = (uni || '').toLowerCase();
+      const unidad = u.startsWith('k') ? 'kg' : (u.startsWith('c') || u.startsWith('b')) ? 'caja' : 'unidad';
+      res.lineas.push({ codigo: cod === '-' ? '' : cod, descripcion: desc, cantidad: n, unidad, kilos: unidad === 'kg' ? n : null });
+    });
+    return res;
+  }
+  function pegarTexto() {
+    modal('Pegar texto de la factura',
+      '<p class="st-ayuda">Pegá acá lo que devolvió el GPT. Un renglón por producto: <b>código | producto | cantidad | unidad</b>.</p>' +
+      '<textarea id="st-pegar" class="st-texto" rows="10" placeholder="Proveedor: Don Solano&#10;Número: 00001-00000001&#10;Fecha: 20/10/2026&#10;PROD-019 | Cremoso - Don solano | 25,60 | kg"></textarea>',
+      [['Cancelar', 'btn-secondary', cerrarModal], ['Leer', 'btn-primary', () => {
+        const res = parsearTexto($('st-pegar').value || '');
+        if (!res.lineas.length) return avisar('No encontré renglones de productos. Revisá el formato.');
+        procesarLectura(res);
+      }]]);
+    setTimeout(() => { const el = $('st-pegar'); if (el) el.focus(); }, 50);
+  }
   // En la PC: captura con Win+Shift+S y Ctrl+V en Stock → Movimientos.
   document.addEventListener('paste', e => {
     const r = raiz();
     if (!E.ok || E.vista !== 'movimientos' || !r || !r.offsetParent || $('st-ocr-av')) return;
     const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(x => /^image\//.test(x.type));
-    if (!f) return;
+    if (!f) {
+      if ($('st-pegar') || (document.activeElement && /input|textarea/i.test(document.activeElement.tagName))) return;
+      const t = e.clipboardData && e.clipboardData.getData('text');
+      const res = t ? parsearTexto(t) : null;
+      if (res && res.lineas.length) { e.preventDefault(); procesarLectura(res); }
+      return;
+    }
     e.preventDefault(); leerFoto({ files: [f] });
   });
   async function leerFoto(input) {
@@ -971,6 +1019,9 @@
     } catch (e) {
       return modal('No se pudo leer', '<p>' + esc(errTxt(e)) + '</p><p class="st-ayuda">Podés cargar el ingreso a mano con «Ingreso a mano / merma».</p>', [['Entendido', 'btn-primary', cerrarModal]]);
     }
+    return procesarLectura(res);
+  }
+  async function procesarLectura(res) {
     const { data: al } = await sb.from('stock_alias').select('texto_key,producto_id').limit(5000);
     const alias = new Map((al || []).map(a => [a.texto_key, a.producto_id]));
     const activos = E.prods.filter(p => p.activo);
@@ -1107,7 +1158,7 @@
     agregarLinea, elegirFoto, leerFoto, buscarPara, ignorarLinea,
     quitarLinea(i) { guardarCamposMov(); E.lineas.splice(i, 1); pintarMovimiento(); restaurarCamposMov(); },
     lineaCant(i, v, k) { if (E.lineas[i]) E.lineas[i][k === 'cj' ? 'cj' : 'cant'] = v; },
-    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), _parsearCaptura: t => parsearCaptura(t), vincular, vincBuscar, vincElegir, _E: () => E,
+    elegirCsv, leerCsv, anularImp, _acc, productoNuevo, factor, elegirManana, sinManana, _parsearEntreFechas: t => parsearEntreFechas(t), _parsearDetalle: t => parsearDetalle(t), _parsearCaptura: t => parsearCaptura(t), _parsearTexto: t => parsearTexto(t), pegarTexto, vincular, vincBuscar, vincElegir, _E: () => E,
     _parsearVentas: parsearVentas, _E: E,   // para pruebas
   };
 })();

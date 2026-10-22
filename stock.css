@@ -145,3 +145,4 @@ body:not(.stock-visible) [data-tab="stock"], body:not(.stock-visible) #tab-stock
 .st-hist--btn { width: 100%; background: none; border: 0; border-top: 1px solid var(--m-linea); text-align: left; cursor: pointer; color: inherit; font: inherit; }
 .st-hist--btn.on { background: var(--m-acento-suave, rgba(0,0,0,.05)); }
 .st-vinc-res { max-height: 240px; overflow-y: auto; margin: 8px 0 12px; }
+.st-texto { width: 100%; box-sizing: border-box; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 10px; border: 1px solid var(--m-linea); border-radius: 10px; background: var(--m-fondo, #fff); color: inherit; resize: vertical; }
