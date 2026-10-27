@@ -427,7 +427,9 @@ body.arrastrando-pedido .dz-vacia.dz-over { border-color:var(--blue); color:var(
 .extras-body { display:none; }
 .extras-body.open { display:block; }
 
-/* ── TOGGLE cajas / unidades (productos anotados en caja) ── */
+/* ── TOGGLE de medidas (cajas / unidades / kg / tiras) ── */
+.pk-medidas { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pk-medidas small { color:var(--gray); }
 .unit-toggle {
   display:inline-flex; border:1.5px solid var(--border); border-radius:8px;
   overflow:hidden; vertical-align:middle; margin-right:6px;
@@ -2027,7 +2029,8 @@ function mapPedido_(row) {
       const o = { id: it.id, prod: it.producto, qty: Number(it.cantidad) };
       if (it.fetear) o.fetear = true;
       if (it.sin_cuero) o.sinCuero = true;
-      if (it.en_unidades) o.unidades = true;
+      // La medida elegida en el renglón: «medida» (caja, unidad, kg, tira) o, en pedidos viejos, en_unidades (= la alternativa).
+      if (it.medida) o.unidades = it.medida; else if (it.en_unidades) o.unidades = true;
       // Si tiene motivo, hubo una novedad al despachar (faltó, se cayó,
       // volvió con el cliente…): se guarda aparte, sin tocar qty, que
       // sigue siendo lo que el cliente pidió.
@@ -2123,7 +2126,7 @@ async function sbGetAppData() {
     leerProductos_(),
     sb.from('clientes').select('nombre,direccion'),
     sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
       .or(`eliminado_en.not.is.null,estado.eq.Pendiente,fecha_despacho.gte.${corte}`)
       .order('fecha', { ascending: false }),
     // Las últimas hojas de reparto. Va en el MISMO viaje que todo lo
@@ -2225,7 +2228,7 @@ async function sbGetHistorialAntiguo() {
   let todos = [];
   while (true) {
     const { data, error } = await sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
       .in('estado', ['Despachado', 'Cancelado'])
       .is('eliminado_en', null)
       .or(`fecha_despacho.lt.${corte},fecha_despacho.is.null`)
@@ -2259,7 +2262,7 @@ async function sbSavePedido(data) {
   };
   const its = (data.items || []).map((it, i) => ({
     producto: it.prod, cantidad: Number(it.qty) || 1,
-    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, orden: i
+    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
   const { data: res, error } = await sb.rpc('guardar_pedido', { p: p, its: its });
   if (error) throw sbError_(error);
@@ -2273,7 +2276,7 @@ async function sbUpdatePedido(data) {
   };
   const its = (data.items || []).map((it, i) => ({
     producto: it.prod, cantidad: Number(it.qty) || 1,
-    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, orden: i
+    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
   const { data: res, error } = await sb.rpc('editar_pedido', { p: p, its: its });
   if (error) throw sbError_(error);
@@ -3140,12 +3143,12 @@ let pkDestino = 'cargar';   // en qué lista de ítems se agrega
 let pkFila = null;          // fila que se está editando (null = nueva)
 let pkProd = '';            // producto elegido
 let pkTexto = '';           // cantidad que se va tecleando
-let pkFetear = false, pkSinCuero = false, pkUnidades = false;
+let pkFetear = false, pkSinCuero = false, pkUnidades = '';   // pkUnidades: medida elegida ('' = la principal)
 
 function abrirPicker(destino, fila) {
   pkDestino = destino || 'cargar';
   pkFila = fila || null;
-  pkProd = ''; pkTexto = ''; pkFetear = false; pkSinCuero = false; pkUnidades = false;
+  pkProd = ''; pkTexto = ''; pkFetear = false; pkSinCuero = false; pkUnidades = '';
 
   // Si viene a editar una fila existente, se arranca directo en la
   // cantidad con lo que ya tenía cargado.
@@ -3154,7 +3157,7 @@ function abrirPicker(destino, fila) {
     pkTexto = String(pkFila.querySelector('.qty-input').value || '');
     pkFetear = pkFila.querySelector('.fetear-input').checked;
     pkSinCuero = pkFila.querySelector('.sincuero-input').checked;
-    pkUnidades = pkFila.dataset.unidades === '1';
+    pkUnidades = pkFila.dataset.unidades || '';
     pickerPaso(2);
   } else {
     document.getElementById('pkBuscar').value = '';
@@ -3221,7 +3224,7 @@ function pickerElegir(nombre) {
   pkTexto = '';
   const info = prodInfo(nombre);
   pkFetear = false; pkSinCuero = false;
-  pkUnidades = false;
+  pkUnidades = '';
   pickerPaso(2);
 }
 
@@ -3257,11 +3260,11 @@ function pickerPintarCantidad() {
         onchange="pkSinCuero=this.checked"> ${mIco('ban', 'ico-sm')} Sin cuero</label>`);
     }
   }
-  const alt = !pkFetear && medidaAlt(info);
-  if (alt) {
-    const cont = contenidoTexto(info);
-    ex.push(`<label><input type="checkbox" ${pkUnidades ? 'checked' : ''}
-      onchange="pkUnidades=this.checked;pickerPintarCantidad()"> Cargar en ${alt === 'kg' ? 'kg sueltos' : (info.u === 'kg' ? 'unidades' : 'unidades sueltas')}${cont ? ' (' + cont + ')' : ''}</label>`);
+  const meds = pkFetear ? [] : medidasDe(info);
+  if (meds.length > 1) {
+    const elegida = medidaDe(info, false, pkUnidades), cont = contenidoTexto(info);
+    ex.push(`<div class="pk-medidas"><span>Cargar en</span><span class="unit-toggle">${meds.map(m =>
+      `<button type="button" class="${m === elegida ? 'on' : ''}" onclick="pkUnidades='${m}';pickerPintarCantidad()">${MEDIDA_NOMBRE[m][1]}</button>`).join('')}</span>${cont ? `<small>${esc(cont)}</small>` : ''}</div>`);
   }
   document.getElementById('pkExtras').innerHTML = ex.join('');
 }
@@ -3272,7 +3275,7 @@ function pickerConfirmar() {
   const info = prodInfo(pkProd);
   if (info && info.fetea && pkFetear) it.fetear = true;
   if (it.fetear && isPanceta(pkProd) && pkSinCuero) it.sinCuero = true;
-  if (!it.fetear && medidaAlt(info) && pkUnidades) it.unidades = true;
+  if (!it.fetear && pkUnidades && info && medidaDe(info, false, pkUnidades) !== info.u) it.unidades = medidaDe(info, false, pkUnidades);
 
   if (pkFila) {
     // Editando: se pisan los valores de la fila que ya existía.
@@ -3280,7 +3283,7 @@ function pickerConfirmar() {
     pkFila.querySelector('.qty-input').value = it.qty;
     pkFila.querySelector('.fetear-input').checked = !!it.fetear;
     pkFila.querySelector('.sincuero-input').checked = !!it.sinCuero;
-    pkFila.dataset.unidades = it.unidades ? '1' : '';
+    pkFila.dataset.unidades = typeof it.unidades === 'string' ? it.unidades : '';
     updateBoxHint(pkFila);
     actualizarResumenFila(pkFila);
   } else {
@@ -3305,7 +3308,7 @@ function actualizarResumenFila(row) {
     qty: parseFloat(row.querySelector('.qty-input').value) || 1,
     fetear: row.querySelector('.fetear-input').checked,
     sinCuero: row.querySelector('.sincuero-input').checked,
-    unidades: row.dataset.unidades === '1'
+    unidades: row.dataset.unidades || undefined
   };
   res.innerHTML = `<span class="ir-q">${itemLabelCorto(it)}</span>
     <span class="ir-n">${esc(prod || 'Sin producto')}${itemTags(it)}</span>
@@ -5583,9 +5586,10 @@ function totalsOf(list) {
     const cuero = (it.fetear && isPanceta(it.prod)) ? (it.sinCuero ? '|sc' : '|cc') : '';
     // Las unidades sueltas de un producto de caja se suman aparte de las
     // cajas enteras, en su propia fila.
-    const un = it.unidades ? '|un' : '';
+    const med = it.fetear ? '' : medidaDe(prodInfo(it.prod), false, it.unidades);
+    const un = it.unidades ? '|' + med : '';
     const k = String(it.prod).trim().toLowerCase() + (it.fetear ? '|fetear' : '') + cuero + un;
-    if (!acc[k]) acc[k] = { prod: String(it.prod).trim(), fetear: !!it.fetear, sinCuero: !!it.sinCuero, unidades: !!it.unidades, qty: 0 };
+    if (!acc[k]) acc[k] = { prod: String(it.prod).trim(), fetear: !!it.fetear, sinCuero: !!it.sinCuero, unidades: it.unidades ? (med || true) : false, qty: 0 };
     acc[k].qty += Number(it.qty) || 0;
   }));
   return Object.values(acc)
@@ -5823,19 +5827,18 @@ function updateBoxHint(rowEl) {
   // Producto anotado en caja con conversión: se puede cargar la cantidad
   // en cajas (default) o en unidades sueltas — ej: 30 panes que no llegan
   // a una caja. El modo elegido vive en dataset.unidades de la fila.
-  const alt = !fetOn && medidaAlt(p);
-  const enUn = !!alt && rowEl.dataset.unidades === '1';
-  const m = medidaDe(p, fetOn, enUn);
+  const meds = fetOn ? [] : medidasDe(p);
+  const m = medidaDe(p, fetOn, rowEl.dataset.unidades || '');
+  const enUn = !fetOn && !!p && m !== p.u;
 
   let html = '';
   if (fetOn && p.u && p.u !== 'kg') {
     html = 'Feteado: se anota en kg';
-  } else if (alt) {
-    // Medida principal o alternativa: cajas/un., cajas/kg, tiras/un., kg/un.
-    const toggle = `<span class="unit-toggle">` +
-      `<button type="button" class="${enUn ? '' : 'on'}" onclick="setRowUnidades(this,false)">${MEDIDA_NOMBRE[p.u][1]}</button>` +
-      `<button type="button" class="${enUn ? 'on' : ''}" onclick="setRowUnidades(this,true)">${MEDIDA_NOMBRE[alt][1]}</button></span>`;
-    const conv = !enUn && contenidoTexto(p) && qty > 0 ? ' = ' + round2(qty * p.box) + ' ' + (alt === 'kg' ? 'kg' : 'unidades') : '';
+  } else if (meds.length > 1) {
+    // Una botonera con las medidas del producto: cajas/un., cajas/un./kg, tiras/un., kg/un.
+    const toggle = `<span class="unit-toggle">` + meds.map(x =>
+      `<button type="button" class="${x === m ? 'on' : ''}" onclick="setRowUnidades(this,'${x}')">${MEDIDA_NOMBRE[x][1]}</button>`).join('') + `</span>`;
+    const conv = !enUn && contenidoTexto(p) && qty > 0 ? ' = ' + round2(qty * p.box) + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'unidades') : '';
     html = toggle + (qty > 0 ? cantMedida(round2(qty), m) + conv : '');
   } else if (p && p.u) {
     html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : p.u === 'tira' ? 'tiras' : esc(p.u));
@@ -5848,15 +5851,16 @@ function updateBoxHint(rowEl) {
   const cuero = rowEl.querySelector('.cuero-check');
   if (cuero) cuero.style.display = (fetOn && isPanceta(rowEl.querySelector('.ac-input').value)) ? 'flex' : 'none';
   const wrap = rowEl.querySelector('.qty-wrap');
-  const suf = m === 'kg' ? 'kg' : (enUn ? 'un.' : '');
+  const suf = m === 'kg' ? 'kg' : (enUn ? (MEDIDA_NOMBRE[m] ? MEDIDA_NOMBRE[m][1] : '') : '');
   wrap.querySelector('.qty-unit').textContent = suf || 'kg';
   wrap.classList.toggle('kg', !!suf);
 }
 
-// Cambia el modo cajas/unidades de una fila de producto.
-function setRowUnidades(btn, un) {
+// Cambia la medida de una fila de producto ('' o la principal = la de siempre).
+function setRowUnidades(btn, m) {
   const row = btn.closest('.item-row');
-  row.dataset.unidades = un ? '1' : '';
+  const p = prodInfo(row.querySelector('.ac-input').value);
+  row.dataset.unidades = p && m && m !== p.u ? m : '';
   updateBoxHint(row);
 }
 
@@ -5870,7 +5874,8 @@ function addItemRowWith(type, it) {
   row.querySelector('.qty-input').value = it.qty;
   row.querySelector('.fetear-input').checked = !!it.fetear;
   row.querySelector('.sincuero-input').checked = !!it.sinCuero;
-  row.dataset.unidades = it.unidades ? '1' : '';
+  const pi = prodInfo(it.prod), mi = medidaDe(pi, it.fetear, it.unidades);
+  row.dataset.unidades = it.unidades && pi && mi !== pi.u ? mi : '';
   updateBoxHint(row);
   actualizarResumenFila(row);
 }
@@ -5897,7 +5902,7 @@ function getItemRows(type) {
     if (it.fetear && isPanceta(prod) && row.querySelector('.sincuero-input').checked) it.sinCuero = true;
     // La medida alternativa (unidades sueltas, kg sueltos) solo vale si el
     // producto la tiene (medidaAlt) y nunca junto con fetear, que va en kg.
-    if (!it.fetear && medidaAlt(info) && row.dataset.unidades === '1') it.unidades = true;
+    if (!it.fetear && info && row.dataset.unidades && medidaDe(info, false, row.dataset.unidades) !== info.u) it.unidades = medidaDe(info, false, row.dataset.unidades);
     items.push(it);
   });
   return items;
@@ -5923,7 +5928,7 @@ function onAcInput(input) {
   if (!filtered.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
   list.innerHTML = filtered.map(p => {
     const hl = q ? esc(p.n).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>') : esc(p.n);
-    const sub = p.c || (p.u ? 'se anota en ' + p.u + (contenidoTexto(p) ? ' · ' + contenidoTexto(p) : '') + (p.u === 'kg' && medidaAlt(p) ? ' o en unidades' : '') : '');
+    const sub = p.c || (p.u ? 'se anota en ' + medidasDe(p).map(m => m === 'unidad' ? 'unidades' : m).join(', ') + (contenidoTexto(p) ? ' · ' + contenidoTexto(p) : '') : '');
     return `<div class="ac-item" onmousedown="selectAc(event,'${escAttr(p.n)}')">
       ${hl}${sub ? `<div class="ac-cat">${esc(sub)}</div>` : ''}
     </div>`;
@@ -6150,23 +6155,29 @@ function prodInfo(name) {
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
-// ── Medidas de un producto (pedido del usuario, 23/10/2026) ──
-// Medida principal: caja, tira (salamines y parecidos), kg o unidad. Algunos tienen una medida
-// alternativa que se elige en cada renglón y viaja en en_unidades («it.unidades»):
+// ── Medidas de un producto (pedido del usuario, 23 y 26/10/2026) ──
+// Medida principal (productos.unidad): caja, tira (salamines y parecidos), kg o unidad.
+// Las que se pueden elegir en cada renglón salen de productos.medidas (p. ej. caja, unidad y kg);
+// sin esa lista, de la regla anterior (una alternativa):
 //  · caja con conversión → unidades sueltas, o kg sueltos si la caja se mide en kg (caja_en = 'kg');
-//  · tira con conversión → unidades sueltas;  · kg con alterna_unidad → unidades.
+//  · tira con conversión → unidades sueltas;  · kg o unidad con alterna_unidad → la otra (unidades o kg).
+// En el renglón, «it.unidades» es la medida elegida ('caja', 'unidad', 'kg', 'tira'), true (la
+// alternativa, pedidos viejos) o nada (la principal). Se guarda en pedido_items.medida y en_unidades.
 const MEDIDA_NOMBRE = { caja: ['caja', 'cajas'], tira: ['tira', 'tiras'], kg: ['kg', 'kg'], unidad: ['un.', 'un.'] };
 function productoDeFila_(p) {
   return {
     n: p.nombre, u: (p.unidad || '').toLowerCase(),
     box: Number(p.unidades_por_caja) > 0 ? Number(p.unidades_por_caja) : 0,
     fetea: !!p.se_fetea, act: p.activo !== false, pop: 0,
-    altU: !!p.alterna_unidad, cajaEn: p.caja_en === 'kg' ? 'kg' : 'unidad'
+    altU: !!p.alterna_unidad, cajaEn: p.caja_en === 'kg' ? 'kg' : 'unidad',
+    meds: Array.isArray(p.medidas) && p.medidas.length ? p.medidas.map(m => String(m).toLowerCase()) : null
   };
 }
 async function leerProductos_() {
   const base = 'nombre,unidad,unidades_por_caja,se_fetea,activo';
-  const r = await sb.from('productos').select(base + ',alterna_unidad,caja_en');
+  // Columnas nuevas por partes: si la base todavía no tiene alguna, la app abre igual sin esa opción.
+  let r = await sb.from('productos').select(base + ',alterna_unidad,caja_en,medidas');
+  if (r.error) r = await sb.from('productos').select(base + ',alterna_unidad,caja_en');
   return r.error ? sb.from('productos').select(base) : r;
 }
 // La medida alternativa del producto ('unidad' o 'kg'), o null si no tiene.
@@ -6174,13 +6185,27 @@ function medidaAlt(p) {
   if (!p) return null;
   if ((p.u === 'caja' || p.u === 'tira') && p.box > 0) return p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'unidad';
   if (p.u === 'kg' && p.altU) return 'unidad';
+  if (p.u === 'unidad' && p.altU) return 'kg';
   return null;
 }
-// En qué se anotó un renglón: kg si va feteado, la alternativa si se eligió, o la del producto.
-function medidaDe(p, fetear, alterna) {
+// Las medidas que se pueden elegir al cargar, la principal primero.
+function medidasDe(p) {
+  if (!p || !p.u) return [];
+  const otras = p.meds ? p.meds.filter(m => m !== p.u && MEDIDA_NOMBRE[m]) : [medidaAlt(p)].filter(Boolean);
+  return [p.u].concat(otras);
+}
+// En qué se anotó un renglón: kg si va feteado, la elegida si el producto la permite, o la principal.
+function medidaDe(p, fetear, elegida) {
   if (fetear) return 'kg';
   if (!p || !p.u) return '';
-  return alterna && medidaAlt(p) ? medidaAlt(p) : p.u;
+  if (typeof elegida === 'string') return medidasDe(p).includes(elegida) ? elegida : p.u;
+  return elegida && medidaAlt(p) ? medidaAlt(p) : p.u;
+}
+// Lo que va a pedido_items.medida: la medida elegida si no es la principal (null = la principal).
+function medidaGuardar(it) {
+  const p = prodInfo(it.prod);
+  const m = medidaDe(p, it.fetear, it.unidades);
+  return !it.fetear && p && m && m !== p.u ? m : null;
 }
 // «2 cajas», «1 tira», «3 kg», «4 un.»
 function cantMedida(q, m) {
@@ -6189,9 +6214,8 @@ function cantMedida(q, m) {
 }
 // Lo que trae una caja o una tira: «1 caja = 12 un.», «1 caja = 10 kg», «1 tira = 4 un.»
 function contenidoTexto(p) {
-  const alt = medidaAlt(p);
-  if (!alt || !p.box || p.u === 'kg') return '';
-  return '1 ' + p.u + ' = ' + p.box + ' ' + (alt === 'kg' ? 'kg' : 'un.');
+  if (!p || !p.box || (p.u !== 'caja' && p.u !== 'tira')) return '';
+  return '1 ' + p.u + ' = ' + p.box + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'un.');
 }
 
 // La opción "sin cuero" solo aplica a la PANCETA (no jamón, etc.).
@@ -6217,7 +6241,7 @@ function qtyLabel(prod, qty, fetear, unidades) {
   if (!p || !p.u) return '× ' + q;
   const m = medidaDe(p, false, unidades);
   // Caja o tira entera con conversión: la equivalencia entre paréntesis.
-  const conv = m === p.u && contenidoTexto(p) ? ' (= ' + round2(q * p.box) + ' ' + (medidaAlt(p) === 'kg' ? 'kg' : 'un.') + ')' : '';
+  const conv = m === p.u && contenidoTexto(p) ? ' (= ' + round2(q * p.box) + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'un.') + ')' : '';
   return cantMedida(q, m) + conv;
 }
 
