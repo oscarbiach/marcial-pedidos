@@ -8,7 +8,7 @@
   'use strict';
   // Enlace «Publicar en la web» (CSV) de la planilla «Precios Publicos». Vacío = todavía no se publicó.
   const URL_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vThGdsJrx-_3bcXPMHJELbIgY7zBB9fksN1d1W09bWzbxpxUM1-8l1Y-tgflTs1d6njrAuBn3AD821S/pub?gid=0&single=true&output=csv';
-  const CLAVE = 'dm_wa_precios', VIEJA = 30 * 60000, TOPE = 80;
+  const CLAVE = 'dm_wa_precios', VIEJA = 60000, TOPE = 80;
   const $ = id => document.getElementById(id);
   const ico = (n, c) => (window.mIco ? mIco(n, c || 'ico-sm') : '');
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -65,7 +65,7 @@
         else if (!URL_CSV) throw new Error('sin-enlace');
         else { const r = await fetch(URL_CSV, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); csv = await r.text(); }
         const lista = leer(csv);
-        if (!lista.length) throw new Error('La planilla no tiene productos con precio en el formato esperado.');
+        if (!lista.length && !csv.includes('PUBLICACION_OK')) throw new Error('La planilla no tiene productos con precio en el formato esperado.');
         S.lista = lista; S.cuando = Date.now();
         if (!prueba()) try { localStorage.setItem(CLAVE, JSON.stringify({ lista, cuando: S.cuando })); } catch (e) { /* sin espacio */ }
       } catch (e) {
@@ -101,6 +101,7 @@
     if (S.error === 'sin-enlace') { box.innerHTML = '<p class="pr-aviso">Falta conectar la planilla «Precios Publicos». Cuando esté publicada en la web, la lista aparece acá sola.</p>'; return; }
     const aviso = S.error ? `<p class="pr-aviso wa-error">${esc(S.error)}</p>` : '';
     if (!S.lista) { box.innerHTML = aviso || '<p class="pr-aviso">Leyendo la lista de precios…</p>'; return; }
+    if (!S.lista.length) { box.innerHTML = aviso + '<p class="pr-aviso">No hay productos publicados en la lista.</p>'; return; }
     const pal = norm(S.q).split(' ').filter(Boolean);
     let res = S.lista.map((p, i) => [p, i]);
     if (S.cat) res = res.filter(([p]) => p.cat === S.cat);
@@ -143,5 +144,8 @@
     if (!S.lista) { const g = guardada(); if (g && !prueba()) { S.lista = g.lista; S.cuando = g.cuando; } }
     armar(); dibujar(); cargar(false);
   }
+  setInterval(() => {
+    if (S.listo && !document.hidden && $('wa-precios')?.getClientRects().length) cargar(false);
+  }, 60000);
   window.WhatsAppPrecios = { mostrar, actualizar: () => cargar(true), _leer: leer, _texto: texto };
 })();
