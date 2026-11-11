@@ -181,6 +181,31 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .pac-form { display:grid; gap:10px; padding:2px 14px 14px; }
 .pac-form label { display:grid; gap:5px; font-size:13px; font-weight:700; }
 .pac-form label i { font-style:normal; font-weight:500; }
+/* ── Pedidos fijos semanales (pedidos-fijos.js): casilla en Cargar y sección plegable en Pedidos ── */
+/* Hasta que la base confirma que existe la tabla, la casilla y la sección no se ven. */
+#n_fijoWrap, #fijos { display:none; }
+body.fijos-ok #n_fijoWrap { display:flex; }
+body.fijos-ok #fijos { display:block; }
+.fijo-check { align-items:center; gap:8px; margin:2px 0 10px; font-size:13.5px; font-weight:700; color:var(--navy); cursor:pointer; min-height:36px; }
+.fijo-check input { width:19px; height:19px; margin:0; accent-color:var(--navy); }
+.fijo-tag { display:inline-flex; align-items:center; font-size:11.5px; font-weight:700; color:var(--navy); opacity:.85; white-space:nowrap; }
+.fijos { margin:0 0 10px; background:#fff; border:1px solid #D6DEEB; border-radius:12px; color:var(--navy); }
+.fijos > summary { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 14px; cursor:pointer; font-weight:700; font-size:14px; list-style:none; }
+.fijos > summary::-webkit-details-marker { display:none; }
+.fijos > summary:focus-visible, .fijo-btn:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
+.fijos-cuerpo { display:grid; gap:8px; padding:0 12px 12px; }
+.fijos-ayuda { margin:0; font-size:12.5px; color:var(--gray); }
+.fijos-vacio { margin:0; font-size:13px; color:var(--gray); }
+.fijo-it { padding:8px 10px; border:1px solid #D6DEEB; border-left:4px solid var(--navy); border-radius:10px; background:#fff; }
+.fijo-it.fijo-pausado { opacity:.75; border-left-color:var(--gray); }
+.fijo-cli { font-weight:800; font-size:13.5px; }
+.fijo-res { margin-top:2px; font-size:12.5px; color:var(--gray); overflow-wrap:anywhere; }
+.fijo-est { margin-top:3px; font-size:12px; font-weight:700; }
+.fijo-err { margin-top:3px; font-size:12px; font-weight:700; color:var(--red-ink); }
+.fijo-acc { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+.fijo-btn { min-height:32px; padding:3px 12px; border:1px solid #C5CFE0; border-radius:8px; background:#fff; color:var(--navy); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
+.fijo-btn.fijo-quitar { color:var(--red-ink); border-color:var(--red); }
+.fijo-btn:disabled { opacity:.55; cursor:default; }
 .pac-form #pac-enviar { background:#D9730D; border-color:#D9730D; }
 .pac-form input, .pac-form textarea { width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #EBC98A; border-radius:10px; background:#fff; font:inherit; font-size:16px; color:var(--navy); }
 .pac-form .pac-aviso { margin:0; }
@@ -1685,6 +1710,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
             <textarea id="n_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
           </div>
         </div>
+        <label class="fijo-check" id="n_fijoWrap"><input type="checkbox" id="n_fijo"> 📌 Repetir todas las semanas (pedido fijo)</label>
         <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
       </div>
       <!-- Historial del cliente: solo PC ancha. Aparece al elegir el
@@ -1729,6 +1755,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
           <button class="desp-btn" id="despBtn" onclick="entrarDespacho()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-package-check"/></svg>Despachar varios</button>
         </div>
         <div id="frescura" class="frescura"></div>
+        <details id="fijos" class="fijos"></details>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos"
                 onclick="openPapelera()">
@@ -2266,7 +2293,56 @@ async function sbSavePedido(data) {
   }));
   const { data: res, error } = await sb.rpc('guardar_pedido', { p: p, its: its });
   if (error) throw sbError_(error);
+  // Pedido fijo semanal: se anota después de guardar el pedido, con el id que
+  // el celular generó una sola vez (data.fijo), así los reintentos de la cola
+  // no crean otro fijo (upsert que ignora duplicados).
+  if (data.fijo) {
+    const { error: e2 } = await sb.from('pedidos_fijos').upsert({
+      id: data.fijo, cliente: data.cliente, direccion: data.direccion || '', notas: data.notas || '',
+      retiro: !!data.retiro, items: its, ultima_semana: data.fijoSemana || lunesDe(hoyArg()),
+      creado_por: data.quien || ''
+    }, { onConflict: 'id', ignoreDuplicates: true });
+    // Si la tabla no existe (SQL sin aplicar) el pedido ya quedó guardado: no se traba la cola.
+    if (e2 && !sinFijos_(e2)) throw sbError_(e2);
+  }
   return res;   // {ok:true, id} o {ok:true, id, yaEstaba:true}
+}
+
+// ── Pedidos fijos semanales (ver pedidos-fijos.js y supabase/20-pedidos-fijos-semanales.sql) ──
+// Lunes (YYYY-MM-DD) de la semana de una fecha YYYY-MM-DD.
+function lunesDe(fecha) {
+  const d = new Date(fecha + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+// La tabla o la función todavía no existen en la base: la app sigue sin la función.
+function sinFijos_(error) {
+  const code = String((error && (error.code || '')) || ''), st = Number(error && error.status);
+  const msg = String((error && error.message) || '');
+  return /^(PGRST202|PGRST205|42P01|42883)$/.test(code) || st === 404
+    || /does not exist|schema cache|could not find the/i.test(msg);
+}
+function errorFijos_(error) {
+  const e = sbError_(error);
+  if (sinFijos_(error)) e.sinFijos = true;
+  return e;
+}
+async function sbFijosListar() {
+  const { data, error } = await sb.from('pedidos_fijos')
+    .select('id,cliente,items,activo,ultima_semana,ultimo_error,retiro')
+    .is('eliminado_en', null).order('creado_en', { ascending: true }).limit(200);
+  if (error) throw errorFijos_(error);
+  return data || [];
+}
+async function sbFijoCambiar(id, patch) {
+  const { data, error } = await sb.from('pedidos_fijos').update(patch).eq('id', id).select('id');
+  if (error) throw errorFijos_(error);
+  return { ok: !!(data && data.length) };
+}
+async function sbGenerarFijos() {
+  const { data, error } = await sb.rpc('generar_fijos_semana');
+  if (error) throw errorFijos_(error);
+  return data || { ok: true, creados: 0 };
 }
 
 async function sbUpdatePedido(data) {
@@ -2385,6 +2461,9 @@ function sbAccion(action, args) {
     case 'getAppData':         return sbGetAppData();
     case 'historialAntiguo':   return sbGetHistorialAntiguo();
     case 'savePedido':         return sbSavePedido(args[0]);
+    case 'fijosListar':        return sbFijosListar();
+    case 'fijoCambiar':        return sbFijoCambiar(args[0], args[1]);
+    case 'generarFijos':       return sbGenerarFijos();
     case 'updatePedido':       return sbUpdatePedido(args[0]);
     case 'updatePedidoStatus': return sbUpdateEstado(args[0], args[1]);
     case 'deletePedido':       return sbDeletePedido(args[0], args[1]);
@@ -2469,7 +2548,7 @@ function makeRunner() {
   };
   // Las funciones que existen del lado de Supabase. Cualquier otra
   // llamada cae en sbAccion y devuelve "Acción desconocida".
-  ['getAppData','historialAntiguo','savePedido','updatePedido','updatePedidoStatus','deletePedido',
+  ['getAppData','historialAntiguo','savePedido','fijosListar','fijoCambiar','generarFijos','updatePedido','updatePedidoStatus','deletePedido',
    'restorePedido','guardarHoja','despacharVarios','guardarNovedadItem',
    'eliminarHoja','vaciarPapelera','marcarRemito']
     .forEach(action => {
@@ -2978,6 +3057,7 @@ function setTab(tab) {
   if (tab === 'whatsapp' && window.WhatsAppUI) WhatsAppUI.open();
   // Cargar: trae al día los «Pedidos para cargar» (pedidos-a-cargar.js).
   if (window.PedidosACargar) { if (tab === 'cargar') PedidosACargar.alMostrar(); else PedidosACargar.alSalir(); }
+  if (window.PedidosFijos && tab === 'pedidos') PedidosFijos.refrescar();
   if (tab === 'stock' && window.StockUI) StockUI.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
@@ -3013,6 +3093,7 @@ function resetCargarForm() {
   document.getElementById('n_notas').value = '';
   document.getElementById('n_fecha').value = '';
   document.getElementById('n_retiro').checked = false;
+  document.getElementById('n_fijo').checked = false;
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
   // En celular no se arranca con una fila vacía: los productos entran por
@@ -3081,6 +3162,13 @@ function submitCargarPedido() {
   // lista al toque y el formulario queda limpio para el siguiente. El
   // envío corre solo, de fondo.
   const nuevo = { cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who };
+  // Pedido fijo: el id se genera acá, UNA vez, y viaja dentro del ítem de la cola
+  // (data.fijo): cada reintento reusa el mismo y no se duplica. El pedido de esta
+  // semana es el que se está cargando, por eso ultima_semana = lunes de hoy.
+  if (document.body.classList.contains('fijos-ok') && document.getElementById('n_fijo').checked) {
+    nuevo.fijo = 'fij_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8).replace(/[^a-z0-9]/g, 'x');
+    nuevo.fijoSemana = lunesDe(hoyArg());
+  }
   encolarPedido(nuevo);
   // Si venía de «Pedidos para cargar» («Cargar este»), ese pedido queda marcado como cargado.
   if (window.PedidosACargar) PedidosACargar.alGuardar(nuevo.id);
@@ -3394,6 +3482,7 @@ function procesarCola() {
       const p = state.pedidos.find(x => x.id === item.tmpId);
       if (p) { delete p.enCola; delete p.errorCola; }
       renderPedidos();
+      if (item.data.fijo && window.PedidosFijos) PedidosFijos.refrescar();
       procesarCola();   // sigue con el que viene
     })
     .withFailureHandler(e => {
@@ -4153,6 +4242,7 @@ function pedidoBloqueHtml(p) {
       <div class="blk-top">
         ${d.check}
         <span class="status-pill sp-${p.estado}">${p.estado}</span>
+        ${p.quien === 'Fijo semanal' ? '<span class="fijo-tag">📌 Fijo semanal</span>' : ''}
         ${p.retiro ? '<span class="retiro-tag">' + mIco('store', 'ico-sm') + ' RETIRO</span>' : ''}
         ${esReposicion(p) ? '<span class="repo-tag">' + mIco('rotate-ccw', 'ico-sm') + ' REPOSICIÓN</span>' : ''}
         ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
@@ -4222,6 +4312,7 @@ function pedidoCardHtml(p) {
         </div>
         <div class="oc-pills">
           <span class="status-pill sp-${p.estado}">${p.estado}</span>
+          ${p.quien === 'Fijo semanal' ? '<span class="fijo-tag">📌 Fijo semanal</span>' : ''}
           ${p.retiro ? '<span class="retiro-tag">' + mIco('store', 'ico-sm') + ' RETIRO</span>' : ''}
           ${esReposicion(p) ? '<span class="repo-tag">' + mIco('rotate-ccw', 'ico-sm') + ' REPOSICIÓN</span>' : ''}
           ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
@@ -6436,5 +6527,6 @@ function abrirInstalar() {
 <script src="whatsapp-precios.js"></script>
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
+<script src="pedidos-fijos.js"></script>
 </body>
 </html>

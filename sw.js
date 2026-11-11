@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v89';
+const CACHE = 'dm-pedidos-v90';
 
 const SHELL = [
   './',
@@ -43,7 +43,8 @@ const SHELL = [
   './whatsapp-precios.js',
   './stock.js',
   './stock.css',
-  './pedidos-a-cargar.js'
+  './pedidos-a-cargar.js',
+  './pedidos-fijos.js'
 ];
 
 self.addEventListener('install', e => {
