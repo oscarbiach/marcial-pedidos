@@ -181,16 +181,13 @@ main { padding:12px; max-width:900px; margin:0 auto; padding-bottom:40px; }
 .pac-form { display:grid; gap:10px; padding:2px 14px 14px; }
 .pac-form label { display:grid; gap:5px; font-size:13px; font-weight:700; }
 .pac-form label i { font-style:normal; font-weight:500; }
-/* ── Pedidos fijos semanales (pedidos-fijos.js): casilla en Cargar y sección plegable en Pedidos ── */
+/* ── Pedidos fijos semanales (pedidos-fijos.js): sección plegable en Pedidos y ventana «Pedido fijo semanal» ── */
 /* Hasta que la base confirma que existe la tabla, la casilla y la sección no se ven. */
-#n_fijoWrap, #fijos { display:none; }
-body.fijos-ok #n_fijoWrap { display:flex; }
+#fijos { display:none; }
 body.fijos-ok #fijos { display:block; }
-.fijo-check { align-items:center; gap:8px; margin:2px 0 10px; font-size:13.5px; font-weight:700; color:var(--navy); cursor:pointer; min-height:36px; }
-.fijo-check input { width:19px; height:19px; margin:0; accent-color:var(--navy); }
 .fijo-tag { display:inline-flex; align-items:center; font-size:11.5px; font-weight:700; color:var(--navy); opacity:.85; white-space:nowrap; }
 .fijos { margin:0 0 10px; background:#fff; border:1px solid #D6DEEB; border-radius:12px; color:var(--navy); }
-.fijos > summary { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 14px; cursor:pointer; font-weight:700; font-size:14px; list-style:none; }
+.fijos > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:44px; padding:0 14px; cursor:pointer; font-weight:700; font-size:14px; list-style:none; }
 .fijos > summary::-webkit-details-marker { display:none; }
 .fijos > summary:focus-visible, .fijo-btn:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
 .fijos-cuerpo { display:grid; gap:8px; padding:0 12px 12px; }
@@ -206,6 +203,15 @@ body.fijos-ok #fijos { display:block; }
 .fijo-btn { min-height:32px; padding:3px 12px; border:1px solid #C5CFE0; border-radius:8px; background:#fff; color:var(--navy); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
 .fijo-btn.fijo-quitar { color:var(--red-ink); border-color:var(--red); }
 .fijo-btn:disabled { opacity:.55; cursor:default; }
+.fijo-btn.fijo-nuevo { background:var(--navy); border-color:var(--navy); color:#fff; min-height:34px; white-space:nowrap; }
+.fijo-primer { margin:0 0 14px; padding:0; border:0; min-width:0; }
+.fijo-primer legend { padding:0; margin-bottom:5px; font-size:12px; font-weight:700; color:var(--gray); text-transform:uppercase; letter-spacing:.5px; }
+.fijo-primer label { display:flex; align-items:center; gap:8px; min-height:38px; font-size:14px; font-weight:600; color:var(--navy); cursor:pointer; }
+.fijo-primer input { width:19px; height:19px; margin:0; accent-color:var(--navy); }
+#fijoModal .modal { max-width:560px; }
+#fijoModal .fijo-error { margin:0 0 10px; font-size:13px; font-weight:700; color:var(--red-ink); }
+#fijoModal .fijo-error:empty { display:none; }
+#fijoGuardarBtn:disabled { opacity:.6; cursor:default; }
 .pac-form #pac-enviar { background:#D9730D; border-color:#D9730D; }
 .pac-form input, .pac-form textarea { width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #EBC98A; border-radius:10px; background:#fff; font:inherit; font-size:16px; color:var(--navy); }
 .pac-form .pac-aviso { margin:0; }
@@ -1710,7 +1716,6 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
             <textarea id="n_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
           </div>
         </div>
-        <label class="fijo-check" id="n_fijoWrap"><input type="checkbox" id="n_fijo"> 📌 Repetir todas las semanas (pedido fijo)</label>
         <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
       </div>
       <!-- Historial del cliente: solo PC ancha. Aparece al elegir el
@@ -1824,6 +1829,53 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="visitar" class="bn-item" onclick="goTab('visitar')"><span>📍</span>Visitar</button>
     -->
   </nav>
+</div>
+
+<!-- ── MODAL: Pedido fijo semanal (alta y edición; lógica en pedidos-fijos.js) ── -->
+<div class="overlay" id="fijoModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fijoModalTit">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="fijoModalTit">📌 Pedido fijo semanal</h2>
+      <button type="button" class="close-btn" onclick="PedidosFijos.cerrar()" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="f_cliente">Cliente</label>
+        <div class="ac-wrap">
+          <input type="text" id="f_cliente" class="ac-input" placeholder="Nombre del cliente"
+            autocomplete="off" data-dir="f_direccion"
+            oninput="onClienteInput(this)"
+            onblur="closeClienteAcLater(this)">
+          <div class="ac-list"></div>
+        </div>
+      </div>
+      <div class="items-section">
+        <h4>Productos de todas las semanas</h4>
+        <div id="fijoItemRows"></div>
+        <button type="button" class="add-item-btn" onclick="agregarProducto('fijo')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Agregar producto</button>
+      </div>
+      <div class="field">
+        <label for="f_direccion">Dirección (opcional)</label>
+        <input type="text" id="f_direccion" placeholder="Ej: Av. San Martín 1234" oninput="this.dataset.auto=''">
+      </div>
+      <div class="field">
+        <label for="f_notas">Observación (opcional)</label>
+        <textarea id="f_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
+      </div>
+      <div class="form-extras-row">
+        <label class="retiro-mini"><input type="checkbox" id="f_retiro"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
+      </div>
+      <fieldset class="fijo-primer" id="f_primer">
+        <legend>Primer pedido</legend>
+        <label><input type="radio" name="f_primer" id="f_primer_esta" value="esta" checked> Esta semana</label>
+        <label><input type="radio" name="f_primer" id="f_primer_prox" value="prox"> Desde la semana que viene</label>
+      </fieldset>
+      <p class="fijo-error" id="fijoError" role="alert"></p>
+      <button type="button" class="btn btn-primary" id="fijoGuardarBtn" onclick="PedidosFijos.guardar()">Guardar fijo</button>
+      <button type="button" class="btn btn-secondary" onclick="PedidosFijos.cerrar()">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── MODAL: Editar Pedido ── -->
@@ -2293,18 +2345,6 @@ async function sbSavePedido(data) {
   }));
   const { data: res, error } = await sb.rpc('guardar_pedido', { p: p, its: its });
   if (error) throw sbError_(error);
-  // Pedido fijo semanal: se anota después de guardar el pedido, con el id que
-  // el celular generó una sola vez (data.fijo), así los reintentos de la cola
-  // no crean otro fijo (upsert que ignora duplicados).
-  if (data.fijo) {
-    const { error: e2 } = await sb.from('pedidos_fijos').upsert({
-      id: data.fijo, cliente: data.cliente, direccion: data.direccion || '', notas: data.notas || '',
-      retiro: !!data.retiro, items: its, ultima_semana: data.fijoSemana || lunesDe(hoyArg()),
-      creado_por: data.quien || ''
-    }, { onConflict: 'id', ignoreDuplicates: true });
-    // Si la tabla no existe (SQL sin aplicar) el pedido ya quedó guardado: no se traba la cola.
-    if (e2 && !sinFijos_(e2)) throw sbError_(e2);
-  }
   return res;   // {ok:true, id} o {ok:true, id, yaEstaba:true}
 }
 
@@ -2329,10 +2369,24 @@ function errorFijos_(error) {
 }
 async function sbFijosListar() {
   const { data, error } = await sb.from('pedidos_fijos')
-    .select('id,cliente,items,activo,ultima_semana,ultimo_error,retiro')
+    .select('id,cliente,direccion,notas,items,activo,ultima_semana,ultimo_error,retiro')
     .is('eliminado_en', null).order('creado_en', { ascending: true }).limit(200);
   if (error) throw errorFijos_(error);
   return data || [];
+}
+// Alta de un fijo: el id 'fij_…' lo genera quien abre el formulario, una sola vez; si el
+// guardado se repite, el upsert que ignora duplicados no crea otro.
+async function sbFijoCrear(fila) {
+  const { error } = await sb.from('pedidos_fijos').upsert(fila, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) throw errorFijos_(error);
+  return { ok: true };
+}
+// Renglones con el formato de guardar_pedido / pedidos_fijos.items.
+function itemsFijoBase_(items) {
+  return (items || []).map((it, i) => ({
+    producto: it.prod, cantidad: Number(it.qty) || 1,
+    fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
+  }));
 }
 async function sbFijoCambiar(id, patch) {
   const { data, error } = await sb.from('pedidos_fijos').update(patch).eq('id', id).select('id');
@@ -2462,6 +2516,7 @@ function sbAccion(action, args) {
     case 'historialAntiguo':   return sbGetHistorialAntiguo();
     case 'savePedido':         return sbSavePedido(args[0]);
     case 'fijosListar':        return sbFijosListar();
+    case 'fijoCrear':          return sbFijoCrear(args[0]);
     case 'fijoCambiar':        return sbFijoCambiar(args[0], args[1]);
     case 'generarFijos':       return sbGenerarFijos();
     case 'updatePedido':       return sbUpdatePedido(args[0]);
@@ -2548,7 +2603,7 @@ function makeRunner() {
   };
   // Las funciones que existen del lado de Supabase. Cualquier otra
   // llamada cae en sbAccion y devuelve "Acción desconocida".
-  ['getAppData','historialAntiguo','savePedido','fijosListar','fijoCambiar','generarFijos','updatePedido','updatePedidoStatus','deletePedido',
+  ['getAppData','historialAntiguo','savePedido','fijosListar','fijoCrear','fijoCambiar','generarFijos','updatePedido','updatePedidoStatus','deletePedido',
    'restorePedido','guardarHoja','despacharVarios','guardarNovedadItem',
    'eliminarHoja','vaciarPapelera','marcarRemito']
     .forEach(action => {
@@ -3093,7 +3148,6 @@ function resetCargarForm() {
   document.getElementById('n_notas').value = '';
   document.getElementById('n_fecha').value = '';
   document.getElementById('n_retiro').checked = false;
-  document.getElementById('n_fijo').checked = false;
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
   // En celular no se arranca con una fila vacía: los productos entran por
@@ -3162,13 +3216,6 @@ function submitCargarPedido() {
   // lista al toque y el formulario queda limpio para el siguiente. El
   // envío corre solo, de fondo.
   const nuevo = { cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who };
-  // Pedido fijo: el id se genera acá, UNA vez, y viaja dentro del ítem de la cola
-  // (data.fijo): cada reintento reusa el mismo y no se duplica. El pedido de esta
-  // semana es el que se está cargando, por eso ultima_semana = lunes de hoy.
-  if (document.body.classList.contains('fijos-ok') && document.getElementById('n_fijo').checked) {
-    nuevo.fijo = 'fij_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8).replace(/[^a-z0-9]/g, 'x');
-    nuevo.fijoSemana = lunesDe(hoyArg());
-  }
   encolarPedido(nuevo);
   // Si venía de «Pedidos para cargar» («Cargar este»), ese pedido queda marcado como cargado.
   if (window.PedidosACargar) PedidosACargar.alGuardar(nuevo.id);
@@ -3482,7 +3529,6 @@ function procesarCola() {
       const p = state.pedidos.find(x => x.id === item.tmpId);
       if (p) { delete p.enCola; delete p.errorCola; }
       renderPedidos();
-      if (item.data.fijo && window.PedidosFijos) PedidosFijos.refrescar();
       procesarCola();   // sigue con el que viene
     })
     .withFailureHandler(e => {
@@ -5867,7 +5913,7 @@ function submitEditPedido() {
 //  catálogo, aparece la lista desplegable para elegirlo — opcional)
 // ═══════════════════════════════════════════════════════════════
 let rowCount = 0;
-const ROW_CONTAINERS = { cargar:'cargarItemRows', ped:'pedItemRows' };
+const ROW_CONTAINERS = { cargar:'cargarItemRows', ped:'pedItemRows', fijo:'fijoItemRows' };
 
 function addItemRow(type) {
   const container = document.getElementById(ROW_CONTAINERS[type]);
