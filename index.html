@@ -1598,6 +1598,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="seguimiento-clientes.css">
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
+<link rel="stylesheet" href="preparacion.css">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -3870,6 +3871,7 @@ function renderRepHistorial() {
             <b>${fmtDate(h.fecha)} · ${h.cantidad} pedido${h.cantidad !== 1 ? 's' : ''}${h.quien ? ' · ' + esc(h.quien) : ''}</b>
             <span>${esc(h.clientes || '')}</span>
           </div>
+          <button class="rh-prep" onclick="Preparacion.abrir('${h.id}')">📦 Preparar</button>
           <button onclick="repCopiarHoja('${h.id}')">${mIco('copy', 'ico-sm')}Copiar</button>
           <button class="rh-x" onclick="repEliminarHoja('${h.id}')" title="Eliminar esta hoja" aria-label="Eliminar esta hoja">${mIco('x')}</button>
         </div>`).join('')}
@@ -5033,13 +5035,15 @@ function despConfirmar() {
 // { ids:[...], idx:0, resp:{ [pedidoId]: { [itemId]: {completo,cantidadNoEntregada} } } }
 let despChecklist = null;
 
-function abrirChecklistDespacho(ids) {
+// respInicial (opcional): respuestas ya cargadas, { pedidoId: { itemId: { completo:false, cantidadNoEntregada } } }.
+// La usa la preparación (preparacion.js) para llegar al despacho con los faltantes del depósito ya puestos.
+function abrirChecklistDespacho(ids, respInicial) {
   const validos = ids.filter(id => {
     const p = state.pedidos.find(x => x.id === id);
     return p && despElegible(p);
   });
   if (!validos.length) { toast('No hay nada para despachar.'); return; }
-  despChecklist = { ids: validos, idx: 0, resp: {} };
+  despChecklist = { ids: validos, idx: 0, resp: respInicial || {} };
   document.getElementById('despChkCerrar').disabled = false;  // por si quedó deshabilitada de un despacho anterior
   document.getElementById('despChecklistModal').classList.add('open');
   renderChecklistPaso();
@@ -6574,5 +6578,6 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
+<script src="preparacion.js"></script>
 </body>
 </html>
