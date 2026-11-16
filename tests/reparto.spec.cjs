@@ -81,23 +81,24 @@ test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',as
  await expect(oscar.locator('.rv-pendiente .rv-card')).toHaveCount(2);
  await oscar.locator('[data-id="p1"][data-rv="mover"][data-to="por_preparar"]').click();
  await expect(mateo.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
- await mateo.locator('[data-id="p1"][data-to="preparando"]').click();
+ await mateo.locator('.rv-card[data-id="p1"]').press('ArrowRight');
  await expect(oscar.locator('.rv-preparando .rv-card')).toHaveCount(1);
  await mateo.locator('[data-id="p1"][data-to="listo"]').click();
  await expect(oscar.locator('.rv-listo .rv-card')).toHaveCount(1);
- await mateo.locator('[data-id="p1"][data-to="preparando"]').click();
+ await mateo.locator('.rv-card[data-id="p1"]').press('ArrowLeft');
  await expect(oscar.locator('.rv-preparando .rv-card')).toHaveCount(1);
  s.db.pedidos[0].estado='Despachado';await s.emit('pedidos');
  await expect(mateo.locator('.rv-card')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
 });
-async function touch(page,points){
+async function touch(page,points,hold=false){
  const cdp=await page.context().newCDPSession(page);
  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[points[0]]});
+ if(hold)await page.clock.runFor(240);
  for(const point of points.slice(1))await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[point]});
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
 }
-test('gesto táctil horizontal, desplazamiento vertical y fallo de escritura',async({browser})=>{
+test('gesto corto no cambia de columna, scroll vertical y fallo de escritura',async({browser})=>{
  const s=await setup(browser),page=await s.open('Thiago',{width:390,height:844},{hasTouch:true});
  await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
  const card=page.locator('.rv-card[data-id="p1"]');
@@ -106,12 +107,12 @@ test('gesto táctil horizontal, desplazamiento vertical y fallo de escritura',as
  expect(s.moves).toHaveLength(0);
  await card.scrollIntoViewIfNeeded();box=await card.boundingBox();
  await touch(page,[{x:box.x+20,y:box.y+50},{x:box.x+50,y:box.y+50},{x:box.x+130,y:box.y+50}]);
- await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ expect(s.moves).toHaveLength(0);
  await expect(page.locator('#ap-raiz')).toBeHidden();
  await page.clock.runFor(400); // terminar la supresión del click que genera el gesto táctil
  s.fail();await page.locator('[data-id="p2"][data-to="por_preparar"]').click();
- await expect.poll(()=>s.moves.length).toBe(2);
- await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(1);
+ await expect.poll(()=>s.moves.length).toBe(1);
+ await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/reparto-mobile.png',fullPage:true});
  expect(s.errors).toEqual([]);await s.close();
@@ -190,20 +191,27 @@ test('autoscroll durante arrastre y limpieza al cambiar de pestaña',async({brow
  await page.mouse.up();expect(s.moves).toHaveLength(0);
  expect(s.errors).toEqual([]);await s.close();
 });
-test('agarre táctil permite mover hacia otra columna sin activar swipe',async({browser})=>{
- const s=await setup(browser),page=await s.open('Thiago',{width:390,height:1800},{hasTouch:true});
- const r=await page.locator('.rv-card[data-id="p1"] .rv-grip').boundingBox();
- const target=await page.locator('[data-stage="por_preparar"]>h3').boundingBox();
- await touch(page,[{x:r.x+16,y:r.y+16},{x:r.x+16,y:r.y+50},{x:target.x+target.width/2,y:target.y+20}]);
- await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+test('Mateo mueve desde el cuerpo de la tarjeta con pulsación larga',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');
+ const page=await s.open('Mateo',{width:390,height:844},{hasTouch:true});
+ const r=await page.locator('.rv-card[data-id="p1"] li').boundingBox();
+ const target=await page.locator('[data-stage="preparando"]>h3').boundingBox();
+ await touch(page,[{x:r.x+16,y:r.y+16},{x:r.x+16,y:r.y+50},{x:target.x+target.width/2,y:target.y+20}],true);
+ await expect(page.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await expect(page.locator('#ap-raiz')).toBeHidden();
  await expect(page.locator('.rv-ghost')).toHaveCount(0);
+ await page.locator('.rv-card[data-id="p1"] li').scrollIntoViewIfNeeded();
+ const back=await page.locator('.rv-card[data-id="p1"] li').boundingBox(),queue=await page.locator('[data-stage="por_preparar"]>h3').boundingBox();
+ await touch(page,[{x:back.x+25,y:back.y+10},{x:queue.x+40,y:queue.y+20}],true);
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ expect(s.moves.map(m=>m.p_etapa)).toEqual(['preparando','por_preparar']);
  expect(s.errors).toEqual([]);await s.close();
 });
 test('detalle conserva peso en edición; novedades y navegación de Mateo',async({browser})=>{
  const s=await setup(browser);s.db.prep_cola=[{pedido_id:'p1',etapa:'preparando',version:1,actualizado_por:'Oscar'}];
  s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
  const page=await s.open('Mateo');
- await page.locator('[data-rv="detalle"][data-id="p1"]').click();
+ await page.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(page);
  const input=page.locator('[data-ap="peso"]');await input.fill('2,35');
  await s.emit('prep_items');await page.waitForTimeout(250);
  await expect(input).toHaveValue('2,35');
@@ -218,7 +226,8 @@ test('detalle conserva peso en edición; novedades y navegación de Mateo',async
  expect(s.errors).toEqual([]);await s.close();
 });
 
-function enCola(s,etapa='por_preparar') {
+async function abrirProducto(page,id=1){await page.locator(`[data-ap="abrir"][data-i="${id}"]`).click();await expect(page.locator(`#ap-item-${id} .ap-editor`)).toBeVisible();}
+function enCola(s,etapa='preparando') {
  s.db.prep_cola=[{pedido_id:'p1',etapa,version:1,actualizado_por:'Oscar'}];
 }
 const fotoPrueba={name:'balanza.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=','base64')};
@@ -227,29 +236,28 @@ async function subirFotoPrueba(page){
  await (await chooser).setFiles(fotoPrueba);
 }
 
-test('Mateo abre tocando o con teclado sin cambiar el estado; avanza producto por producto',async({browser})=>{
+test('Mateo abre con productos plegados; guardar pliega y marcar listo cierra',async({browser})=>{
  const s=await setup(browser);enCola(s);
  s.db.pedidos[0].notas='Entregar por la puerta lateral';
  s.db.pedidos[0].pedido_items.push({id:10,producto:'Aceite',cantidad:1,orden:1});
  const page=await s.open('Mateo'),oscar=await s.open('Oscar');
  const card=page.locator('.rv-card[data-id="p1"]');
  await card.locator('h3').click();await expect(page.locator('#ap-titulo')).toHaveText('Almacén del Centro');
- await expect(page.locator('#ap-item-1 .ap-editor')).toBeVisible();expect(s.moves).toHaveLength(0);
+ await expect(page.locator('.ap-editor')).toHaveCount(0);await abrirProducto(page);expect(s.moves).toHaveLength(0);
  await expect(page.locator('.ap-observacion')).toContainText('puerta lateral');
  await page.screenshot({path:'test-results/armado-desktop.png',animations:'disabled'});
  await page.locator('[data-ap="guardar"]').click();
- await expect(page.locator('#ap-item-10 .ap-editor')).toBeVisible();
+ await expect(page.locator('.ap-editor')).toHaveCount(0);await abrirProducto(page,10);
  await expect(page.locator('.ap-progress-head b')).toHaveText('1 de 2 productos preparados');
  await expect(oscar.locator('.rv-preparando .rv-card')).toHaveCount(1);
  await expect(page.locator('#ap-finalizar')).toBeDisabled();
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-progress-head b')).toHaveText('2 de 2 productos preparados');
  await page.locator('#ap-finalizar').click();
- await expect(page.locator('.ap-stage')).toHaveText('Listo para cargar');
+ await expect(page.locator('#ap-raiz')).toBeHidden();
  await expect(oscar.locator('.rv-listo .rv-card')).toHaveCount(1);
  expect(s.db.pedidos[0].estado).toBe('Pendiente');
  expect(s.db.prep_items.filter(i=>i.separado)).toHaveLength(2);
- await page.locator('[data-ap="cerrar"]').click();
  await card.focus();await page.keyboard.press('Enter');await expect(page.locator('#ap-raiz')).toBeVisible();
  await page.keyboard.press('Escape');await expect(page.locator('#ap-raiz')).toBeHidden();
  await card.focus();await page.keyboard.press('Space');await expect(page.locator('#ap-raiz')).toBeVisible();
@@ -259,7 +267,7 @@ test('Mateo abre tocando o con teclado sin cambiar el estado; avanza producto po
 test('toque en móvil abre el armado, sin desbordamiento y con faltante total inline',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
  const page=await s.open('Mateo',{width:390,height:844},{hasTouch:true});
- await page.locator('.rv-card h3').tap();
+ await page.locator('.rv-card h3').tap();await expect(page.locator('.ap-editor')).toHaveCount(0);await abrirProducto(page);
  await expect(page.locator('#ap-item-1 .ap-editor')).toBeVisible();
  expect(s.moves).toHaveLength(0);
  await page.screenshot({path:'test-results/armado-mobile.png',animations:'disabled'});
@@ -279,9 +287,10 @@ test('toque en móvil abre el armado, sin desbordamiento y con faltante total in
 
 test('peso y foto opcionales; errores de foto conservan datos y cambiar peso retira la foto vieja',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
- const page=await s.open('Mateo');await page.locator('.rv-card h3').click();
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
- await page.locator('#ap-finalizar').click();await expect(page.locator('.ap-stage')).toHaveText('Listo para cargar');
+ await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
+ await page.locator('.rv-card h3').click();await abrirProducto(page);
  const peso=page.locator('[data-ap="peso"]');await peso.fill('2abc');
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-inline-error')).toContainText('peso mayor que 0');
  const writes=s.writes.length;await peso.fill('2,35');
@@ -293,11 +302,12 @@ test('peso y foto opcionales; errores de foto conservan datos y cambiar peso ret
  expect(s.db.prep_items[0]).toMatchObject({peso:2.35,separado:true});
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-progress-head b')).toHaveText('1 de 1 productos preparados');
- await page.locator('#ap-finalizar').click();await expect(page.locator('.ap-stage')).toHaveText('Listo para cargar');
+ await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
+ await page.locator('.rv-card h3').click();await abrirProducto(page);
  const original=s.db.prep_items[0].foto;await peso.fill('2,45');
  await page.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0].peso).toBe(2.45);
  expect(s.db.prep_items[0].foto).toBe(null);
- await subirFotoPrueba(page);await expect(page.locator('.ap-stage')).toHaveText('En preparación');
+ await abrirProducto(page);await subirFotoPrueba(page);await expect(page.locator('.ap-stage')).toHaveText('En preparación');
  await expect.poll(()=>s.db.prep_items[0].foto).not.toBe(original);
  await expect(peso).toHaveValue('2,45');expect(s.db.prep_items[0].peso).toBe(2.45);
  expect(s.uploads.every(u=>u.size>0)).toBe(true);
@@ -309,7 +319,7 @@ test('peso y foto opcionales; errores de foto conservan datos y cambiar peso ret
 
 test('guardado fallido retiene cambios y los faltantes parciales se pueden corregir',async({browser})=>{
  const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Mateo');
- await page.locator('.rv-card h3').click();await page.locator('[data-ap="falta"]').click();
+ await page.locator('.rv-card h3').click();await abrirProducto(page);await page.locator('[data-ap="falta"]').click();
  await page.locator('[data-ap="enviado"]').fill('1');s.failItem(true);
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-inline-error')).toContainText('No se guardó');
@@ -319,7 +329,7 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
  s.failItem(false);await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
  expect(s.db.prep_items[0]).toMatchObject({falta:true,enviado:1,separado:true});
- await page.locator('[data-ap="completo"]').click();await page.locator('[data-ap="guardar"]').click();
+ await abrirProducto(page);await page.locator('[data-ap="completo"]').click();await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
  expect(s.db.prep_items[0]).toMatchObject({falta:false,enviado:null,separado:true});
  s.fail();await page.locator('#ap-finalizar').click();
@@ -330,13 +340,13 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
 
 test('novedades remotas preservan borradores; pedido despachado deja de ser editable',async({browser})=>{
  const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Mateo');
- await page.locator('.rv-card h3').click();await page.locator('[data-ap="medir"]').click();const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
+ await page.locator('.rv-card h3').click();await abrirProducto(page);await page.locator('[data-ap="medir"]').click();const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
  s.db.prep_items=[{item_id:1,falta:true,enviado:1}];await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(peso).toBeFocused();await expect(peso).toHaveValue('4,5');
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
  expect(s.db.prep_items[0]).toMatchObject({peso:4.5,falta:true,enviado:1,separado:true});
- await page.locator('[data-ap="abrir"]').click();await s.emit('prep_items');await page.waitForTimeout(300);
+ await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(page.locator('.ap-editor')).toHaveCount(0);
  s.db.pedidos[0].estado='Despachado';await s.emit('pedidos');
  await expect(page.locator('.ap-error')).toContainText('ya no está disponible');
@@ -360,15 +370,15 @@ test('arrastrar desde el nombre y los productos no selecciona texto ni abre el a
 
 test('producto fuera de catálogo define medida opcional y foto sin exigir peso',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.pedidos[0].pedido_items[0].producto='Pan nuevo';
- const page=await s.open('Mateo');await page.locator('.rv-card h3').click();
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
  await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
  await page.locator('[data-ap="medida_real"]').selectOption('caja');
  await page.locator('[data-ap="medir"]').click();await subirFotoPrueba(page);
  await expect(page.locator('.ap-photo-preview')).toBeVisible();
  expect(s.db.prep_items[0].peso).toBe(null);expect(s.db.prep_items[0].medida_real).toBe('caja');
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
- await page.locator('#ap-finalizar').click();await expect(page.locator('.ap-stage')).toHaveText('Listo para cargar');
- await page.locator('[data-ap="operaciones"]').click();
+ await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
+ await page.locator('[data-rv="camioneta"]').click();await page.locator('[data-rc="expandir"]').click();
  await expect(page.locator('#rc-content table')).toContainText('2 cajas');
  await expect(page.locator('.rc-photo img')).toHaveCount(1);
  expect(s.errors).toEqual([]);await s.close();
@@ -378,20 +388,20 @@ test('sustituto parcial, remito compartido y carga crean solo el faltante pendie
  const s=await setup(browser);enCola(s);s.db.pedidos[0].pedido_items[0].cantidad=5;
  const mateo=await s.open('Mateo'),oscar=await s.open('Oscar');
  await expect(mateo.locator('[data-rv="camioneta"]')).toBeDisabled();
- await mateo.locator('.rv-card h3').click();await mateo.locator('[data-ap="falta"]').click();
+ await mateo.locator('.rv-card h3').click();await abrirProducto(mateo);await mateo.locator('[data-ap="falta"]').click();
  await mateo.locator('[data-ap="enviado"]').fill('1');await mateo.locator('[data-ap="reemplazar"]').click();
  await mateo.locator('[data-ap="sustituto"]').fill('Mozzarella alternativa');
  await mateo.locator('[data-ap="sustituto_cantidad"]').fill('2');await mateo.locator('[data-ap="sustituye"]').fill('2');
  await expect(mateo.locator('.ap-pending')).toContainText('Queda pendiente: 2');
  await mateo.locator('[data-ap="guardar"]').click();await expect(mateo.locator('.ap-item-status')).toHaveText('Con faltante');
- await mateo.locator('#ap-finalizar').click();await expect(mateo.locator('.ap-stage')).toHaveText('Listo para cargar');
- await mateo.locator('[data-ap="cerrar"]').click();await expect(mateo.locator('[data-rv="camioneta"]')).toBeEnabled();
- await oscar.locator('.rv-listo .rv-card h3').click();await expect(oscar.locator('#rc-title')).toHaveText('Resumen para remito');
+ await mateo.locator('#ap-finalizar').click();await expect(mateo.locator('#ap-raiz')).toBeHidden();
+ await expect(mateo.locator('[data-rv="camioneta"]')).toBeEnabled();
+ await oscar.locator('.rv-listo .rv-card h3').click();await expect(oscar.locator('#rc-title')).toHaveText('Resumen para remito');await expect(oscar.locator('table')).toHaveCount(0);await oscar.locator('[data-rc="expandir"]').click();
  await expect(oscar.locator('.rc-sub-row')).toContainText('Mozzarella alternativa');
  await expect(oscar.locator('.rc-sub-row')).toContainText('2 un.');await expect(oscar.locator('.rc-missing')).toContainText('Pendiente: 2 un.');
  await oscar.locator('[data-rc="remito"]').click();await expect(oscar.locator('[data-rc="remito"]')).toHaveAttribute('aria-pressed','true');
  await oscar.screenshot({path:'test-results/remito-desktop.png',animations:'disabled'});
- await mateo.locator('[data-rv="camioneta"]').click();await expect(mateo.locator('[data-rc="remito"]')).toHaveAttribute('aria-pressed','true');
+ await mateo.locator('[data-rv="camioneta"]').click();await expect(mateo.locator('[data-rc="remito"]')).toHaveCount(0);
  await expect(mateo.locator('[data-rc="cargar"]')).toBeDisabled();await mateo.locator('[data-rc="expandir"]').click();
  await mateo.locator('[data-rc="control"]').click();await expect(mateo.locator('[data-rc="control"]')).toHaveAttribute('aria-pressed','true');
  await expect(oscar.locator('[data-rc="control"]')).toHaveAttribute('aria-pressed','true');
@@ -430,5 +440,99 @@ test('control viejo rechaza carga y muestra el cambio para revisar de nuevo',asy
  await expect(page.locator('[data-rc="cargar"]')).toBeDisabled();expect(s.db.pedidos[0].estado).toBe('Pendiente');
  await page.locator('[data-rc="expandir"]').click();await expect(page.locator('table')).toContainText('2,15 kg');
  await page.locator('[data-rc="control"]').click();await expect(page.locator('[data-rc="cargar"]')).toBeEnabled();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Por preparar solo muestra el pedido; Mateo no ve autor ni fecha',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');
+ s.db.pedidos[0].pedido_items.push(...[10,11,12].map(id=>({id,producto:'Producto '+id,cantidad:id,orden:id})));
+ const mateo=await s.open('Mateo',{width:390,height:844},{hasTouch:true}),oscar=await s.open('Oscar');
+ const card=mateo.locator('.rv-card[data-id="p1"]');
+ await expect(card.locator('button,.rv-grip,.rv-card-top')).toHaveCount(0);
+ await expect(card.locator('li')).toHaveCount(4);
+ await expect(oscar.locator('.rv-card[data-id="p1"] .rv-card-top')).toContainText('Oscar');
+ await expect(oscar.locator('.rv-card[data-id="p1"] .rv-card-top')).toContainText('16/11/2026');
+ await card.locator('h3').tap();await expect(mateo.locator('#ap-raiz')).toBeHidden();
+ await card.press('Enter');await card.press('Space');await expect(mateo.locator('#ap-raiz')).toBeHidden();
+ await oscar.locator('.rv-card[data-id="p1"] h3').click();await expect(oscar.locator('#ap-raiz')).toBeHidden();
+ await card.press('ArrowRight');await expect(mateo.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await expect(mateo.locator('.rv-preparando .rv-card button')).toHaveText('Marcar listo →');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Mateo usa toda la pantalla con selector, contador, progreso y camioneta',async({browser})=>{
+ const s=await setup(browser);enCola(s);
+ for(const width of [390,1440]){
+  const page=await s.open('Mateo',{width,height:900},{hasTouch:width===390});
+  await expect(page.locator('#appTitle')).toBeHidden();await expect(page.locator('#bottomNav')).toBeHidden();
+  await expect(page.getByText('Tu mesa de preparación')).toHaveCount(0);
+  await expect(page.locator('#pcNav button:visible')).toHaveCount(2);
+  await expect(page.locator('#rv-mateo-progress .rv-summary>b')).toHaveText('0/1');
+  await expect(page.locator('#rv-mateo-progress .rv-truck')).toHaveText('');
+  await expect(page.locator('#rv-mateo-refresh')).toHaveText('↻');
+  const main=await page.locator('main').boundingBox(),bar=await page.locator('#rv-mateo-progress').boundingBox(),nav=await page.locator('#pcNav').boundingBox();
+  expect(main.width).toBeGreaterThan(width-25);expect(bar.y).toBeLessThan(nav.y);
+  await page.locator('#pcNav [data-tab="pedidos"]').click();await expect(page.locator('#tab-pedidos')).toHaveClass(/active/);
+  await expect(page.locator('#rv-mateo-progress')).toBeHidden();
+  await page.locator('#pcNav [data-tab="reparto"]').click();await expect(page.locator('#tab-reparto')).toHaveClass(/active/);
+  await expect(page.locator('#pcNav [data-tab="reparto"]')).toHaveAttribute('aria-pressed','true');
+  await page.screenshot({path:`test-results/mateo-completo-${width}.png`,animations:'disabled'});
+ }
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('ventanas centradas: el fondo cierra, soltar fuera desde adentro no cierra',async({browser})=>{
+ const s=await setup(browser);enCola(s);const page=await s.open('Oscar');
+ await page.locator('.rv-preparando .rv-card h3').click();await expect(page.locator('.ap-item-head')).toBeVisible();
+ const panel=await page.locator('.ap-panel').boundingBox();
+ expect(Math.abs(panel.x+panel.width/2-720)).toBeLessThan(2);expect(Math.abs(panel.y+panel.height/2-500)).toBeLessThan(2);
+ await expect(page.locator('.ap-editor')).toHaveCount(0);
+ await page.mouse.move(panel.x+20,panel.y+25);await page.mouse.down();await page.mouse.move(8,500);await page.mouse.up();
+ await expect(page.locator('#ap-raiz')).toBeVisible();
+ await page.mouse.click(8,500);await expect(page.locator('#ap-raiz')).toBeHidden();
+ await page.locator('.rv-preparando .rv-card h3').click();await abrirProducto(page);
+ await page.locator('[data-ap="medir"]').click();await page.locator('[data-ap="peso"]').fill('2,5');
+ page.once('dialog',d=>d.dismiss());await page.mouse.click(8,500);await expect(page.locator('[data-ap="peso"]')).toHaveValue('2,5');
+ page.once('dialog',d=>d.accept());await page.mouse.click(8,500);await expect(page.locator('#ap-raiz')).toBeHidden();
+ s.db.prep_cola[0].etapa='listo';s.db.prep_cola[0].version++;s.db.prep_items=[{item_id:1,separado:true}];await s.emit('prep_cola');
+ await page.locator('.rv-listo .rv-card h3').click();await expect(page.locator('.rc-order')).toBeVisible();
+ const rc=await page.locator('.rc-panel').boundingBox();
+ expect(Math.abs(rc.x+rc.width/2-720)).toBeLessThan(2);
+ await expect.poll(async()=>{const r=await page.locator('.rc-panel').boundingBox();return Math.abs(r.y+r.height/2-500);}).toBeLessThan(2);
+ await expect(page.locator('.rc-table-wrap')).toHaveCount(0);
+ await page.mouse.move(rc.x+20,rc.y+25);await page.mouse.down();await page.mouse.move(8,500);await page.mouse.up();await expect(page.locator('#rc-raiz')).toBeVisible();
+ await page.mouse.click(8,500);await expect(page.locator('#rc-raiz')).toBeHidden();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('eliminar fotos conserva pesos y borradores; un fallo conserva la imagen',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');
+ s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:1,peso:1.15,foto:'original.jpg',sustituto:'Otro queso',sustituto_cantidad:1,sustituto_medida:'unidad',sustituye:1,sustituto_peso:1.2,sustituto_foto:'sustituto.jpg'}];
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();
+ await expect(page.locator('.ap-editor')).toHaveCount(0);await expect(page.locator('[data-ap="operaciones"]')).toHaveCount(0);
+ await abrirProducto(page);await page.locator('[data-ap="peso"]').fill('1,3');
+ s.failItem(true);await page.locator('[data-ap="quitar-foto"]').click();
+ await expect(page.locator('.ap-inline-error')).toContainText('No se pudo eliminar');await expect(page.locator('[data-ap="ver-foto"]')).toBeVisible();
+ expect(s.db.prep_items[0].foto).toBe('original.jpg');
+ s.failItem(false);await page.locator('[data-ap="quitar-foto"]').click();
+ await expect(page.locator('[data-ap="quitar-foto"]')).toHaveCount(0);await expect(page.locator('[data-ap="peso"]')).toHaveValue('1,3');
+ expect(s.db.prep_items[0].peso).toBe(1.15);expect(s.db.prep_items[0].foto).toBe(null);
+ await page.locator('[data-ap="quitar-foto-sub"]').click();await expect(page.locator('[data-ap="quitar-foto-sub"]')).toHaveCount(0);
+ expect(s.db.prep_items[0].sustituto_peso).toBe(1.2);expect(s.db.prep_items[0].sustituto_foto).toBe(null);
+ await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-editor')).toHaveCount(0);
+ expect(s.db.prep_items[0].peso).toBe(1.3);await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('desplazamiento vertical desde una tarjeta de Mateo no mueve ni abre pedidos',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');
+ for(let i=10;i<16;i++){s.db.pedidos.push(pedido('p'+i,'Cliente '+i));s.db.prep_cola.push({pedido_id:'p'+i,etapa:'por_preparar',version:1});}
+ const page=await s.open('Mateo',{width:390,height:844},{hasTouch:true});
+ const r=await page.locator('.rv-card[data-id="p1"]').boundingBox();
+ await touch(page,[{x:r.x+80,y:r.y+r.height-20},{x:r.x+80,y:r.y+r.height-55},{x:r.x+80,y:r.y+10}]);
+ expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(30);expect(s.moves).toHaveLength(0);
+ await expect(page.locator('#ap-raiz')).toBeHidden();await expect(page.locator('.rv-ghost')).toHaveCount(0);
+ await page.context().setOffline(true);await expect(page.locator('.rv-connection')).toHaveText('Sin conexión');
+ await expect(page.locator('.rv-card').first()).toHaveCSS('touch-action','pan-y');
  expect(s.errors).toEqual([]);await s.close();
 });

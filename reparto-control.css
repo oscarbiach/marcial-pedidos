@@ -1,7 +1,8 @@
 body.rc-abierto { overflow:hidden; }
-.rc { position:fixed; inset:0; z-index:930; background:#0b1c337a; display:flex; justify-content:center; padding:20px; font:16px var(--m-fuente,system-ui,sans-serif); color:#17314f; animation:rc-in .22s ease-out; }
+.rc { position:fixed; inset:0; z-index:930; background:#0b1c337a; display:flex; align-items:center; justify-content:center; padding:24px; font:16px var(--m-fuente,system-ui,sans-serif); color:#17314f; animation:rc-in .22s ease-out; }
 .rc[hidden] { display:none; }
-.rc-panel { width:min(1140px,100%); display:flex; flex-direction:column; background:#f3f6fa; border-radius:22px; overflow:hidden; box-shadow:0 20px 70px #10284240; }
+.rc-panel { width:min(1140px,100%); max-height:100%; display:flex; flex-direction:column; background:#f3f6fa; border-radius:22px; overflow:hidden; box-shadow:0 20px 70px #10284240; }
+.rc-panel>header { flex-shrink:0; }
 .rc header { background:#fff; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:24px; border-bottom:1px solid #dce4ed; }
 .rc h2 { font-size:25px; margin:0; }
 .rc header p { margin:8px 0 0; }
@@ -30,7 +31,7 @@ body.rc-abierto { overflow:hidden; }
 .rc-viewer { position:fixed; inset:0; background:#0b1c33ed; display:flex; align-items:center; justify-content:center; }.rc-viewer img { max-width:95%; max-height:92%; object-fit:contain; }.rc-viewer button { position:absolute; right:18px; top:18px; }
 @keyframes rc-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
 @media(max-width:650px){
- .rc { padding:0; }.rc-panel { border-radius:0; }.rc header { padding:calc(16px + env(safe-area-inset-top)) 16px 16px; }.rc h2 { font-size:21px; }
+ .rc { padding:0; height:100dvh; }.rc-panel { border-radius:0; height:100%; }.rc header { padding:calc(16px + env(safe-area-inset-top)) 16px 16px; }.rc h2 { font-size:21px; }
  .rc-content { padding:12px 12px calc(12px + env(safe-area-inset-bottom)); }.rc-order { padding:15px; }.rc-order-top { flex-wrap:wrap; }.rc h3 { font-size:20px; }
  .rc th,.rc td { padding:12px 6px; }.rc th:first-child { width:43%; }.rc th:last-child { width:22%; }.rc td b { font-size:16px; }.rc td strong { font-size:16px; }.rc td span { font-size:14px; }
  .rc .rc-photo { width:54px;height:54px; }.rc-actions button { flex:1 1 100%; }.rc .rc-primary { margin-left:0; }

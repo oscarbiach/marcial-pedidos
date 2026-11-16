@@ -1599,9 +1599,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=98">
-<link rel="stylesheet" href="armado-pedido.css?v=98">
-<link rel="stylesheet" href="reparto-control.css?v=98">
+<link rel="stylesheet" href="reparto-vivo.css?v=99">
+<link rel="stylesheet" href="armado-pedido.css?v=99">
+<link rel="stylesheet" href="reparto-control.css?v=99">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1677,7 +1677,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="visitar" onclick="goTab('visitar')">📍 Visitar</button>
       -->
     </nav>
-    <button id="whoBtn" onclick="openWhoModal()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
+    <button id="whoBtn" onclick="openWhoModal()" aria-label="Cambiar usuario"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
   </header>
 
   <main>
@@ -3105,7 +3105,7 @@ function setTab(tab) {
   // Clientes (seguimiento) también usa el ancho útil en PC: lista | ficha.
   document.body.classList.toggle('seg-ancho', tab === 'clientes');
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
-    .forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    .forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-pressed',String(b.dataset.tab === tab)); });
   // Al entrar a Pedidos, si lo que hay en pantalla ya tiene más de medio
   // minuto se busca lo último sin que haya que tocar nada: es justo el
   // momento en que puede haber cargado algo otro vendedor.
@@ -6595,9 +6595,9 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js?v=98"></script>
-<script src="armado-pedido.js?v=98"></script>
-<script src="reparto-control.js?v=98"></script>
-<script src="reparto-vivo.js?v=98"></script>
+<script src="preparacion.js?v=99"></script>
+<script src="armado-pedido.js?v=99"></script>
+<script src="reparto-control.js?v=99"></script>
+<script src="reparto-vivo.js?v=99"></script>
 </body>
 </html>
