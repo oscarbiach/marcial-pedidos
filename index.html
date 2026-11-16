@@ -1599,8 +1599,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css">
-<link rel="stylesheet" href="armado-pedido.css">
+<link rel="stylesheet" href="reparto-vivo.css?v=98">
+<link rel="stylesheet" href="armado-pedido.css?v=98">
+<link rel="stylesheet" href="reparto-control.css?v=98">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -3953,7 +3954,7 @@ function repCantidad(it) {
   const p = prodInfo(it.prod), q = round2(Number(it.qty) || 0);
   const cajas = n => n + ' ' + (n === 1 ? 'caja' : 'cajas');
   if (it.fetear) return q + ' kg';
-  if (!p || !p.u) return q + 'u';
+  if (!p || !p.u) return typeof it.unidades==='string'&&MEDIDA_NOMBRE[it.unidades]?cantMedida(q,it.unidades):'× '+q;
   const m = medidaDe(p, false, it.unidades);
   if (m === 'kg') return q + ' kg';
   if (m === 'caja') return cajas(q);
@@ -6395,7 +6396,7 @@ function qtyLabel(prod, qty, fetear, unidades) {
   const p = prodInfo(prod);
   const q = round2(Number(qty) || 0);
   if (fetear) return q + ' kg';
-  if (!p || !p.u) return '× ' + q;
+  if (!p || !p.u) return typeof unidades==='string'&&MEDIDA_NOMBRE[unidades]?cantMedida(q,unidades):'× '+q;
   const m = medidaDe(p, false, unidades);
   // Caja o tira entera con conversión: la equivalencia entre paréntesis.
   const conv = m === p.u && contenidoTexto(p) ? ' (= ' + round2(q * p.box) + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'un.') + ')' : '';
@@ -6594,8 +6595,9 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js"></script>
-<script src="armado-pedido.js"></script>
-<script src="reparto-vivo.js"></script>
+<script src="preparacion.js?v=98"></script>
+<script src="armado-pedido.js?v=98"></script>
+<script src="reparto-control.js?v=98"></script>
+<script src="reparto-vivo.js?v=98"></script>
 </body>
 </html>

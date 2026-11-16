@@ -8,11 +8,11 @@
     return /^\d+(?:\.\d+)?$/.test(s) && Number.isFinite(Number(s)) ? Number(s) : null;
   };
   const decimal = v => v == null ? '' : String(v).replace('.',',');
-  const cantidad = it => repCantidad(it);
+  const cantidad = it => repCantidad({...it,unidades:row(it).medida_real||it.unidades});
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const S = { open:false, epoch:0, revision:0, p:null, cola:null, items:new Map(), productos:new Map(),
     drafts:new Map(), fotos:new Map(), active:null, ready:false, loading:false, busy:false, again:false,
-    error:'', itemError:null, timer:null, debounce:null, interacting:false, repaint:false, choosing:false };
+    error:'', itemError:null, timer:null, debounce:null, interacting:false, repaint:false, choosing:false, extras:new Set() };
   const row = it => S.items.get(it.id) || {};
   const pesa = it => !!S.productos.get(it.prod)?.se_pesa;
   const editable = () => S.ready && S.p?.estado === 'Pendiente' && !S.p.retiro;
@@ -20,11 +20,14 @@
   function listo(it) {
     const x = row(it);
     if (!x.separado || (x.falta && (x.enviado == null || Number(x.enviado)<0 || Number(x.enviado)>Number(it.qty)))) return false;
-    return (x.falta && Number(x.enviado)===0) || !pesa(it) || (Number(x.peso)>0 && !!x.foto);
+    if(x.sustituto && (!x.falta || !(Number(x.sustituto_cantidad)>0) || !(Number(x.sustituye)>0) || Number(x.sustituye)>Number(it.qty)-Number(x.enviado) || !x.sustituto_medida))return false;
+    return true;
   }
   function borrador(it) {
     const x = row(it);
-    return {peso:decimal(x.peso),falta:!!x.falta,enviado:decimal(x.enviado),...S.drafts.get(it.id)};
+    return {peso:decimal(x.peso),falta:!!x.falta,enviado:decimal(x.enviado),medida_real:x.medida_real||'',
+      sustituto:x.sustituto||'',sustituto_cantidad:decimal(x.sustituto_cantidad),sustituto_medida:x.sustituto_medida||'unidad',sustituye:decimal(x.sustituye),sustituto_peso:decimal(x.sustituto_peso),
+      reemplazar:!!x.sustituto,...S.drafts.get(it.id)};
   }
   function modificar(id,cambios) {
     S.drafts.set(id,{...S.drafts.get(id),...cambios}); S.itemError=null;
@@ -36,6 +39,7 @@
     S.epoch++; S.revision++; S.open=true; S.p=p; S.cola=null; S.items=new Map(); S.productos=new Map();
     S.drafts.clear(); S.active=undefined; S.ready=false; S.busy=false; S.error=''; S.actionError=''; S.itemError=null; S.choosing=false;
     S.interacting=false; S.repaint=false;
+    S.extras.clear();
     S.returnId=p.id; S.returnFocus=document.activeElement;
     let r=$('ap-raiz');
     if (!r) {
@@ -95,7 +99,7 @@
       for(const itemId of S.drafts.keys()) if(!ids.includes(itemId)) S.drafts.delete(itemId);
       if(S.active!==null && !ids.includes(S.active)) S.active=(S.p.items.find(it=>!listo(it)) || S.p.items[0])?.id;
       S.ready=true; S.error='';
-      const fotos=[...new Set((detalle.data || []).map(x=>x.foto).filter(Boolean))];
+      const fotos=[...new Set((detalle.data || []).flatMap(x=>[x.foto,x.sustituto_foto]).filter(Boolean))];
       const faltan=fotos.filter(f=>!S.fotos.has(f) || S.fotos.get(f).hasta<Date.now());
       if(faltan.length){
         const urls=await sb.storage.from('preparacion').createSignedUrls(faltan,3600);
@@ -108,14 +112,15 @@
   function estadoItem(it) {
     const x=row(it);
     if(S.drafts.has(it.id))return 'Sin guardar';
-    if(listo(it))return x.falta ? 'Listo con faltante' : 'Preparado';
+    if(listo(it))return x.falta&&Number(x.enviado)+(Number(x.sustituye)||0)<Number(it.qty)?'Con faltante':x.sustituto?'Con sustituto':'Preparado';
     if(x.falta && x.enviado==null)return 'Indicá cuánto se envía';
-    if(pesa(it) && !(Number(x.peso)>0))return 'Falta el peso';
-    if(pesa(it) && !x.foto)return 'Falta la foto';
     return 'Por preparar';
   }
+  const opcionesMedida = (value) => ['unidad','kg','caja','tira'].map(m=>`<option value="${m}" ${m===value?'selected':''}>${{unidad:'Unidades',kg:'Kg',caja:'Cajas',tira:'Tiras'}[m]}</option>`).join('');
   function producto(it,index) {
     const x=row(it),d=borrador(it),open=S.active===it.id,ok=listo(it),zero=d.falta && numero(d.enviado)===0;
+    const medir=pesa(it)||S.extras.has(it.id)||x.peso!=null||x.foto;
+    const medida=it.fetear?'kg':typeof it.unidades==='string'?it.unidades:medidaDe(prodInfo(it.prod),false,it.unidades);
     const url=x.foto && S.fotos.get(x.foto)?.url,dirty=S.drafts.has(it.id);
     return `<article class="ap-item ${ok?'ap-done':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
       <button class="ap-item-head" data-ap="abrir" data-i="${it.id}" aria-expanded="${open}" aria-controls="ap-editor-${it.id}">
@@ -123,22 +128,28 @@
         <span class="ap-item-status">${esc(estadoItem(it))}</span><span aria-hidden="true">${open?'−':'+'}</span>
       </button>
       ${open?`<div class="ap-editor" id="ap-editor-${it.id}">
-        <div class="ap-request"><span>El cliente pidió</span><strong>${esc(cantidad(it))}</strong><small>${S.productos.get(it.prod)?.frio===false?'Seco':'Frío'}${repTagsTexto(it)?' · '+esc(repTagsTexto(it)):''}</small></div>
+        <div class="ap-request"><span>Pedido</span><strong>${esc(cantidad(it))}</strong></div>
         <fieldset ${!editable()||S.busy?'disabled':''}>
           <legend class="ap-sr">Preparar ${esc(it.prod)}</legend>
-          <div class="ap-weigh">
-            <label>Peso real <span>${pesa(it)?'Obligatorio':'Opcional'}</span><div class="ap-input-unit"><input data-ap="peso" data-a="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="0,000" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div><small>${zero?'No se envía: no necesita peso ni foto.':pesa(it)?'Pesá lo que vas a enviar y sacale una foto.':'Completalo si este producto se pesa.'}</small></label>
-            <div class="ap-photo"><span>Foto del pesaje ${pesa(it)?'· obligatoria':''}</span><div>
+          ${!medida?`<label class="ap-measure">Medida del producto <select data-ap="medida_real" data-i="${it.id}"><option value="">Sin definir</option>${opcionesMedida(d.medida_real)}</select></label>`:''}
+          ${medir?`<div class="ap-weigh">
+            <label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>
+            <div class="ap-photo"><span>Foto (opcional)</span><div>
               ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
-              <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'↻ Cambiar foto':'＋ Agregar foto'}<small>${x.foto?'Verificá que coincida con el peso':'Cámara o galería'}</small></button>
+              <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
             </div></div>
+          </div>`:`<button class="ap-add-weight" data-ap="medir" data-i="${it.id}">Agregar peso o foto</button>`}
+          <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} Faltante o sustituto</button>
+            ${d.falta?`<div class="ap-shortage-form"><label>De ${esc(it.prod)} se envía <input data-ap="enviado" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(d.enviado)}" placeholder="0" aria-label="Cantidad a enviar de ${esc(it.prod)}"><small>Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">No hay</button><button data-ap="completo" data-i="${it.id}">Está completo</button>
+              <button class="ap-sub-toggle" data-ap="reemplazar" data-i="${it.id}" aria-expanded="${d.reemplazar}">${d.reemplazar?'Quitar sustituto':'Agregar sustituto'}</button>
+              ${d.reemplazar?`<div class="ap-substitute"><label>Producto sustituto<input data-ap="sustituto" data-i="${it.id}" value="${esc(d.sustituto)}" list="ap-productos" autocomplete="off"></label><div><label>Cantidad del sustituto<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label></div><label>Cantidad del original que reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label>
+                ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'✓ Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
+              </div>`:''}
+              <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
+            </div>`:''}
           </div>
-          <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} ${d.falta?'Hay un faltante':'¿Falta mercadería?'}</button>
-            ${d.falta?`<div class="ap-shortage-form"><label>Cantidad que sí se envía <input data-ap="enviado" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(d.enviado)}" placeholder="0" aria-label="Cantidad a enviar de ${esc(it.prod)}"><small>En la misma medida del pedido: ${esc(cantidad(it))}. Máximo ${esc(String(it.qty))}.</small></label><button data-ap="nada" data-i="${it.id}">No se envía nada</button><button data-ap="completo" data-i="${it.id}">Se envía completo</button></div>`:''}
-          </div>
-          ${x.foto?'<p class="ap-note">Si cambiás el peso, agregá otra foto para que coincidan.</p>':''}
           ${S.itemError?.id===it.id?`<p class="ap-inline-error" role="alert">${esc(S.itemError.message)}</p>`:''}
-          <div class="ap-product-footer"><span id="ap-draft-${it.id}" role="status">${S.busy?'Guardando…':dirty?'Cambios sin guardar':ok?'✓ Guardado':'Separá el producto y guardá para seguir.'}</span>
+          <div class="ap-product-footer"><span id="ap-draft-${it.id}" role="status">${S.busy?'Guardando…':dirty?'Sin guardar':ok?'✓ Guardado':''}</span>
             <button class="ap-save" data-ap="guardar" data-i="${it.id}">${S.busy?'Guardando…':ok?'Guardar cambios y seguir':'Guardar y seguir →'}</button></div>
         </fieldset>
       </div>`:''}</article>`;
@@ -153,25 +164,28 @@
     const labels={pendiente:'Sin enviar',por_preparar:'Por preparar',preparando:'En preparación',listo:'Listo para cargar'};
     const next=stage==='pendiente'?'Enviar a preparar':stage==='por_preparar'?'Empezar preparación':stage==='preparando'?'Marcar pedido listo':'✓ Pedido listo';
     const disabled=S.busy || !editable() || !!S.error || stage==='listo' || (stage==='preparando'&&!complete) || (stage==='pendiente'&&state.who==='Mateo') || !!S.drafts.size;
-    const html=`<div class="ap-top"><div><span class="ap-eyebrow">ARMADO DEL PEDIDO</span><h2 id="ap-titulo">${esc(p.cliente)}</h2><p>${esc(p.fechaEntrega?fmtDate(p.fechaEntrega):'Sin fecha de entrega')}${p.direccion?' · '+esc(p.direccion):''}</p></div><button id="ap-cerrar" class="ap-close" data-ap="cerrar" aria-label="Volver al reparto">✕</button></div>
+    const html=`<div class="ap-top"><div><h2 id="ap-titulo">${esc(p.cliente)}</h2><p>${esc(p.fechaEntrega?fmtDate(p.fechaEntrega):'Sin fecha de entrega')}${p.direccion?' · '+esc(p.direccion):''}</p></div><button id="ap-cerrar" class="ap-close" data-ap="cerrar" aria-label="Volver al reparto">✕</button></div>
       <div class="ap-progress-head"><div><b>${done} de ${total} productos preparados</b><span class="ap-stage">${esc(labels[stage])}</span></div><div class="ap-progress" role="progressbar" aria-label="Productos preparados" aria-valuenow="${done}" aria-valuemin="0" aria-valuemax="${total||1}"><i style="width:${total?done/total*100:0}%"></i></div></div>
       <div class="ap-content" id="ap-content">
         ${S.error?`<div class="ap-error" role="alert">${esc(S.error)} <button data-ap="refrescar">Reintentar</button></div>`:''}
         ${S.actionError?`<div class="ap-error" role="alert">${esc(S.actionError)}</div>`:''}
         ${!S.ready?'<p class="ap-empty">Cargando el armado…</p>':!editable()?'<p class="ap-error">Este pedido ya no está disponible para preparar.</p>':''}
         ${p.notas?`<aside class="ap-observacion"><b>Observación del pedido</b><p>${esc(p.notas)}</p></aside>`:''}
-        ${S.ready?`<p class="ap-guide">Tocá un producto, separá la cantidad pedida y guardá para pasar al siguiente.</p>${p.items.map(producto).join('')}`:''}
-        ${stage==='listo'?'<p class="ap-note">Si modificás un producto, el pedido vuelve a Preparando.</p>':''}
-        ${S.ready&&total?'<button class="ap-operations" data-ap="operaciones">Remito y carga en camioneta →</button>':''}
+        ${S.ready?p.items.map(producto).join(''):''}
+        ${S.ready&&total&&stage==='listo'?'<button class="ap-operations" data-ap="operaciones">Ver resumen para remito →</button>':''}
       </div>
-      <footer class="ap-footer"><div><b>${S.drafts.size?'Hay cambios sin guardar':complete?'Todo preparado':total-done===1?'Queda 1 producto':`Quedan ${total-done} productos`}</b><small>${S.drafts.size?'Guardá los cambios de cada producto.':'Listo significa preparado, todavía no despachado.'}</small></div><button id="ap-finalizar" data-ap="etapa" ${disabled?'disabled':''}>${S.busy?'Guardando…':next}</button></footer>
-      <input id="ap-camara" type="file" accept="image/*" capture="environment" hidden>`;
+      <footer class="ap-footer"><div><b>${S.drafts.size?'Cambios sin guardar':complete?'Todo preparado':total-done===1?'Queda 1 producto':`Quedan ${total-done} productos`}</b></div><button id="ap-finalizar" data-ap="etapa" ${disabled?'disabled':''}>${S.busy?'Guardando…':next}</button></footer>
+      <input id="ap-camara" type="file" accept="image/*" capture="environment" hidden><datalist id="ap-productos">${(state.products||[]).filter(p=>p.act!==false).map(p=>`<option value="${esc(p.n)}">`).join('')}</datalist>`;
     if(r._html===html)return; r._html=html;r.innerHTML=html;$('ap-content').scrollTop=scroll;
     if(focus?.a) [...r.querySelectorAll('[data-ap]')].find(el=>el.dataset.ap===focus.a&&el.dataset.i===focus.id)?.focus({preventScroll:true});
   }
   function input(e) {
     const el=e.target,id=Number(el.dataset.i);
-    if(el.dataset.ap==='peso' || el.dataset.ap==='enviado') modificar(id,{[el.dataset.ap]:el.value});
+    if(['peso','enviado','medida_real','sustituto','sustituto_cantidad','sustituto_medida','sustituye','sustituto_peso'].includes(el.dataset.ap)) {
+      modificar(id,{[el.dataset.ap]:el.value});
+      const it=S.p.items.find(x=>x.id===id),d=it&&borrador(it),pending=$('ap-item-'+id)?.querySelector('.ap-pending');
+      if(pending&&d)pending.textContent='Queda pendiente: '+Math.max(0,Number(it.qty)-(numero(d.enviado)||0)-(d.reemplazar?(numero(d.sustituye)||0):0))+' de '+it.prod;
+    }
   }
   function cambios(it,completar) {
     const d=borrador(it),x=row(it),draft=S.drafts.get(it.id)||{},out={};
@@ -180,12 +194,29 @@
     const zero=d.falta&&enviado===0;
     if(!zero && String(d.peso).trim()!=='' && !(peso>0))throw Error('Ingresá un peso mayor que 0. Usá coma o punto para los decimales.');
     if('peso' in draft){out.peso=peso;if(peso!==Number(x.peso))out.foto=null;}
-    if('falta' in draft || 'enviado' in draft){out.falta=!!d.falta;out.enviado=enviado;}
+    if('falta' in draft || 'enviado' in draft){
+      out.falta=!!d.falta;out.enviado=enviado;
+      if((d.falta?enviado:Number(it.qty))!==(x.falta?Number(x.enviado):Number(it.qty))){
+        if(!('peso' in draft))out.peso=null;out.foto=null;
+      }
+    }
     if(zero){out.peso=null;out.foto=null;}
-    const foto='foto' in out?out.foto:x.foto;
-    if(completar && pesa(it) && !zero){
-      if(!(peso>0))throw Error('Falta registrar el peso de este producto.');
-      if(!foto)throw Error('Agregá una foto del pesaje antes de guardar el producto.');
+    if('medida_real' in draft)out.medida_real=d.medida_real||null;
+    const subFields=['reemplazar','sustituto','sustituto_cantidad','sustituto_medida','sustituye'];
+    if(d.falta&&d.reemplazar){
+      if(!d.sustituto.trim()||!(numero(d.sustituto_cantidad)>0)||!(numero(d.sustituye)>0)||numero(d.sustituye)>Number(it.qty)-enviado)throw Error('Completá el sustituto, su cantidad y cuánto reemplaza del original.');
+      if(subFields.some(k=>k in draft)){
+        Object.assign(out,{sustituto:d.sustituto.trim(),sustituto_cantidad:numero(d.sustituto_cantidad),sustituto_medida:d.sustituto_medida,sustituye:numero(d.sustituye)});
+        if(out.sustituto!==x.sustituto){out.sustituto_foto=null;if(!('sustituto_peso' in draft))out.sustituto_peso=null;}
+        if(out.sustituto_cantidad!==Number(x.sustituto_cantidad)||out.sustituto_medida!==x.sustituto_medida){out.sustituto_foto=null;if(!('sustituto_peso' in draft))out.sustituto_peso=null;}
+      }
+      if('sustituto_peso' in draft){
+        const sp=String(d.sustituto_peso).trim()===''?null:numero(d.sustituto_peso);
+        if(sp!==null&&!(sp>0)||String(d.sustituto_peso).trim()!==''&&sp===null)throw Error('Revisá el peso del sustituto.');
+        out.sustituto_peso=sp;if(sp!==Number(x.sustituto_peso))out.sustituto_foto=null;
+      }
+    } else if(subFields.some(k=>k in draft)||'falta' in draft){
+      Object.assign(out,{sustituto:null,sustituto_cantidad:null,sustituto_medida:null,sustituye:null,sustituto_peso:null,sustituto_foto:null});
     }
     if(completar)out.separado=true;
     return out;
@@ -232,11 +263,10 @@
     catch(e){if(epoch===S.epoch)S.actionError=e.message;}
     finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
-  function pedirFoto(it) {
+  function pedirFoto(it,sub=false) {
     try{
-      const out=cambios(it,false),peso=numero(borrador(it).peso);
-      if(!(peso>0))throw Error('Ingresá el peso antes de agregar la foto del pesaje.');
-      S.fotoPara={it,peso,out,epoch:S.epoch,pid:S.p.id,cliente:S.p.cliente};S.choosing=true;
+      const out=cambios(it,false),d=borrador(it),peso=numero(sub?d.sustituto_peso:d.peso);
+      S.fotoPara={it,peso,out,sub,nombre:sub?d.sustituto:it.prod,epoch:S.epoch,pid:S.p.id,cliente:S.p.cliente};S.choosing=true;
       const file=$('ap-camara');file.value='';file.click();
     }catch(e){S.itemError={id:it.id,message:e.message};pintar();}
   }
@@ -246,13 +276,13 @@
     S.busy=true;S.revision++;S.itemError=null;pintar();
     try{
       await iniciarEdicion(d.epoch);
-      const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.it.prod,decimal(d.peso)+' kg']);
+      const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?decimal(d.peso)+' kg':'Sin peso registrado']);
       if(d.epoch!==S.epoch)return;
       if(!blob)throw Error('No se pudo procesar la imagen.');
       const ruta=`pedido-${d.pid}/${d.it.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
       const {error}=await sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false});
       if(error)throw error;
-      if(await escribir(d.it,{...d.out,peso:d.peso,foto:ruta},d.epoch)){
+      if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta}:{peso:d.peso,foto:ruta})},d.epoch)){
         const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast('Foto guardada. Tocá Guardar y seguir cuando esté separado.');
       }
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
@@ -264,14 +294,18 @@
     if(a==='cerrar')return cerrar();
     if(a==='refrescar')return cargar();
     if(a==='abrir'){S.active=S.active===it.id?null:it.id;pintar();return;}
-    if(a==='operaciones'){const p=S.p;if(cerrar())Preparacion.abrirOperaciones(p);return;}
+    if(a==='operaciones'){const id=S.p.id;if(cerrar())RepartoControl.remito(id);return;}
     if(a==='etapa')return cambiarEtapa();
     if(!it || S.busy || !editable())return;
+    if(a==='medir'){S.extras.add(it.id);pintar();}
+    if(a==='medir-sub'){S.extras.add(it.id+'-sub');pintar();}
     if(a==='falta'){modificar(it.id,{falta:!borrador(it).falta});pintar();}
     if(a==='nada'){modificar(it.id,{falta:true,enviado:'0'});pintar();}
-    if(a==='completo'){modificar(it.id,{falta:false,enviado:''});pintar();}
+    if(a==='completo'){modificar(it.id,{falta:false,enviado:'',reemplazar:false});pintar();}
+    if(a==='reemplazar'){const d=borrador(it);modificar(it.id,{reemplazar:!d.reemplazar,enviado:d.enviado||'0',sustituye:decimal(Math.max(0,Number(it.qty)-(numero(d.enviado)||0)))});pintar();}
     if(a==='guardar')return guardar(it);
     if(a==='foto')return pedirFoto(it);
+    if(a==='foto-sub')return pedirFoto(it,true);
     if(a==='ver-foto'){
       const url=S.fotos.get(row(it).foto)?.url;if(!url)return;
       const v=document.createElement('div');v.className='ap-viewer';v.setAttribute('role','dialog');v.setAttribute('aria-label','Foto del pesaje');

@@ -26,6 +26,7 @@
       S.filas.clear(); S.pedidos = []; S.busy.clear(); S.error = '';
       S.dias.clear();
       if (window.Preparacion) Preparacion.cerrar(false);
+      if (window.RepartoControl) RepartoControl.cerrar(true);
       if (mateo()) { activeTab = 'reparto'; repSel = []; }
     }
   }
@@ -47,6 +48,7 @@
       S.canal.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
         programar();
         if (window.Preparacion) Preparacion.refrescar();
+        if (window.RepartoControl) RepartoControl.refrescar();
       });
     });
     S.canal.subscribe(status => {
@@ -105,6 +107,7 @@
         }
       });
       root.addEventListener('pointerdown', down);
+      root.addEventListener('dragstart', e => { if(e.target.closest('.rv-card'))e.preventDefault(); });
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
       document.addEventListener('pointercancel', cancel);
@@ -127,8 +130,7 @@
       <ul>${p.items.slice(0,3).map(it => `<li><b>${esc(repCantidad(it))}</b> ${esc(it.prod)} <em>${esc(repTagsTexto(it))}</em></li>`).join('')}</ul>
       ${p.items.length > 3 ? `<span class="rv-more">+ ${p.items.length-3} productos · Abrí el detalle</span>` : ''}
       ${p.notas ? `<p class="rv-note">${esc(p.notas)}</p>` : ''}
-      ${fila ? `<p class="rv-author">${e === 'por_preparar' ? 'Enviado' : 'Actualizado'} por ${esc(fila.actualizado_por)}</p>` : ''}
-      <div class="rv-actions"><button data-rv="detalle" data-id="${esc(p.id)}">Abrir armado</button>
+      <div class="rv-actions"><button data-rv="detalle" data-id="${esc(p.id)}">${e==='listo'&&!mateo()?'Ver remito':'Abrir armado'}</button>
       ${next && permiso(e,next) ? `<button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button>` : ''}</div>
       ${anterior[e] && permiso(e,anterior[e]) ? `<button class="rv-back" data-rv="mover" data-id="${esc(p.id)}" data-to="${anterior[e]}" ${busy || S.error ? 'disabled' : ''}>← ${e === 'por_preparar' ? 'Quitar de la cola' : e === 'listo' ? 'Volver a preparar' : 'Volver a la cola'}</button>` : ''}
     </article>`;
@@ -177,7 +179,7 @@
       <p>${mateo() ? 'Tocá un pedido para armarlo. Agarrá la tarjeta para moverla entre columnas.' : 'Elegí los pedidos del día y arrastralos a Por preparar. Tocá una tarjeta para abrir su armado.'}</p></div>
       <div class="rv-status"><span class="rv-connection ${S.live && !S.error ? 'online' : ''}" role="status">${!navigator.onLine ? 'Sin conexión' : S.error ? 'Sin sincronizar' : S.live ? 'En vivo' : 'Reconectando…'}</span>
       <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button>${!mateo() ? '<button data-rv="hojas">Hojas de reparto</button>' : ''}</div></header>
-      <div class="rv-summary"><b>${listos} de ${total} listos</b><div class="rv-progress" role="progressbar" aria-label="Pedidos listos" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${listos}"><i style="width:${total ? listos/total*100 : 0}%"></i></div><span>Listo = preparado; aún no despachado</span></div>
+      <div class="rv-summary"><b>${listos} de ${total} listos</b><div class="rv-progress" role="progressbar" aria-label="Pedidos listos" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${listos}"><i style="width:${total ? listos/total*100 : 0}%"></i></div><button class="rv-truck" data-rv="camioneta" ${!total||listos!==total?'disabled':''}>Camioneta · Controlar y cargar →</button></div>
       ${S.error ? `<div class="rv-error" role="alert">${esc(S.error)} <button data-rv="refresh">Reintentar</button></div>` : ''}
       <div class="rv-board ${mateo() ? 'rv-mateo' : ''}">${cols.map(e => {
         const pedidos = S.pedidos.filter(p => etapa(p.id) === e).sort((a,b) => {
@@ -185,7 +187,7 @@
           return String(S.filas.get(a.id)?.enviado_en || '').localeCompare(String(S.filas.get(b.id)?.enviado_en || '')) || a.id.localeCompare(b.id);
         });
         return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3><div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : pedidos.map(tarjeta).join('')) || `<div class="rv-empty"><span>${e === 'listo' ? '✓' : '◇'}</span><b>${!S.ready ? 'Cargando pedidos…' : e === 'por_preparar' ? 'Todo al día' : 'Sin pedidos'}</b><p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Mové los pedidos con el mouse o con sus botones.'}</p></div>`}</div></section>`;
-      }).join('')}</div><p class="rv-hint">Arrastrá a una columna resaltada. En celular, agarrá el símbolo ⠿ o deslizá la tarjeta a la derecha. También podés usar los botones.</p>`;
+      }).join('')}</div>`;
     if (r._html === html) return;
     r._html = html;
     r.innerHTML = html;
@@ -228,6 +230,7 @@
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
+    if (b.dataset.rv === 'camioneta') RepartoControl.camioneta(S.pedidos.filter(p=>etapa(p.id)==='listo').map(p=>p.id));
     if (b.dataset.rv === 'hojas') { S.legacy = true; montar(); renderReparto(); }
     if (b.dataset.rv === 'detalle') {
       abrirArmado(b.dataset.id);
@@ -235,7 +238,10 @@
   }
   function abrirArmado(id) {
     const p = S.pedidos.find(x => x.id === id);
-    if (p && !S.busy.has(id)) Preparacion.abrirPedido(p);
+    if (p && !S.busy.has(id)) {
+      if(etapa(id)==='listo'&&!mateo()) RepartoControl.remito(p.id);
+      else Preparacion.abrirPedido(p);
+    }
   }
   function down(e) {
     const card = e.target.closest('.rv-card');

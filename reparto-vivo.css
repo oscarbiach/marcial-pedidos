@@ -35,7 +35,11 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-listo .rv-dot { background:#278358; }
 .rv-listo { background:#e9f2ed; border-color:#dae8df; }
 .rv-list { display:flex; flex-direction:column; gap:10px; min-height:180px; max-height:calc(100dvh - 330px); overflow-y:auto; overflow-x:hidden; padding:2px 2px 8px; scrollbar-width:thin; }
-.rv-card { position:relative; flex:none; background:#fff; border:1px solid #dfe6ee; border-radius:12px; padding:15px; box-shadow:0 2px 3px #10284205; touch-action:pan-y; transition:transform .24s ease,border-color .2s,box-shadow .2s; }
+.rv-card { position:relative; flex:none; background:#fff; border:1px solid #dfe6ee; border-radius:12px; padding:15px; box-shadow:0 2px 3px #10284205; touch-action:pan-y; cursor:grab; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; transition:transform .24s ease,border-color .2s,box-shadow .2s; }
+.rv-card * { -webkit-user-select:none; user-select:none; }
+.rv .rv-truck { padding:14px 20px; font-size:16px; background:#173b62; color:white; border-radius:12px; }
+.rv .rv-truck:disabled { background:#e2e8f0; color:#697b91; cursor:default; }
+.rv-card-top,.rv-dir,.rv-more,.rv-note,.rv-back,.rv-date-help { font-size:14px; }
 .rv-card-top { display:flex; justify-content:space-between; gap:8px; font-size:10px; color:#6b7d93; font-weight:650; }
 .rv-card-top>span:nth-child(2) { margin-left:auto; }
 .rv-grip { display:inline-flex; align-items:center; justify-content:center; flex:none; width:32px; height:32px; margin:-8px -7px -6px 0; font-size:24px; color:#7388a2; cursor:grab; touch-action:none; user-select:none; }

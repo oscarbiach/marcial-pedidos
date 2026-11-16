@@ -7,8 +7,12 @@
 - El arrastre incluye una copia flotante, destinos resaltados y desplazamiento automático. Soltar afuera, en una columna no permitida, presionar Escape, salir de la ventana o perder el gesto no mueve el pedido. Si otro operador cambia ese pedido durante el gesto, se pide revisar el estado antes de intentar de nuevo.
 - Mateo entra en Reparto y tiene únicamente Reparto y Pedidos en ambas navegaciones. Ve la cola compartida sin los pedidos que todavía no enviaron ni las hojas anteriores.
 - Tocar cualquier tarjeta, usar Enter/Espacio sobre ella o «Abrir armado» abre el pedido sin cambiar su etapa. El arrastre y el deslizamiento no abren el detalle.
-- El armado muestra un producto por vez: cantidad solicitada, indicaciones, peso real, foto del pesaje y faltante editable dentro de la misma pantalla. «Guardar y seguir» confirma el guardado y abre el próximo producto pendiente. El avance refleja productos guardados; conserva los borradores ante actualizaciones y errores. Las fotos llevan cliente, producto y peso; cambiar el peso exige renovar la foto cuando es obligatoria. Un faltante total no necesita peso ni foto.
-- Guardar un producto de la cola inicia su preparación; editar uno listo vuelve a Preparando. «Marcar pedido listo» exige que todos estén separados, con faltantes válidos y peso/foto donde corresponde. La base valida nuevamente. No despacha el pedido. «Remito y carga en camioneta» conserva las herramientas operativas anteriores.
+- El armado muestra un producto por vez. Peso y foto son opcionales en la interfaz y en la base. Los productos que no requieren pesaje muestran «Agregar peso o foto»; los que no tienen medida permiten definirla para ese pedido. «Guardar y seguir» confirma el guardado antes de avanzar. Cambiar cantidad, producto o peso retira el pesaje/foto anterior cuando ya no corresponde; no exige volver a cargarlo.
+- En «Faltante o sustituto» se indica cuánto se envía del original y, si corresponde, el producto sustituto, su cantidad/medida y cuánto reemplaza. El sustituto tiene su propio peso y foto opcionales. Lo reemplazado se considera resuelto. Solo el resto queda pendiente.
+- Guardar un producto de la cola inicia su preparación; editar uno listo vuelve a Preparando. «Marcar pedido listo» exige separar todos los productos e indicar cantidades válidas. No despacha. Un faltante registrado permite completar el armado.
+- Oscar, Thiago y Joaquín tocan un pedido listo para abrir el resumen de remito: productos enviados, cantidades reales registradas, fotos, sustitutos y pendientes. Los datos de pesaje ausentes se señalan sin bloquear. «Marcar remito hecho» y «Confirmar control» se comparten en vivo.
+- Cuando todos los pedidos de la cola están listos, «Camioneta · Controlar y cargar» abre el lote. «Cargar y despachar» requiere control del contenido vigente y marca ese pedido Despachado en Pedidos. Si hay faltantes, crea la reposición violeta en la misma transacción; un fallo revierte todo y reintentar no duplica. El lote abierto conserva los pedidos ya cargados. Los nuevos pedidos se preparan en el tablero.
+- Cambios en productos, cantidades o encabezado invalidan el control y remito anterior. Un cambio de cantidades vuelve a exigir separar el producto. Una carga con un resumen viejo se rechaza para revisar las novedades.
 - Los demás conservan las hojas y sus herramientas detrás de «Hojas de reparto».
 - Los cambios se reciben por Supabase Realtime. Un refresco cada 15 segundos y al recuperar conexión/visibilidad recupera eventos perdidos. Si falla una escritura, la tarjeta permanece en su estado confirmado. La base rechaza una versión vieja si otra pantalla ya cambió el pedido.
 
@@ -16,8 +20,9 @@
 
 1. La base debe tener aplicada `20261113_preparacion.sql`.
 2. Ejecutar `supabase/migrations/20261116_reparto_en_vivo.sql` en el proyecto Supabase de la app **antes de publicar el frontend**. Crea la cola, su RPC transaccional y agrega seis tablas a `supabase_realtime`. No mueve pedidos ni importa hojas guardadas automáticamente.
-3. Publicar el frontend de esta rama, incluyendo `reparto-vivo.*`, `armado-pedido.*`, `preparacion.js`, `index.html` y `sw.js` (caché v97). Las mejoras de arrastre, fechas y armado individual no requieren otra migración.
-4. Abrir dos sesiones reales: enviar con Oscar/Thiago/Joaquín y comprobar la llegada a Mateo, el retorno de cambios y la reconexión.
+3. Aplicar `20261116_reparto_carga.sql`: agrega medidas/sustituciones, elimina requisitos de peso/foto y crea lectura, confirmación y carga atómica, además de invalidar controles ante ediciones. No modifica pedidos existentes durante la migración.
+4. Publicar `reparto-vivo.*`, `armado-pedido.*`, `reparto-control.*`, `preparacion.js`, `index.html` y `sw.js` (caché v98). Las referencias con versión evitan que una caché anterior mezcle archivos nuevos y viejos.
+5. Abrir dos sesiones reales: enviar con Oscar/Thiago/Joaquín y comprobar la llegada a Mateo, el retorno de cambios y la reconexión.
 
 Las restricciones de navegación solicitadas para Mateo son de interfaz, coherentes con el esquema PIN existente. No sustituyen permisos de servidor sobre pedidos. La nueva cola exige sesión Auth; las escrituras pasan por la RPC y se auditan con `auth.uid()`. `actualizado_por` conserva el nombre de la sesión como etiqueta, no como prueba de identidad. Esta entrega no redefine los permisos de las tablas anteriores.
 
@@ -25,6 +30,6 @@ Las restricciones de navegación solicitadas para Mateo son de interfaz, coheren
 
 `npm ci`, `npm test`, `npx playwright install chromium`, `npm run test:ui`.
 
-- Pruebas SQL con PostgreSQL embebido (PGlite): transiciones, versiones concurrentes, sesión requerida, exclusión de pedidos despachados, validación de cantidades/peso/foto y publicación Realtime.
+- Pruebas SQL con PostgreSQL embebido (PGlite): transiciones, sesión requerida, cantidades/sustitutos, datos opcionales, carga completa/parcial, reposición atómica, rollback ante fallos, reintentos, invalidación de controles y publicación Realtime.
 - Navegador: dos sesiones con backend simulado, eventos compartidos, arrastre, fechas, gesto horizontal/scroll vertical, toque y teclado, avance por producto, validación de pesos/fotos/faltantes, errores y reintentos, borradores concurrentes, navegación de Mateo y cambio de usuario. Sin modificar pedidos reales.
 - Las pruebas simuladas no verifican la configuración ni las credenciales del Supabase productivo. La activación y el ensayo real siguen siendo necesarios.
