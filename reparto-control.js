@@ -9,9 +9,9 @@
  function abrir(ids,modo){
   if(S.busy)return;
   if(window.ArmadoPedido&&!ArmadoPedido.cerrar())return;
-  S.epoch++;S.open=true;S.ids=[...new Set(ids)];S.rows=[];S.modo=modo;S.error='';S.actionError='';S.expanded=new Set(modo==='remito'?ids:[]);S.focus=document.activeElement;
+  S.epoch++;S.open=true;S.ids=[...new Set(ids)];S.rows=[];S.modo=modo;S.error='';S.actionError='';S.expanded=new Set();S.focus=document.activeElement;
   let r=$('rc-raiz');
-  if(!r){r=document.createElement('section');r.id='rc-raiz';r.className='rc';r.setAttribute('role','dialog');r.setAttribute('aria-modal','true');r.setAttribute('aria-labelledby','rc-title');r.addEventListener('click',clic);r.addEventListener('pointerdown',()=>{S.interacting=true;});document.body.appendChild(r);}
+  if(!r){r=document.createElement('section');r.id='rc-raiz';r.className='rc';r.setAttribute('role','dialog');r.setAttribute('aria-modal','true');r.setAttribute('aria-labelledby','rc-title');r.addEventListener('click',clic);r.addEventListener('pointerdown',e=>{S.interacting=true;S.backdropDown=e.target===r;});document.body.appendChild(r);}
   S.interacting=false;S.repaint=false;
   r.hidden=false;$('appShell').inert=true;document.body.classList.add('rc-abierto');pintar();r.querySelector('[data-rc="cerrar"]')?.focus();cargar();
   clearInterval(S.timer);S.timer=setInterval(cargar,15000);
@@ -74,7 +74,7 @@
    <button class="rc-expand" data-rc="expandir" data-id="${esc(p.id)}" aria-expanded="${expanded}">${expanded?'Ocultar productos':'Ver productos'} ${expanded?'−':'+'}</button>
    ${expanded?tabla(r):''}
    ${loaded?control.reposicion_id?'<p class="rc-missing">Pedido violeta de reposición creado.</p>':'':`<div class="rc-actions">
-    <button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${off?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>
+    ${state.who!=='Mateo'?`<button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${off?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
     <button data-rc="control" data-id="${esc(p.id)}" aria-pressed="${checked}" ${off?'disabled':''}>${checked?'✓ Controlado':'Confirmar control'}</button>
     ${S.modo==='camioneta'?`<button class="rc-primary" data-rc="cargar" data-id="${esc(p.id)}" ${off||!checked?'disabled':''}>Cargar y despachar →</button>`:''}
     <button class="rc-edit" data-rc="editar" data-id="${esc(p.id)}" ${S.busy||p.estado!=='Pendiente'?'disabled':''}>Revisar armado</button>
@@ -106,6 +106,7 @@
   finally{if(epoch===S.epoch){S.busy=false;await cargar();pintar();}}
  }
  function clic(e){
+  if(e.target===$('rc-raiz')){if(S.backdropDown)cerrar();S.backdropDown=false;return;}
   const b=e.target.closest('[data-rc]');if(!b||b.disabled)return;const a=b.dataset.rc,id=b.dataset.id;
   if(a==='cerrar')return cerrar();if(a==='actualizar')return cargar();
   if(a==='expandir'){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);pintar();return;}

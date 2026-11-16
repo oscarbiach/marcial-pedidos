@@ -6,7 +6,9 @@
   const etapas = { pendiente: 'Sin enviar', por_preparar: 'Por preparar', preparando: 'Preparando', listo: 'Listos' };
   const siguiente = { pendiente: 'por_preparar', por_preparar: 'preparando', preparando: 'listo' };
   const anterior = { por_preparar: 'pendiente', preparando: 'por_preparar', listo: 'preparando' };
-  const accion = { pendiente: 'Enviar a preparar', por_preparar: 'Empezar', preparando: 'Marcar listo' };
+  const accion = { pendiente: 'Enviar a preparar', preparando: 'Marcar listo' };
+  const icono = nombre => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="marca/iconos.svg#i-${nombre}"/></svg>`;
+  const cantidadTarjeta = it => repCantidad(it).replace(/(\d)u\b/g,'$1 un.');
   const S = { filas: new Map(), pedidos: [], canal: null, timer: null, debounce: null, loading: false,
     again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0,
     dias: new Map(), diaActual: '' };
@@ -21,6 +23,12 @@
 
   function acceso() {
     document.body.classList.toggle('usuario-mateo', mateo());
+    if(mateo()&&!$('rv-mateo-progress')){
+      const header=document.querySelector('#appShell>header'),progress=document.createElement('div'),refresh=document.createElement('button');
+      progress.id='rv-mateo-progress';progress.className='rv';progress.addEventListener('click',clic);header.prepend(progress);
+      refresh.id='rv-mateo-refresh';refresh.innerHTML='↻';refresh.setAttribute('aria-label','Actualizar');refresh.title='Actualizar';
+      refresh.addEventListener('click',()=>activeTab==='reparto'?cargar():reload());header.insertBefore(refresh,$('whoBtn'));
+    }
     if (S.usuario !== state.who) {
       detener(); S.usuario = state.who; S.legacy = false; S.ready = false;
       S.filas.clear(); S.pedidos = []; S.busy.clear(); S.error = '';
@@ -102,9 +110,11 @@
       panel.prepend(root);
       root.addEventListener('click', clic);
       root.addEventListener('keydown', e => {
-        if (e.target.matches('.rv-card') && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault(); abrirArmado(e.target.dataset.id);
-        }
+        if (!e.target.matches('.rv-card')) return;
+        const id=e.target.dataset.id, de=etapa(id);
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirArmado(id); }
+        const to=e.key==='ArrowRight'?siguiente[de]:e.key==='ArrowLeft'?anterior[de]:null;
+        if(to&&permiso(de,to)){e.preventDefault();mover(id,to);}
       });
       root.addEventListener('pointerdown', down);
       root.addEventListener('dragstart', e => { if(e.target.closest('.rv-card'))e.preventDefault(); });
@@ -120,19 +130,16 @@
     if (activeTab === 'reparto') { iniciar(); pintar(); }
   }
   function tarjeta(p) {
-    const e = etapa(p.id), fila = S.filas.get(p.id), busy = S.busy.has(p.id), next = siguiente[e];
+    const e = etapa(p.id), busy = S.busy.has(p.id), next = siguiente[e];
     const fecha = etiquetaFecha(p.fechaEntrega);
-    const puedeMover = (permiso(e,next) || permiso(e,anterior[e])) && S.ready && !S.error && !busy;
-    return `<article class="rv-card" tabindex="0" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]} · Tocar para armar" aria-busy="${busy}">
-      <div class="rv-card-top"><span>${esc(fecha)}</span><span>${esc(p.quien || '')}</span>${puedeMover ? '<span class="rv-grip" data-rv-grip aria-hidden="true" title="Agarrá para mover el pedido">⠿</span>' : ''}</div>
+    const abre=['preparando','listo'].includes(e);
+    return `<article class="rv-card${!navigator.onLine||S.error||busy?' rv-no-drag':''}" tabindex="0" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]}${abre?' · Tocar para ver el pedido':''}" aria-keyshortcuts="ArrowLeft ArrowRight${abre?' Enter Space':''}" aria-busy="${busy}">
+      ${!mateo()?`<div class="rv-card-top"><span>${esc(fecha)}</span><span>${esc(p.quien || '')}</span></div>`:''}
       <h3>${esc(p.cliente)}</h3>
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
-      <ul>${p.items.slice(0,3).map(it => `<li><b>${esc(repCantidad(it))}</b> ${esc(it.prod)} <em>${esc(repTagsTexto(it))}</em></li>`).join('')}</ul>
-      ${p.items.length > 3 ? `<span class="rv-more">+ ${p.items.length-3} productos · Abrí el detalle</span>` : ''}
+      <ul>${p.items.map(it => `<li><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
       ${p.notas ? `<p class="rv-note">${esc(p.notas)}</p>` : ''}
-      <div class="rv-actions"><button data-rv="detalle" data-id="${esc(p.id)}">${e==='listo'&&!mateo()?'Ver remito':'Abrir armado'}</button>
-      ${next && permiso(e,next) ? `<button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button>` : ''}</div>
-      ${anterior[e] && permiso(e,anterior[e]) ? `<button class="rv-back" data-rv="mover" data-id="${esc(p.id)}" data-to="${anterior[e]}" ${busy || S.error ? 'disabled' : ''}>← ${e === 'por_preparar' ? 'Quitar de la cola' : e === 'listo' ? 'Volver a preparar' : 'Volver a la cola'}</button>` : ''}
+      ${['pendiente','preparando'].includes(e) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
     </article>`;
   }
   function etiquetaFecha(f) {
@@ -174,19 +181,24 @@
     const cols = mateo() ? ['por_preparar','preparando','listo'] : ['pendiente','por_preparar','preparando','listo'];
     const total = S.pedidos.filter(p => etapa(p.id) !== 'pendiente').length;
     const listos = S.pedidos.filter(p => etapa(p.id) === 'listo').length;
-    const html = `<header class="rv-header"><div><span class="rv-eyebrow">DEPÓSITO · REPARTO</span>
-      <h2>${mateo() ? 'Tu mesa de preparación' : 'Preparación en vivo'}</h2>
-      <p>${mateo() ? 'Tocá un pedido para armarlo. Agarrá la tarjeta para moverla entre columnas.' : 'Elegí los pedidos del día y arrastralos a Por preparar. Tocá una tarjeta para abrir su armado.'}</p></div>
-      <div class="rv-status"><span class="rv-connection ${S.live && !S.error ? 'online' : ''}" role="status">${!navigator.onLine ? 'Sin conexión' : S.error ? 'Sin sincronizar' : S.live ? 'En vivo' : 'Reconectando…'}</span>
-      <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button>${!mateo() ? '<button data-rv="hojas">Hojas de reparto</button>' : ''}</div></header>
-      <div class="rv-summary"><b>${listos} de ${total} listos</b><div class="rv-progress" role="progressbar" aria-label="Pedidos listos" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${listos}"><i style="width:${total ? listos/total*100 : 0}%"></i></div><button class="rv-truck" data-rv="camioneta" ${!total||listos!==total?'disabled':''}>Camioneta · Controlar y cargar →</button></div>
+    const conexion=`<span class="rv-connection ${S.live && !S.error && navigator.onLine ? 'online' : ''}" role="status">${!navigator.onLine ? 'Sin conexión' : S.error ? 'Sin sincronizar' : S.live ? 'En vivo' : 'Reconectando…'}</span>`;
+    const resumen=`<div class="rv-summary"><b aria-label="${listos} de ${total} pedidos listos">${mateo()?`${listos}/${total}`:`${listos} de ${total} listos`}</b><div class="rv-progress" role="progressbar" aria-label="Pedidos listos" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${listos}"><i style="width:${total ? listos/total*100 : 0}%"></i></div><button class="rv-truck" data-rv="camioneta" aria-label="Camioneta: controlar y cargar" title="Controlar y cargar" ${!total||listos!==total||!S.ready||S.error?'disabled':''}>${mateo()?icono('truck'):'Camioneta · Controlar y cargar →'}</button></div>`;
+    if(mateo()){
+      const barra=$('rv-mateo-progress'),contenido=resumen+conexion;
+      if(barra&&barra._html!==contenido){barra._html=contenido;barra.innerHTML=contenido;}
+    }
+    const html = `${mateo()?'':`<header class="rv-header"><div><span class="rv-eyebrow">DEPÓSITO · REPARTO</span>
+      <h2>Preparación en vivo</h2>
+      <p>Arrastrá para mover. En el celular, mantené presionada la tarjeta. Tocá en Preparando para armar.</p></div>
+      <div class="rv-status">${conexion}
+      <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button><button data-rv="hojas">Hojas de reparto</button></div></header>${resumen}`}
       ${S.error ? `<div class="rv-error" role="alert">${esc(S.error)} <button data-rv="refresh">Reintentar</button></div>` : ''}
       <div class="rv-board ${mateo() ? 'rv-mateo' : ''}">${cols.map(e => {
         const pedidos = S.pedidos.filter(p => etapa(p.id) === e).sort((a,b) => {
           if(e === 'pendiente') return (a.fechaEntrega || '9999').localeCompare(b.fechaEntrega || '9999');
           return String(S.filas.get(a.id)?.enviado_en || '').localeCompare(String(S.filas.get(b.id)?.enviado_en || '')) || a.id.localeCompare(b.id);
         });
-        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3><div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : pedidos.map(tarjeta).join('')) || `<div class="rv-empty"><span>${e === 'listo' ? '✓' : '◇'}</span><b>${!S.ready ? 'Cargando pedidos…' : e === 'por_preparar' ? 'Todo al día' : 'Sin pedidos'}</b><p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Mové los pedidos con el mouse o con sus botones.'}</p></div>`}</div></section>`;
+        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3><div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : pedidos.map(tarjeta).join('')) || `<div class="rv-empty"><b>${!S.ready ? 'Cargando pedidos…' : e === 'por_preparar' ? 'Todo al día' : 'Sin pedidos'}</b>${!mateo()?`<p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Arrastrá un pedido hasta acá.'}</p>`:''}</div>`}</div></section>`;
       }).join('')}</div>`;
     if (r._html === html) return;
     r._html = html;
@@ -223,7 +235,7 @@
     const b = e.target.closest('[data-rv]');
     if (!b) {
       const card = e.target.closest('.rv-card');
-      if (card && !e.target.closest('[data-rv-grip],a,input')) abrirArmado(card.dataset.id);
+      if (card && !e.target.closest('a,input')) abrirArmado(card.dataset.id);
       return;
     }
     if (b.disabled) return;
@@ -232,13 +244,10 @@
     if (b.dataset.rv === 'refresh') cargar();
     if (b.dataset.rv === 'camioneta') RepartoControl.camioneta(S.pedidos.filter(p=>etapa(p.id)==='listo').map(p=>p.id));
     if (b.dataset.rv === 'hojas') { S.legacy = true; montar(); renderReparto(); }
-    if (b.dataset.rv === 'detalle') {
-      abrirArmado(b.dataset.id);
-    }
   }
   function abrirArmado(id) {
     const p = S.pedidos.find(x => x.id === id);
-    if (p && !S.busy.has(id)) {
+    if (p && ['preparando','listo'].includes(etapa(id)) && !S.busy.has(id)) {
       if(etapa(id)==='listo'&&!mateo()) RepartoControl.remito(p.id);
       else Preparacion.abrirPedido(p);
     }
@@ -247,30 +256,36 @@
     const card = e.target.closest('.rv-card');
     if (S.drag || !card || e.target.closest('button,input,a') || e.button !== 0 || !e.isPrimary || S.busy.has(card.dataset.id) || !S.ready || S.error || !navigator.onLine) return;
     const de = etapa(card.dataset.id);
-    const mode = e.pointerType === 'touch' && !e.target.closest('[data-rv-grip]') ? 'swipe' : 'drag';
-    if (!permiso(de,siguiente[de]) && (mode === 'swipe' || !permiso(de,anterior[de]))) return;
-    S.drag = {card,id:card.dataset.id,from:de,mode,version:S.filas.get(card.dataset.id)?.version || 0,pointer:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,dx:0,locked:false};
+    const mode = e.pointerType === 'touch' ? 'pending' : 'drag';
+    if (!permiso(de,siguiente[de]) && !permiso(de,anterior[de])) return;
+    const d = S.drag = {card,id:card.dataset.id,from:de,mode,version:S.filas.get(card.dataset.id)?.version || 0,pointer:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,locked:false};
     // Captura inmediata: un movimiento rápido no se pierde al salir de la tarjeta.
     card.setPointerCapture(e.pointerId);
     if (mode === 'drag') e.preventDefault();
+    else d.hold=setTimeout(()=>{if(S.drag===d&&d.mode==='pending'){d.mode='drag';iniciarDrag(d);posicionarDrag(d);}},220);
   }
   function move(e) {
     const d = S.drag; if (!d || e.pointerId !== d.pointer) return;
+    const scrollDelta=d.lastY-e.clientY;
     d.lastX = e.clientX; d.lastY = e.clientY;
     const dx = e.clientX-d.x, dy = e.clientY-d.y;
+    if(d.mode==='pending'&&Math.hypot(dx,dy)>=8){
+      clearTimeout(d.hold);
+      d.mode=Math.abs(dy)>Math.abs(dx)?'scroll':'drag';
+      if(d.mode==='scroll')d.locked=true;
+    }
+    if(d.mode==='scroll'){
+      e.preventDefault();
+      const list=d.card.closest('.rv-list'),before=list.scrollTop;
+      list.scrollTop+=scrollDelta;
+      window.scrollBy(0,scrollDelta-(list.scrollTop-before));
+      return;
+    }
     if (d.mode === 'drag') {
       if (!d.locked && Math.hypot(dx,dy) >= 6) iniciarDrag(d);
       if (d.locked) { e.preventDefault(); posicionarDrag(d); }
       return;
     }
-    if (!d.locked && Math.abs(dy)>10 && Math.abs(dy)>Math.abs(dx)) { cancel(); return; }
-    if (!d.locked && dx>10 && dx>Math.abs(dy)*1.3) {
-      d.locked = true; d.card.classList.add('rv-dragging');
-    }
-    if (!d.locked) return;
-    d.dx = Math.min(Math.max(0,dx),160);
-    d.card.style.transform = `translateX(${d.dx}px) rotate(${d.dx/100}deg)`;
-    d.card.classList.toggle('rv-armed', d.dx >= 85);
   }
   function iniciarDrag(d) {
     d.locked = true;
@@ -321,7 +336,7 @@
   }
   function up(e) {
     const d = S.drag; if (!d || e.pointerId !== d.pointer) return;
-    const to = d.locked ? d.mode === 'drag' ? destino(e.clientX,e.clientY,d)?.dataset.stage : d.dx >= 85 ? siguiente[d.from] : null : null;
+    const to = d.locked && d.mode === 'drag' ? destino(e.clientX,e.clientY,d)?.dataset.stage : null;
     S.noClickUntil = d.locked ? Date.now()+350 : 0;
     cancel();
     if (to) {
@@ -332,10 +347,11 @@
   function cancel() {
     const d = S.drag; S.drag = null;
     if (d) {
+      clearTimeout(d.hold);
       cancelAnimationFrame(d.raf);
       if (d.card.hasPointerCapture(d.pointer)) d.card.releasePointerCapture(d.pointer);
       d.ghost?.remove();
-      d.card.style.transform = ''; d.card.classList.remove('rv-dragging','rv-armed','rv-origin');
+      d.card.classList.remove('rv-origin');
       document.body.classList.remove('rv-arrastrando');
       $('rv-raiz')?.querySelectorAll('.rv-drop-allowed,.rv-drop-over').forEach(el => el.classList.remove('rv-drop-allowed','rv-drop-over'));
       if (d.locked) S.noClickUntil = Date.now()+350;
