@@ -387,7 +387,12 @@
   }
   // La foto lleva escrito cliente, producto y peso (como pide el cartel), achicada para que suba rápido.
   async function conTexto(file, lineas) {
-    const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = mal; i.src = URL.createObjectURL(file); });
+    const img = await new Promise((ok, mal) => {
+      const i = new Image(), url = URL.createObjectURL(file);
+      i.onload = () => { URL.revokeObjectURL(url); ok(i); };
+      i.onerror = () => { URL.revokeObjectURL(url); mal(new Error('La imagen no se pudo abrir. Elegí otra foto.')); };
+      i.src = url;
+    });
     const max = 1400, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
     const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
     const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -422,5 +427,11 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
     }
   });
-  window.Preparacion = { abrir, abrirPedido: p => abrir(null,p), cerrar, refrescar: cargar, _S: S };
+  window.Preparacion = {
+    abrir, abrirPedido: p => window.ArmadoPedido ? ArmadoPedido.abrir(p) : abrir(null,p),
+    abrirOperaciones: p => { abrir(null,p); S.paso = 'remitos'; pintar(); },
+    fotoConTexto: conTexto,
+    cerrar: (refrescar = true) => { cerrar(refrescar); if (window.ArmadoPedido) ArmadoPedido.cerrar(!refrescar); },
+    refrescar: () => { cargar(); if (window.ArmadoPedido) ArmadoPedido.refrescar(); }, _S: S
+  };
 })();
