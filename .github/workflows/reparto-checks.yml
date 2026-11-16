@@ -1,0 +1,20 @@
+name: Reparto checks
+on:
+  pull_request:
+    paths: ['reparto-vivo.*', 'preparacion.*', 'index.html', 'sw.js', 'supabase/migrations/*preparacion.sql', 'supabase/migrations/*reparto_en_vivo.sql', 'tests/reparto*', 'tests/serve.cjs', 'package*.json', 'playwright.config.cjs', '.github/workflows/reparto-checks.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui

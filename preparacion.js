@@ -8,7 +8,7 @@
                   abre el checklist de despacho de siempre con los faltantes ya cargados (despacha y arma las reposiciones).
    Pensado para usarse en un iPad apaisado (botones grandes). Datos: prep_productos, prep_items, prep_pedidos y el bucket
    «preparacion» (supabase/migrations/20261113_preparacion.sql). No modifica pedidos hasta el despacho.
-   Varias pantallas a la vez (iPad del depósito y la PC de remitos): se refresca sola cada 20 segundos. */
+   RepartoVivo avisa cambios en tiempo real; el temporizador recupera eventos perdidos. */
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -23,34 +23,44 @@
 
   const S = {
     hoja: null, pedidos: [], items: new Map(), peds: new Map(), prods: new Map(),
-    paso: 'juntar', abierto: false, timer: null, fotos: new Map(), cargando: false, error: ''
+    paso: 'juntar', abierto: false, timer: null, fotos: new Map(), cargando: false, error: '',
+    pedidoId: null, revision: 0, pendiente: false, guardando: new Set()
   };
 
   // ── Datos ──────────────────────────────────────────────────────────
   async function cargar() {
-    if (!S.hoja || S.cargando) return;
+    if (!S.hoja || !S.abierto) return;
+    if (S.cargando || S.guardando.size || esEditando()) { S.pendiente = true; return; }
     S.cargando = true;
+    S.pendiente = false;
+    const revision = S.revision;
     try {
-      const { data: hp, error: e1 } = await sb.from('hoja_reparto_pedidos').select('pedido_id,orden').eq('hoja_id', S.hoja.id).order('orden');
+      const { data: hp, error: e1 } = S.pedidoId ? {data:[{pedido_id:S.pedidoId}]} : await sb.from('hoja_reparto_pedidos').select('pedido_id,orden').eq('hoja_id', S.hoja.id).order('orden');
       if (e1) throw e1;
       const ids = (hp || []).map(x => x.pedido_id);
       // Los pedidos salen del estado de la app; si alguno no está (ya despachado y viejo), se pide aparte.
       const enEstado = new Map((state.pedidos || []).map(p => [p.id, p]));
-      const faltan = ids.filter(id => !enEstado.has(id));
+      const faltan = ids;
       if (faltan.length && typeof mapPedido_ === 'function') {
         const { data, error } = await sb.from('pedidos')
           .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+          .is('eliminado_en', null)
           .in('id', faltan);
-        if (!error) (data || []).forEach(r => enEstado.set(r.id, mapPedido_(r)));
+        if (error) throw error;
+        ids.forEach(id => enEstado.delete(id));
+        (data || []).forEach(r => enEstado.set(r.id, mapPedido_(r)));
       }
-      S.pedidos = ids.map(id => enEstado.get(id)).filter(Boolean);
-      const itemIds = S.pedidos.flatMap(p => p.items.map(it => it.id)).filter(x => x != null);
+      const pedidos = ids.map(id => enEstado.get(id)).filter(Boolean);
+      const itemIds = pedidos.flatMap(p => p.items.map(it => it.id)).filter(x => x != null);
       const [pi, pp, pr] = await Promise.all([
         itemIds.length ? sb.from('prep_items').select('*').in('item_id', itemIds) : { data: [] },
         ids.length ? sb.from('prep_pedidos').select('*').in('pedido_id', ids) : { data: [] },
-        S.prods.size ? { data: null } : sb.from('prep_productos').select('nombre,frio,se_pesa')
+        sb.from('prep_productos').select('nombre,frio,se_pesa')
       ]);
       for (const r of [pi, pp, pr]) if (r.error) throw r.error;
+      if (revision !== S.revision || !S.abierto) return;
+      if (S.guardando.size || esEditando()) { S.pendiente = true; return; }
+      S.pedidos = pedidos;
       S.items = new Map((pi.data || []).map(x => [x.item_id, x]));
       S.peds = new Map((pp.data || []).map(x => [x.pedido_id, x]));
       if (pr.data) S.prods = new Map(pr.data.map(x => [x.nombre, x]));
@@ -58,7 +68,10 @@
       await firmarFotos();
     } catch (e) {
       S.error = 'No se pudo actualizar (' + (e.message || e) + '). Se reintenta solo.';
-    } finally { S.cargando = false; }
+    } finally {
+      S.cargando = false;
+      if (S.pendiente && S.abierto && !esEditando() && !S.guardando.size) setTimeout(cargar, 0);
+    }
     pintar();
   }
   const prodDe = n => S.prods.get(n) || { nombre: n, frio: true, se_pesa: false };
@@ -66,18 +79,25 @@
   const pp = p => S.peds.get(p.id) || { pedido_id: p.id, controlado: false, cargado: false };
 
   async function guardarItem(itemId, cambios) {
+    if (S.guardando.has(itemId)) return false;
+    S.revision++;
+    S.guardando.add(itemId);
     const prev = S.items.get(itemId) || { item_id: itemId, juntado: false, separado: false, falta: false };
     const fila = { ...prev, ...cambios, item_id: itemId, quien: quien(), actualizado_en: new Date().toISOString() };
     S.items.set(itemId, fila); pintar();
-    const { error } = await sb.from('prep_items').upsert(fila);
-    if (error) { aviso('No se guardó: ' + error.message); S.items.set(itemId, prev); pintar(); return false; }
-    return true;
+    try {
+      // Solo las columnas modificadas: no sobrescribir pesos/fotos guardados desde otra pantalla.
+      const { error } = await sb.from('prep_items').upsert({item_id:itemId,...cambios,quien:quien(),actualizado_en:fila.actualizado_en});
+      if (error) throw error;
+      return true;
+    } catch (e) { aviso('No se guardó: ' + e.message); S.items.set(itemId, prev); return false; }
+    finally { S.guardando.delete(itemId); pintar(); cargar(); }
   }
   async function guardarPedido(pid, cambios) {
     const prev = S.peds.get(pid) || { pedido_id: pid, controlado: false, cargado: false };
     const fila = { ...prev, ...cambios, pedido_id: pid };
     S.peds.set(pid, fila); pintar();
-    const { error } = await sb.from('prep_pedidos').upsert(fila);
+    const { error } = await sb.from('prep_pedidos').upsert({pedido_id:pid,...cambios});
     if (error) { aviso('No se guardó: ' + error.message); S.peds.set(pid, prev); pintar(); }
   }
 
@@ -118,6 +138,7 @@
   function itemListo(it) {
     const x = pi(it);
     if (!x.separado) return false;
+    if (x.falta && (x.enviado == null || Number(x.enviado) < 0 || Number(x.enviado) > Number(it.qty))) return false;
     if (x.falta && Number(x.enviado) === 0) return true;
     if (prodDe(it.prod).se_pesa) return num(x.peso) > 0 && !!x.foto;
     return true;
@@ -203,11 +224,12 @@
   }
   function pintar() {
     const r = $('pp-raiz'); if (!r || !S.abierto) return;
-    const c = contar(), pasos = [['juntar', '1 Juntar'], ['separar', '2 Separar y pesar'], ['remitos', '3 Remitos'], ['cargar', '4 Cargar']];
+    if (esEditando() || S.interacting) { S.pendiente = true; return; }
+    const c = contar(), pasos = [['juntar', 'Productos'], ['separar', 'Preparar'], ['remitos', 'Remito'], ['cargar', 'Camioneta']];
     const foco = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.a === 'peso' ? document.activeElement.dataset.i : null;
     const scroll = $('pp-cuerpo') ? $('pp-cuerpo').scrollTop : 0;
     r.innerHTML = `<div class="pp-top">
-        <div class="pp-tit"><b>Preparación</b><span>Hoja del ${esc(fecha(S.hoja.fecha))} · ${S.pedidos.length} pedido${S.pedidos.length !== 1 ? 's' : ''}</span></div>
+        <div class="pp-tit"><b>${S.pedidoId ? esc(S.pedidos[0]?.cliente || 'Pedido') : 'Preparación'}</b><span>${S.pedidoId ? 'Prepará, registrá los faltantes y volvé al tablero' : 'Hoja del ' + esc(fecha(S.hoja.fecha))}</span></div>
         <button class="pp-x" data-a="refrescar" title="Actualizar">⟳</button>
         <button class="pp-x" data-a="cerrar" title="Cerrar">✕</button>
       </div>
@@ -220,22 +242,34 @@
     if (foco) { const el = r.querySelector(`[data-a="peso"][data-i="${foco}"]`); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
   }
 
-  function abrir(hojaId) {
-    const h = (state.hojas || []).find(x => x.id === hojaId) || (state.hojas || [])[0];
+  function abrir(hojaId, pedido) {
+    const h = pedido ? {id:'pedido-' + pedido.id,fecha:pedido.fechaEntrega} : (state.hojas || []).find(x => x.id === hojaId) || (state.hojas || [])[0];
     if (!h) return aviso('Primero armá y guardá la hoja de reparto.');
-    S.hoja = h; S.abierto = true; S.paso = 'juntar'; S.pedidos = []; S.items = new Map(); S.peds = new Map();
+    S.revision++; S.pedidoId = pedido?.id || null;
+    S.hoja = h; S.abierto = true; S.paso = pedido ? 'separar' : 'juntar'; S.pedidos = pedido ? [pedido] : []; S.items = new Map(); S.peds = new Map();
     let r = $('pp-raiz');
-    if (!r) { r = document.createElement('div'); r.id = 'pp-raiz'; r.className = 'pp'; document.body.appendChild(r); r.addEventListener('click', clic); r.addEventListener('change', cambio); }
+    if (!r) {
+      r = document.createElement('div'); r.id = 'pp-raiz'; r.className = 'pp'; document.body.appendChild(r);
+      r.addEventListener('click', clic); r.addEventListener('change', cambio);
+      r.addEventListener('pointerdown', () => { S.interacting = true; });
+      const soltar = () => setTimeout(() => { S.interacting = false; if (S.pendiente) { pintar(); cargar(); } }, 0);
+      document.addEventListener('pointerup', soltar); document.addEventListener('pointercancel', soltar);
+    }
+    r.classList.toggle('pp-pedido', !!pedido);
+    r.setAttribute('role','dialog'); r.setAttribute('aria-modal','true'); r.setAttribute('aria-label','Detalle de preparación');
     r.hidden = false; document.body.classList.add('pp-abierto');
     pintar(); cargar();
+    r.querySelector('[data-a="cerrar"]')?.focus();
     clearInterval(S.timer); S.timer = setInterval(() => { if (!document.hidden && !esEditando()) cargar(); }, 20000);
   }
   const esEditando = () => document.activeElement && document.activeElement.dataset && document.activeElement.dataset.a === 'peso';
-  function cerrar() {
+  function cerrar(refrescar = true) {
+    S.revision++;
     S.abierto = false; clearInterval(S.timer);
     const r = $('pp-raiz'); if (r) r.hidden = true;
     document.body.classList.remove('pp-abierto');
-    if (typeof reload === 'function') reload();
+    if (refrescar && typeof reload === 'function') reload();
+    if (refrescar && window.RepartoVivo) RepartoVivo.refrescar();
   }
 
   // ── Acciones ───────────────────────────────────────────────────────
@@ -274,7 +308,7 @@
       const { it } = itemPorId(id);
       const v = prompt(`¿Cuánto se manda de «${it ? it.prod : ''}»? (pedido: ${it ? cant(it) : ''}). Poné 0 si no va nada.`, '0');
       if (v === null) return;
-      const n = num(v); if (n === null || n < 0) return aviso('Poné un número');
+      const n = num(v); if (n === null || n < 0 || (it && n > Number(it.qty))) return aviso('Poné una cantidad entre 0 y lo pedido');
       return guardarItem(id, { falta: true, enviado: n, separado: true });
     }
     if (a === 'foto') { S.fotoPara = { itemId: Number(b.dataset.i), pedidoId: b.dataset.p }; const inp = $('pp-camara'); inp.value = ''; inp.click(); return; }
@@ -348,8 +382,7 @@
       const { error } = await sb.storage.from('preparacion').upload(ruta, blob, { contentType: 'image/jpeg', upsert: true });
       if (error) throw error;
       S.fotos.set(ruta, URL.createObjectURL(blob));
-      await guardarItem(it.id, { peso, foto: ruta, separado: true });
-      aviso('✓ Foto guardada');
+      if (await guardarItem(it.id, { peso, foto: ruta, separado: true })) aviso('✓ Foto guardada');
     } catch (e) { aviso('No se pudo subir la foto: ' + (e.message || e)); }
   }
   // La foto lleva escrito cliente, producto y peso (como pide el cartel), achicada para que suba rápido.
@@ -378,5 +411,16 @@
     document.body.appendChild(v);
   }
 
-  window.Preparacion = { abrir, cerrar, _S: S };
+  document.addEventListener('focusout', () => { if (S.abierto && S.pendiente) setTimeout(cargar, 0); });
+  document.addEventListener('keydown', e => {
+    if (!S.abierto) return;
+    if (e.key === 'Escape') cerrar();
+    if (e.key === 'Tab') {
+      const els = [...$('pp-raiz').querySelectorAll('button:not(:disabled), input:not([hidden])')];
+      const first = els[0], last = els[els.length-1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  });
+  window.Preparacion = { abrir, abrirPedido: p => abrir(null,p), cerrar, refrescar: cargar, _S: S };
 })();
