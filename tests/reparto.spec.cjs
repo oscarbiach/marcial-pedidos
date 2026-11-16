@@ -75,7 +75,7 @@ async function setup(browser){
 test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',async({browser})=>{
  const s=await setup(browser),oscar=await s.open('Oscar'),mateo=await s.open('Mateo');
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
- await expect(mateo.locator('#pcNav button:visible')).toHaveCount(2);
+ await expect(mateo.locator('#pcNav')).toBeHidden();await expect(mateo.locator('#rv-mateo-nav')).toBeVisible();
  await mateo.evaluate(()=>goTab('cargar'));
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
  await expect(oscar.locator('.rv-pendiente .rv-card')).toHaveCount(2);
@@ -223,6 +223,7 @@ test('detalle conserva peso en edición; novedades y navegación de Mateo',async
  await expect(page.locator('#tab-pedidos')).toHaveClass(/active/);
  await page.evaluate(()=>{state.who='Joaquin';mostrarApp();goTab('reparto')});
  await expect(page.locator('#pcNav [data-tab="cargar"]')).toBeVisible();
+ await expect(page.locator('#rv-mateo-nav')).toBeHidden();
  expect(s.errors).toEqual([]);await s.close();
 });
 
@@ -460,22 +461,26 @@ test('Por preparar solo muestra el pedido; Mateo no ve autor ni fecha',async({br
  expect(s.errors).toEqual([]);await s.close();
 });
 
-test('Mateo usa toda la pantalla con selector, contador, progreso y camioneta',async({browser})=>{
+test('Mateo cambia entre Reparto y Pedidos con un único botón redondo',async({browser})=>{
  const s=await setup(browser);enCola(s);
  for(const width of [390,1440]){
   const page=await s.open('Mateo',{width,height:900},{hasTouch:width===390});
   await expect(page.locator('#appTitle')).toBeHidden();await expect(page.locator('#bottomNav')).toBeHidden();
   await expect(page.getByText('Tu mesa de preparación')).toHaveCount(0);
-  await expect(page.locator('#pcNav button:visible')).toHaveCount(2);
+  await expect(page.locator('#pcNav')).toBeHidden();
+  const toggle=page.locator('#rv-mateo-nav');await expect(toggle).toHaveText('');await expect(toggle).toHaveCSS('border-radius','50%');
+  await expect(toggle).toHaveAttribute('aria-label','Ir a Pedidos');await expect(toggle.locator('use')).toHaveAttribute('href','marca/iconos.svg#i-shopping-cart');
   await expect(page.locator('#rv-mateo-progress .rv-summary>b')).toHaveText('0/1');
   await expect(page.locator('#rv-mateo-progress .rv-truck')).toHaveText('');
   await expect(page.locator('#rv-mateo-refresh')).toHaveText('↻');
-  const main=await page.locator('main').boundingBox(),bar=await page.locator('#rv-mateo-progress').boundingBox(),nav=await page.locator('#pcNav').boundingBox();
+  const main=await page.locator('main').boundingBox(),bar=await page.locator('#rv-mateo-progress').boundingBox(),nav=await toggle.boundingBox(),refresh=await page.locator('#rv-mateo-refresh').boundingBox();
   expect(main.width).toBeGreaterThan(width-25);expect(bar.y).toBeLessThan(nav.y);
-  await page.locator('#pcNav [data-tab="pedidos"]').click();await expect(page.locator('#tab-pedidos')).toHaveClass(/active/);
+  expect(refresh.x-nav.x-nav.width).toBe(8);expect(refresh.y).toBe(nav.y);
+  await toggle.click();await expect(page.locator('#tab-pedidos')).toHaveClass(/active/);
   await expect(page.locator('#rv-mateo-progress')).toBeHidden();
-  await page.locator('#pcNav [data-tab="reparto"]').click();await expect(page.locator('#tab-reparto')).toHaveClass(/active/);
-  await expect(page.locator('#pcNav [data-tab="reparto"]')).toHaveAttribute('aria-pressed','true');
+  await expect(toggle).toHaveAttribute('aria-label','Ir a Reparto');await expect(toggle.locator('use')).toHaveAttribute('href','marca/iconos.svg#i-truck');
+  await toggle.press('Enter');await expect(page.locator('#tab-reparto')).toHaveClass(/active/);
+  await expect(toggle).toHaveAttribute('aria-label','Ir a Pedidos');
   await page.screenshot({path:`test-results/mateo-completo-${width}.png`,animations:'disabled'});
  }
  expect(s.errors).toEqual([]);await s.close();

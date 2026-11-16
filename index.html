@@ -1599,9 +1599,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=99">
-<link rel="stylesheet" href="armado-pedido.css?v=99">
-<link rel="stylesheet" href="reparto-control.css?v=99">
+<link rel="stylesheet" href="reparto-vivo.css?v=100">
+<link rel="stylesheet" href="armado-pedido.css?v=100">
+<link rel="stylesheet" href="reparto-control.css?v=100">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -3095,6 +3095,7 @@ function setTab(tab) {
   // Stock: solo Oscar y Joaquín (lo confirma la base con stock_es_admin; ver stock.js).
   if (tab === 'stock' && !document.body.classList.contains('stock-visible')) tab = 'pedidos';
   activeTab = tab;
+  if (window.RepartoVivo) RepartoVivo.navegacion();
   document.body.classList.toggle('reparto-vivo', tab === 'reparto' && !!window.RepartoVivo && RepartoVivo.activo());
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -6595,9 +6596,9 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js?v=99"></script>
-<script src="armado-pedido.js?v=99"></script>
-<script src="reparto-control.js?v=99"></script>
-<script src="reparto-vivo.js?v=99"></script>
+<script src="preparacion.js?v=100"></script>
+<script src="armado-pedido.js?v=100"></script>
+<script src="reparto-control.js?v=100"></script>
+<script src="reparto-vivo.js?v=100"></script>
 </body>
 </html>

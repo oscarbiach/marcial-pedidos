@@ -24,10 +24,11 @@
   function acceso() {
     document.body.classList.toggle('usuario-mateo', mateo());
     if(mateo()&&!$('rv-mateo-progress')){
-      const header=document.querySelector('#appShell>header'),progress=document.createElement('div'),refresh=document.createElement('button');
+      const header=document.querySelector('#appShell>header'),progress=document.createElement('div'),refresh=document.createElement('button'),nav=document.createElement('button');
       progress.id='rv-mateo-progress';progress.className='rv';progress.addEventListener('click',clic);header.prepend(progress);
       refresh.id='rv-mateo-refresh';refresh.innerHTML='↻';refresh.setAttribute('aria-label','Actualizar');refresh.title='Actualizar';
       refresh.addEventListener('click',()=>activeTab==='reparto'?cargar():reload());header.insertBefore(refresh,$('whoBtn'));
+      nav.id='rv-mateo-nav';nav.addEventListener('click',()=>goTab(activeTab==='reparto'?'pedidos':'reparto'));header.insertBefore(nav,refresh);
     }
     if (S.usuario !== state.who) {
       detener(); S.usuario = state.who; S.legacy = false; S.ready = false;
@@ -37,6 +38,14 @@
       if (window.RepartoControl) RepartoControl.cerrar(true);
       if (mateo()) { activeTab = 'reparto'; repSel = []; }
     }
+    navegacion();
+  }
+  function navegacion() {
+    const nav=$('rv-mateo-nav');if(!nav||!mateo())return;
+    const reparto=activeTab==='reparto',destino=reparto?'Pedidos':'Reparto';
+    nav.innerHTML=icono(reparto?'shopping-cart':'truck');
+    nav.title='Ir a '+destino;nav.setAttribute('aria-label',nav.title);
+    nav.setAttribute('aria-controls','tab-'+destino.toLowerCase());
   }
   function detener() {
     cancel();
@@ -364,5 +373,5 @@
   window.addEventListener('blur', cancel);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') cancel(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); else if (S.canal) cargar(); });
-  window.RepartoVivo = { montar, acceso, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
+  window.RepartoVivo = { montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
 })();

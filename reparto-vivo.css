@@ -2,14 +2,16 @@
 body.usuario-mateo #pcNav [data-tab]:not([data-tab="reparto"]):not([data-tab="pedidos"]),
 body.usuario-mateo #bottomNav [data-tab]:not([data-tab="reparto"]):not([data-tab="pedidos"]) { display:none !important; }
 body.usuario-mateo #tab-cargar, body.usuario-mateo #repClasico, body.usuario-mateo #repBar { display:none !important; }
-#rv-mateo-progress,#rv-mateo-refresh { display:none; }
-body.usuario-mateo #appShell>header { display:grid; grid-template-columns:minmax(0,1fr) 44px 44px; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 12px 8px; }
+#rv-mateo-progress,#rv-mateo-refresh,#rv-mateo-nav { display:none; }
+body.usuario-mateo #appShell>header { display:grid; grid-template-columns:minmax(0,1fr) repeat(3,44px); gap:8px; padding:calc(8px + env(safe-area-inset-top)) 12px 8px; }
 body.usuario-mateo #appShell>header .hdr-marca,body.usuario-mateo #appTitle,body.usuario-mateo #refreshDot,body.usuario-mateo #bottomNav,body.usuario-mateo #installBar,body.usuario-mateo #whoBtn span { display:none !important; }
-body.usuario-mateo #pcNav { display:flex !important; width:min(340px,100%); padding:4px; gap:0; margin:0; }
-body.usuario-mateo #pcNav button { flex:1; justify-content:center; min-height:38px; font-size:15px; padding:0 10px; }
-body.usuario-mateo #pcNav [data-tab="reparto"] { order:-1; }
-body.usuario-mateo #pcNav .ico { display:none; }
-body.usuario-mateo #whoBtn,body.usuario-mateo #rv-mateo-refresh { display:flex; align-items:center; justify-content:center; width:44px; height:44px; padding:0; margin:0; border:0; border-radius:12px; background:transparent; color:#496681; cursor:pointer; }
+body.usuario-mateo #pcNav { display:none !important; }
+body.usuario-mateo #whoBtn,body.usuario-mateo #rv-mateo-refresh,body.usuario-mateo #rv-mateo-nav { display:flex; align-items:center; justify-content:center; width:44px; height:44px; padding:0; margin:0; border:0; border-radius:50%; background:transparent; color:#496681; cursor:pointer; }
+body.usuario-mateo #rv-mateo-nav { grid-column:2; background:#e7eef7; color:#173b62; transition:background .18s,transform .18s; }
+body.usuario-mateo #rv-mateo-nav:hover { background:#d8e5f4; }
+body.usuario-mateo #rv-mateo-nav:active { transform:scale(.94); }
+body.usuario-mateo #rv-mateo-nav:focus-visible { outline:3px solid #5487c7; outline-offset:2px; }
+#rv-mateo-nav svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; }
 body.usuario-mateo #rv-mateo-refresh { font-size:29px; }
 body.usuario-mateo #rv-mateo-refresh:active { transform:rotate(45deg); }
 body.usuario-mateo.reparto-vivo #rv-mateo-progress { display:block; grid-column:1/-1; padding:0; }
