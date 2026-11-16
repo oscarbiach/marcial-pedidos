@@ -83,6 +83,18 @@ body.ap-abierto { overflow:hidden; }
 .ap-viewer button { position:absolute; right:14px; top:14px; }
 .ap-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .rv-card:focus-visible { outline:3px solid #5487c7; outline-offset:3px; }
+.ap select { font:inherit; color:inherit; border:1px solid #b9cadf; border-radius:9px; min-height:44px; padding:8px; background:#fff; }
+.ap-measure { display:flex !important; align-items:center; gap:12px; margin-bottom:16px; }
+.ap .ap-add-weight { margin-bottom:14px; }
+.ap-top p,.ap-progress-head b,.ap-stage,.ap-item-name small,.ap-item-status,.ap label,.ap-photo>span,.ap .ap-shortage-toggle,.ap .ap-photo-button,.ap-product-footer>span,.ap-error,.ap-inline-error,.ap-observacion { font-size:14px; }
+.ap-shortage-form button,.ap label>small,.ap-footer b { font-size:14px; }
+.ap-shortage-form input,.ap-substitute input { display:block; width:100%; padding:10px; border:1px solid #d6c3a3; border-radius:9px; font-size:18px; margin-top:6px; }
+.ap-substitute { width:100%; display:grid; gap:12px; padding-top:8px; border-top:1px solid #e8c68e; }
+.ap-substitute>div { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.ap-substitute select { display:block; width:100%; margin-top:6px; }
+.ap-shortage .ap-sub-toggle { width:100%; }
+.ap-pending { width:100%; font-size:14px; color:#80551e; font-weight:700; }
+.ap .ap-operations { font-size:16px; background:#e5edf8; color:#173b62; padding:16px; }
 @keyframes ap-entrada { from { opacity:0; transform:translateX(25px); } to { opacity:1; transform:none; } }
 @keyframes ap-producto { from { opacity:.4; transform:translateY(-5px); } to { opacity:1; transform:none; } }
 @media(max-width:650px) {

@@ -140,7 +140,6 @@
     if (!x.separado) return false;
     if (x.falta && (x.enviado == null || Number(x.enviado) < 0 || Number(x.enviado) > Number(it.qty))) return false;
     if (x.falta && Number(x.enviado) === 0) return true;
-    if (prodDe(it.prod).se_pesa) return num(x.peso) > 0 && !!x.foto;
     return true;
   }
   const pedidoSeparado = p => p.items.every(itemListo);
@@ -354,7 +353,7 @@
     pend.forEach(p => p.items.forEach(it => {
       const x = pi(it);
       if (x.falta && x.enviado != null) {
-        const no = Math.max(0, Math.round((Number(it.qty) - Number(x.enviado)) * 1000) / 1000);
+        const no = Math.max(0, Math.round((Number(it.qty) - Number(x.enviado) - Number(x.sustituye||0)) * 1000) / 1000);
         if (no > 0) (resp[p.id] = resp[p.id] || {})[it.id] = { completo: false, cantidadNoEntregada: no };
       }
     }));
@@ -370,14 +369,9 @@
     const { p, it } = itemPorId(d.itemId); if (!it) return;
     const x = pi(it);
     let peso = num(x.peso);
-    if (!(peso > 0)) {
-      const v = prompt(`Peso de «${it.prod}» para ${p.cliente} (kg):`, '');
-      if (v === null) return;
-      peso = num(v); if (!(peso > 0)) return aviso('Peso inválido');
-    }
     aviso('Subiendo foto…');
     try {
-      const blob = await conTexto(file, [p.cliente, it.prod, fmtKg(peso) + ' kg']);
+      const blob = await conTexto(file, [p.cliente, it.prod, peso>0?fmtKg(peso)+' kg':'Sin peso registrado']);
       const ruta = `${S.hoja.id}/${it.id}-${Date.now()}.jpg`;
       const { error } = await sb.storage.from('preparacion').upload(ruta, blob, { contentType: 'image/jpeg', upsert: true });
       if (error) throw error;
