@@ -24,8 +24,9 @@ async function setup(browser){
   if(q.value){const key=q.table==='prep_items'?'item_id':'pedido_id'; const row=db[q.table].find(r=>r[key]===q.value[key]);if(row)Object.assign(row,q.value);else db[q.table].push(q.value);setTimeout(()=>emit(q.table),0);return {data:null};}
   return {data:(db[q.table]||[]).filter(row=>(q.filters||[]).every(([op,k,v])=>op==='eq'?row[k]===v:op==='neq'?row[k]!==v:v.includes(row[k])))};
  }
- async function open(who,viewport){
-  const page=await browser.newPage({viewport:viewport||{width:1440,height:1000},serviceWorkers:'block'});pages.push(page);
+ async function open(who,viewport,options={}){
+  const page=await browser.newPage({viewport:viewport||{width:1440,height:1000},serviceWorkers:'block',...options});pages.push(page);
+  await page.clock.setFixedTime(new Date('2026-11-16T15:00:00Z'));
   page.on('pageerror',e=>errors.push(e.message));
   await page.exposeFunction('__db',request);
   await page.route('**/vendor/supabase-2.45.4.min.js',r=>r.fulfill({body:mockClient,contentType:'text/javascript'}));
@@ -61,19 +62,108 @@ test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',as
  await expect(mateo.locator('.rv-card')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
 });
-test('gesto horizontal, desplazamiento vertical y fallo de escritura',async({browser})=>{
- const s=await setup(browser),page=await s.open('Thiago',{width:390,height:844});
+async function touch(page,points){
+ const cdp=await page.context().newCDPSession(page);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[points[0]]});
+ for(const point of points.slice(1))await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[point]});
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+}
+test('gesto táctil horizontal, desplazamiento vertical y fallo de escritura',async({browser})=>{
+ const s=await setup(browser),page=await s.open('Thiago',{width:390,height:844},{hasTouch:true});
  await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
  const card=page.locator('.rv-card[data-id="p1"]');
- const box=await card.boundingBox();
- await page.mouse.move(box.x+20,box.y+50);await page.mouse.down();await page.mouse.move(box.x+25,box.y+100,{steps:8});await page.mouse.up();
+ let box=await card.boundingBox();
+ await touch(page,[{x:box.x+20,y:box.y+50},{x:box.x+23,y:box.y+80},{x:box.x+25,y:box.y+110}]);
  expect(s.moves).toHaveLength(0);
- await page.mouse.move(box.x+20,box.y+50);await page.mouse.down();await page.mouse.move(box.x+130,box.y+50,{steps:8});await page.mouse.up();
+ await card.scrollIntoViewIfNeeded();box=await card.boundingBox();
+ await touch(page,[{x:box.x+20,y:box.y+50},{x:box.x+50,y:box.y+50},{x:box.x+130,y:box.y+50}]);
  await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
  s.fail();await page.locator('[data-id="p2"][data-to="por_preparar"]').click();
  await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/reparto-mobile.png',fullPage:true});
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+async function agarrar(page,id){
+ const card=page.locator(`#rv-raiz .rv-card[data-id="${id}"]`);await card.scrollIntoViewIfNeeded();
+ const r=await card.boundingBox();
+ await page.mouse.move(r.x+35,r.y+55);await page.mouse.down();await page.mouse.move(r.x+50,r.y+65,{steps:3});
+ await expect(page.locator('.rv-ghost')).toBeVisible();
+}
+async function soltarEn(page,etapa){
+ const r=await page.locator(`[data-stage="${etapa}"]>h3`).boundingBox();
+ await page.mouse.move(r.x+r.width/2,r.y+r.height/2,{steps:12});await page.mouse.up();
+}
+test('arrastre libre: destinos válidos, retorno, fuera y Escape',async({browser})=>{
+ const s=await setup(browser),page=await s.open('Oscar');
+ await agarrar(page,'p1');
+ await expect(page.locator('[data-stage="por_preparar"]')).toHaveClass(/rv-drop-allowed/);
+ await expect(page.locator('[data-stage="listo"]')).not.toHaveClass(/rv-drop-allowed/);
+ await soltarEn(page,'listo');expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await soltarEn(page,'pendiente');expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await page.keyboard.press('Escape');await page.mouse.up();
+ await expect(page.locator('.rv-ghost')).toHaveCount(0);expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await page.mouse.move(5,90);await page.mouse.up();expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await soltarEn(page,'por_preparar');
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await agarrar(page,'p1');await soltarEn(page,'pendiente');
+ await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
+ expect(s.moves.map(m=>m.p_etapa)).toEqual(['por_preparar','pendiente']);
+ expect(s.errors).toEqual([]);await s.close();
+});
+test('arrastre no pisa cambios que llegan de otra pantalla',async({browser})=>{
+ const s=await setup(browser),page=await s.open('Oscar');
+ await agarrar(page,'p1');
+ s.db.prep_cola=[{pedido_id:'p1',etapa:'por_preparar',version:1,actualizado_por:'Thiago'}];
+ await s.emit('prep_cola');await page.waitForTimeout(350);
+ await expect(page.locator('.rv-ghost')).toBeVisible();
+ await soltarEn(page,'por_preparar');
+ expect(s.moves).toHaveLength(0);
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ expect(s.errors).toEqual([]);await s.close();
+});
+test('fechas plegadas, actualización y cambio de día sin ocultar la cola de Mateo',async({browser})=>{
+ const s=await setup(browser);
+ s.db.pedidos.push(pedido('p6','Atrasado',{fecha_entrega:'2026-11-14'}),pedido('p7','Mañana',{fecha_entrega:'2026-11-17'}),pedido('p8','Próxima semana',{fecha_entrega:'2026-11-23'}),pedido('p9','Sin fecha',{fecha_entrega:null}));
+ const page=await s.open('Joaquin'),mateo=await s.open('Mateo');
+ await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(4);
+ await expect(page.locator('[data-day="2026-11-16"]')).toHaveText(/Hoy.*2/);
+ await expect(page.locator('[data-day="2026-11-14"]')).toHaveText(/Atrasados/);
+ await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
+ await page.locator('[data-day="2026-11-23"]').click();
+ await expect(page.locator('.rv-card[data-id="p8"]')).toBeVisible();
+ s.db.pedidos.push(pedido('p10','Otro programado',{fecha_entrega:'2026-11-23'}));await s.emit('pedidos');
+ await expect(page.locator('#rv-dia-2026-11-23 .rv-card')).toHaveCount(2);
+ await expect(page.locator('[data-day="2026-11-23"]')).toHaveAttribute('aria-expanded','true');
+ await page.locator('[data-id="p8"][data-to="por_preparar"]').click();
+ await expect(mateo.locator('.rv-card[data-id="p8"]')).toBeVisible();
+ await page.clock.setFixedTime(new Date('2026-11-17T15:00:00Z'));await s.emit('pedidos');
+ await expect(page.locator('[data-day="2026-11-17"]')).toHaveText(/Hoy/);
+ await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
+ await page.screenshot({path:'test-results/reparto-fechas.png',fullPage:true});
+ expect(s.errors).toEqual([]);await s.close();
+});
+test('autoscroll durante arrastre y limpieza al cambiar de pestaña',async({browser})=>{
+ const s=await setup(browser);for(let i=10;i<25;i++)s.db.pedidos.push(pedido('p'+i,'Cliente '+i));
+ const page=await s.open('Oscar');await agarrar(page,'p1');
+ const list=page.locator('[data-col="pendiente"]'),r=await list.boundingBox();
+ await page.mouse.move(r.x+50,Math.min(r.y+r.height-5,930),{steps:10});
+ await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(40);
+ await page.evaluate(()=>goTab('pedidos'));
+ await expect(page.locator('.rv-ghost')).toHaveCount(0);
+ await page.mouse.up();expect(s.moves).toHaveLength(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
+test('agarre táctil permite mover hacia otra columna sin activar swipe',async({browser})=>{
+ const s=await setup(browser),page=await s.open('Thiago',{width:390,height:1800},{hasTouch:true});
+ const r=await page.locator('.rv-card[data-id="p1"] .rv-grip').boundingBox();
+ const target=await page.locator('[data-stage="por_preparar"]>h3').boundingBox();
+ await touch(page,[{x:r.x+16,y:r.y+16},{x:r.x+16,y:r.y+50},{x:target.x+target.width/2,y:target.y+20}]);
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await expect(page.locator('.rv-ghost')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
 });
 test('detalle conserva peso en edición; novedades y navegación de Mateo',async({browser})=>{
