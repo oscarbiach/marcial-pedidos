@@ -1,0 +1,25 @@
+{
+  "name": "marcial-pedidos",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "node tests/reparto-db.cjs",
+    "test:ui": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oscarbiach/marcial-pedidos.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/oscarbiach/marcial-pedidos/issues"
+  },
+  "homepage": "https://github.com/oscarbiach/marcial-pedidos#readme",
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@playwright/test": "^1.65.1"
+  },
+  "private": true
+}

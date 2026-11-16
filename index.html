@@ -1599,6 +1599,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
+<link rel="stylesheet" href="reparto-vivo.css">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1782,6 +1783,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- HOJA DE REPARTO -->
     <div id="tab-reparto" class="tab-panel">
+      <div id="repClasico" hidden>
+      <button class="rv-classic-back" onclick="RepartoVivo.volver()">← Preparación en vivo</button>
       <div class="form-card rep-head">
         <h4><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-truck"/></svg> Hoja de reparto</h4>
         <p>Elegí los pedidos que vas a cargar en la camioneta. Abajo se arma
@@ -1802,6 +1805,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
            para que el resumen quede pegado a la lista de la que sale. -->
       <div id="repResumen"></div>
       <div id="repHistorial"></div>
+      </div>
     </div>
 
     <!-- CLIENTES (seguimiento): cada cuánto pide cada cliente, qué días, qué productos y qué observaciones. Solo lectura. Ver seguimiento-clientes-ui.js -->
@@ -2570,6 +2574,8 @@ async function entrarConPin(pin) {
 }
 
 async function volverALogin_(mensaje) {
+  if (window.RepartoVivo) RepartoVivo.detener();
+  if (window.Preparacion) Preparacion.cerrar(false);
   try { await sb.auth.signOut(); } catch (e) { /* da igual */ }
   state.pin = '';
   document.getElementById('loading').style.display = 'none';
@@ -2662,6 +2668,7 @@ function leerCache() {
 }
 
 function mostrarApp() {
+  if (window.RepartoVivo) RepartoVivo.acceso();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
   // Recién con la app visible se pueden medir el header y la barra.
@@ -2740,6 +2747,7 @@ window.addEventListener('load', async () => {
 
   if (sesion && savedWho && VENDEDORES.includes(savedWho)) {
     state.who = savedWho;
+    if (state.who === 'Mateo') activeTab = 'reparto';
     state.pin = 'ok';   // sentinela de "sesión iniciada" (el PIN real no se guarda)
     pendingWho = savedWho;
     document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(savedWho) + '</span>';
@@ -2822,6 +2830,7 @@ async function submitPin() {
   }
 
   state.who = r.quien || pendingWho;
+  if (state.who === 'Mateo') activeTab = 'reparto';
   state.pin = 'ok';   // sentinela de "sesión iniciada"
   localStorage.setItem('dm_ped_who', state.who);
   document.getElementById('whoBtn').innerHTML = mIco('user') + '<span>' + esc(state.who) + '</span>';
@@ -3073,9 +3082,10 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Hoja de reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock' };
 
 function setTab(tab) {
+  if (state.who === 'Mateo' && !['reparto','pedidos'].includes(tab)) tab = 'reparto';
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
   // Por ahora Clientes y WhatsApp son solo para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
@@ -3083,6 +3093,7 @@ function setTab(tab) {
   // Stock: solo Oscar y Joaquín (lo confirma la base con stock_es_admin; ver stock.js).
   if (tab === 'stock' && !document.body.classList.contains('stock-visible')) tab = 'pedidos';
   activeTab = tab;
+  document.body.classList.toggle('reparto-vivo', tab === 'reparto' && !!window.RepartoVivo && RepartoVivo.activo());
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById('appTitle').textContent = TAB_TITLES[tab] || 'Distribuidora Marcial';
@@ -3781,6 +3792,10 @@ function repItemHtml(p) {
 }
 
 function renderReparto() {
+  if (window.RepartoVivo) {
+    RepartoVivo.montar();
+    if (RepartoVivo.activo()) { actualizarBarraRep(); return; }
+  }
   const lista = document.getElementById('repLista');
   if (!lista) return;
 
@@ -6579,5 +6594,6 @@ function abrirInstalar() {
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
 <script src="preparacion.js"></script>
+<script src="reparto-vivo.js"></script>
 </body>
 </html>
