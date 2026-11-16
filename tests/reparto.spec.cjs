@@ -26,7 +26,7 @@ async function setup(browser){
  }
  async function open(who,viewport,options={}){
   const page=await browser.newPage({viewport:viewport||{width:1440,height:1000},serviceWorkers:'block',...options});pages.push(page);
-  await page.clock.setFixedTime(new Date('2026-11-16T15:00:00Z'));
+  await page.clock.install({time:new Date('2026-11-16T15:00:00Z')});
   page.on('pageerror',e=>errors.push(e.message));
   await page.exposeFunction('__db',request);
   await page.route('**/vendor/supabase-2.45.4.min.js',r=>r.fulfill({body:mockClient,contentType:'text/javascript'}));
@@ -78,7 +78,9 @@ test('gesto táctil horizontal, desplazamiento vertical y fallo de escritura',as
  await card.scrollIntoViewIfNeeded();box=await card.boundingBox();
  await touch(page,[{x:box.x+20,y:box.y+50},{x:box.x+50,y:box.y+50},{x:box.x+130,y:box.y+50}]);
  await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await page.clock.runFor(400); // terminar la supresión del click que genera el gesto táctil
  s.fail();await page.locator('[data-id="p2"][data-to="por_preparar"]').click();
+ await expect.poll(()=>s.moves.length).toBe(2);
  await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/reparto-mobile.png',fullPage:true});
@@ -139,7 +141,7 @@ test('fechas plegadas, actualización y cambio de día sin ocultar la cola de Ma
  await expect(page.locator('[data-day="2026-11-23"]')).toHaveAttribute('aria-expanded','true');
  await page.locator('[data-id="p8"][data-to="por_preparar"]').click();
  await expect(mateo.locator('.rv-card[data-id="p8"]')).toBeVisible();
- await page.clock.setFixedTime(new Date('2026-11-17T15:00:00Z'));await s.emit('pedidos');
+ await page.clock.setSystemTime(new Date('2026-11-17T15:00:00Z'));await s.emit('pedidos');
  await expect(page.locator('[data-day="2026-11-17"]')).toHaveText(/Hoy/);
  await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','true');
  await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
