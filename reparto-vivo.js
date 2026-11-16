@@ -99,6 +99,11 @@
       root = document.createElement('section'); root.id = 'rv-raiz'; root.className = 'rv';
       panel.prepend(root);
       root.addEventListener('click', clic);
+      root.addEventListener('keydown', e => {
+        if (e.target.matches('.rv-card') && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault(); abrirArmado(e.target.dataset.id);
+        }
+      });
       root.addEventListener('pointerdown', down);
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
@@ -115,7 +120,7 @@
     const e = etapa(p.id), fila = S.filas.get(p.id), busy = S.busy.has(p.id), next = siguiente[e];
     const fecha = etiquetaFecha(p.fechaEntrega);
     const puedeMover = (permiso(e,next) || permiso(e,anterior[e])) && S.ready && !S.error && !busy;
-    return `<article class="rv-card" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]}" aria-busy="${busy}">
+    return `<article class="rv-card" tabindex="0" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]} · Tocar para armar" aria-busy="${busy}">
       <div class="rv-card-top"><span>${esc(fecha)}</span><span>${esc(p.quien || '')}</span>${puedeMover ? '<span class="rv-grip" data-rv-grip aria-hidden="true" title="Agarrá para mover el pedido">⠿</span>' : ''}</div>
       <h3>${esc(p.cliente)}</h3>
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
@@ -123,7 +128,7 @@
       ${p.items.length > 3 ? `<span class="rv-more">+ ${p.items.length-3} productos · Abrí el detalle</span>` : ''}
       ${p.notas ? `<p class="rv-note">${esc(p.notas)}</p>` : ''}
       ${fila ? `<p class="rv-author">${e === 'por_preparar' ? 'Enviado' : 'Actualizado'} por ${esc(fila.actualizado_por)}</p>` : ''}
-      <div class="rv-actions"><button data-rv="detalle" data-id="${esc(p.id)}">Ver pedido</button>
+      <div class="rv-actions"><button data-rv="detalle" data-id="${esc(p.id)}">Abrir armado</button>
       ${next && permiso(e,next) ? `<button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button>` : ''}</div>
       ${anterior[e] && permiso(e,anterior[e]) ? `<button class="rv-back" data-rv="mover" data-id="${esc(p.id)}" data-to="${anterior[e]}" ${busy || S.error ? 'disabled' : ''}>← ${e === 'por_preparar' ? 'Quitar de la cola' : e === 'listo' ? 'Volver a preparar' : 'Volver a la cola'}</button>` : ''}
     </article>`;
@@ -169,7 +174,7 @@
     const listos = S.pedidos.filter(p => etapa(p.id) === 'listo').length;
     const html = `<header class="rv-header"><div><span class="rv-eyebrow">DEPÓSITO · REPARTO</span>
       <h2>${mateo() ? 'Tu mesa de preparación' : 'Preparación en vivo'}</h2>
-      <p>${mateo() ? 'Los pedidos del equipo llegan acá. Agarrá una tarjeta y movela a la siguiente columna.' : 'Elegí los pedidos del día y arrastralos a Por preparar.'}</p></div>
+      <p>${mateo() ? 'Tocá un pedido para armarlo. Agarrá la tarjeta para moverla entre columnas.' : 'Elegí los pedidos del día y arrastralos a Por preparar. Tocá una tarjeta para abrir su armado.'}</p></div>
       <div class="rv-status"><span class="rv-connection ${S.live && !S.error ? 'online' : ''}" role="status">${!navigator.onLine ? 'Sin conexión' : S.error ? 'Sin sincronizar' : S.live ? 'En vivo' : 'Reconectando…'}</span>
       <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button>${!mateo() ? '<button data-rv="hojas">Hojas de reparto</button>' : ''}</div></header>
       <div class="rv-summary"><b>${listos} de ${total} listos</b><div class="rv-progress" role="progressbar" aria-label="Pedidos listos" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${listos}"><i style="width:${total ? listos/total*100 : 0}%"></i></div><span>Listo = preparado; aún no despachado</span></div>
@@ -213,15 +218,24 @@
   }
   function clic(e) {
     if (Date.now() < (S.noClickUntil || 0)) { e.preventDefault(); return; }
-    const b = e.target.closest('[data-rv]'); if (!b || b.disabled) return;
+    const b = e.target.closest('[data-rv]');
+    if (!b) {
+      const card = e.target.closest('.rv-card');
+      if (card && !e.target.closest('[data-rv-grip],a,input')) abrirArmado(card.dataset.id);
+      return;
+    }
+    if (b.disabled) return;
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
     if (b.dataset.rv === 'hojas') { S.legacy = true; montar(); renderReparto(); }
     if (b.dataset.rv === 'detalle') {
-      const p = S.pedidos.find(x => x.id === b.dataset.id);
-      if (p) Preparacion.abrirPedido(p);
+      abrirArmado(b.dataset.id);
     }
+  }
+  function abrirArmado(id) {
+    const p = S.pedidos.find(x => x.id === id);
+    if (p && !S.busy.has(id)) Preparacion.abrirPedido(p);
   }
   function down(e) {
     const card = e.target.closest('.rv-card');
