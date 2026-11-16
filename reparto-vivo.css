@@ -11,7 +11,7 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv button:active { transform:scale(.97); }
 .rv button:focus-visible { outline:3px solid #5789ca; outline-offset:3px; }
 .rv button:disabled { opacity:.5; cursor:wait; }
-.rv-header { display:flex; gap:20px; justify-content:space-between; align-items:center; margin-bottom:22px; }
+.rv-header { position:static; z-index:auto; display:flex; gap:20px; justify-content:space-between; align-items:center; margin-bottom:22px; }
 .rv-eyebrow { color:#607994; font-size:10px; font-weight:800; letter-spacing:1.6px; }
 .rv-header h2 { font-size:clamp(23px,2.5vw,32px); letter-spacing:-1px; margin:6px 0 8px; }
 .rv-header p { color:#607087; font-size:13px; margin:0; line-height:1.6; }
@@ -37,6 +37,18 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-list { display:flex; flex-direction:column; gap:10px; min-height:180px; max-height:calc(100dvh - 330px); overflow-y:auto; overflow-x:hidden; padding:2px 2px 8px; scrollbar-width:thin; }
 .rv-card { position:relative; flex:none; background:#fff; border:1px solid #dfe6ee; border-radius:12px; padding:15px; box-shadow:0 2px 3px #10284205; touch-action:pan-y; transition:transform .24s ease,border-color .2s,box-shadow .2s; }
 .rv-card-top { display:flex; justify-content:space-between; gap:8px; font-size:10px; color:#6b7d93; font-weight:650; }
+.rv-card-top>span:nth-child(2) { margin-left:auto; }
+.rv-grip { display:inline-flex; align-items:center; justify-content:center; flex:none; width:32px; height:32px; margin:-8px -7px -6px 0; font-size:24px; color:#7388a2; cursor:grab; touch-action:none; user-select:none; }
+.rv-card:has(.rv-grip) { cursor:grab; }
+.rv-card:has(.rv-grip):active { cursor:grabbing; }
+.rv-day { min-width:0; }
+.rv .rv-day-toggle { display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:0; background:#dfe7f0; color:#435b77; font-size:11px; margin:2px 0 9px; padding:10px; }
+.rv-day-toggle>b { margin-left:auto; border-radius:6px; padding:2px 6px; background:#ffffffa6; }
+.rv .rv-day-today>.rv-day-toggle { color:#1e5597; background:#d8e6f7; }
+.rv .rv-day-late>.rv-day-toggle { color:#92591c; background:#f8e8cf; }
+.rv-day-cards { display:flex; flex-direction:column; gap:10px; }
+.rv-day-cards[hidden] { display:none; }
+.rv-date-help { margin:0 4px 5px; font-size:11px; line-height:1.5; color:#607087; }
 .rv-card h3 { font-size:17px; line-height:1.3; letter-spacing:-.4px; margin:10px 0 4px; overflow-wrap:anywhere; }
 .rv-dir { font-size:11px; color:#718095; line-height:1.5; margin:0 0 13px; }
 .rv-card ul { list-style:none; padding:10px 0; border-top:1px solid #edf1f6; border-bottom:1px solid #edf1f6; margin:0 0 10px; font-size:12px; line-height:1.7; }
@@ -59,6 +71,13 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-card.rv-dragging { transition:none; z-index:2; user-select:none; box-shadow:0 12px 24px #10284225; }
 .rv-card.rv-armed { border-color:#278358; background:#f5fcf7; }
 .rv-card.rv-armed::after { content:'Soltá para avanzar →'; display:block; font-size:11px; color:#17613e; margin-top:8px; font-weight:800; }
+.rv-card.rv-origin { opacity:.25; border-style:dashed; }
+.rv.rv-ghost { position:fixed; left:0; top:0; z-index:1000; padding:0; margin:0; pointer-events:none; will-change:transform; }
+.rv-ghost .rv-card { box-shadow:0 18px 38px #10284235; border-color:#7e9fc4; transform:rotate(1deg); }
+.rv-arrastrando, .rv-arrastrando * { cursor:grabbing !important; user-select:none !important; }
+.rv-column { transition:border-color .18s,background .18s,box-shadow .18s; }
+.rv-column.rv-drop-allowed { outline:2px dashed #91abc9; outline-offset:2px; }
+.rv-column.rv-drop-over { background:#dcebf8; outline:2px solid #376ea9; box-shadow:0 0 0 5px #376ea915; }
 .rv-classic-back { margin-bottom:14px; }
 /* El detalle sigue disponible, ahora un pedido por vez sobre el tablero. */
 .pp.pp-pedido { inset:16px 16px 16px auto; width:min(760px,calc(100vw - 32px)); border-radius:20px; overflow:hidden; box-shadow:0 0 0 100vmax #0b1c3370,0 20px 60px #0b1c3340; animation:rv-detalle .25s ease-out; }
