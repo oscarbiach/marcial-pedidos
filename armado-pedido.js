@@ -132,7 +132,7 @@
           <legend class="ap-sr">Preparar ${esc(it.prod)}</legend>
           ${!medida?`<label class="ap-measure">Medida del producto <select data-ap="medida_real" data-i="${it.id}"><option value="">Sin definir</option>${opcionesMedida(d.medida_real)}</select></label>`:''}
           ${medir?`<div class="ap-weigh">
-            <label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>
+            ${state.who==='Mateo'?`<div class="ap-read-weight"><strong>${d.peso?esc(d.peso)+' kg':'Peso desde la foto'}</strong></div>`:`<label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>`}
             <div class="ap-photo"><span>Foto (opcional)</span><div>
               ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
               <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
@@ -144,12 +144,13 @@
             ${d.falta?`<div class="ap-shortage-form"><label>De ${esc(it.prod)} se envía <input data-ap="enviado" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(d.enviado)}" placeholder="0" aria-label="Cantidad a enviar de ${esc(it.prod)}"><small>Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">No hay</button><button data-ap="completo" data-i="${it.id}">Está completo</button>
 
               ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad del sustituto<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label></div><label>Cantidad del original que reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label>
-                ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
+                ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`${state.who==='Mateo'?`<strong>${d.sustituto_peso?esc(d.sustituto_peso)+' kg':'Peso desde la foto'}</strong>`:`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label>`}<button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
             </div>`:''}
           </div>
           ${S.itemError?.id===it.id?`<p class="ap-inline-error" role="alert">${esc(S.itemError.message)}</p>`:''}
+          ${ok?`<button data-ap="despreparar" data-i="${it.id}">Desmarcar preparado</button>`:''}
           <div class="ap-product-footer"><span id="ap-draft-${it.id}" role="status">${S.busy?'Guardando…':dirty?'Sin guardar':ok?'✓ Guardado':''}</span>
             <button class="ap-save" data-ap="guardar" data-i="${it.id}">${S.busy?'Guardando…':ok?'Guardar cambios y seguir':'Guardar y seguir →'}</button></div>
         </fieldset>
@@ -157,7 +158,7 @@
   }
   function pintar() {
     const r=$('ap-raiz'); if(!r || !S.open) return;
-    if($('ap-selector') || $('ap-raiz')?.querySelector('.ap-viewer') || editando() || S.interacting || S.choosing){S.repaint=true;return;} S.repaint=false;
+    if($('ap-selector') || $('ap-raiz')?.querySelector('.ap-viewer,.ap-weight-confirm') || editando() || S.interacting || S.choosing){S.repaint=true;return;} S.repaint=false;
     const scroll=$('ap-content')?.scrollTop || 0,active=document.activeElement;
     const focus= r.contains(active) ? {a:active.dataset.ap,id:active.dataset.i} : null;
     const p=S.p,done=p.items.filter(listo).length,total=p.items.length,stage=S.cola?.etapa || 'pendiente';
@@ -171,7 +172,7 @@
         ${S.error?`<div class="ap-error" role="alert">${esc(S.error)} <button data-ap="refrescar">Reintentar</button></div>`:''}
         ${S.actionError?`<div class="ap-error" role="alert">${esc(S.actionError)}</div>`:''}
         ${!S.ready?'<p class="ap-empty">Cargando el armado…</p>':!editable()?'<p class="ap-error">Este pedido ya no está disponible para preparar.</p>':''}
-        ${p.notas?`<aside class="ap-observacion"><b>Observación del pedido</b><p>${esc(p.notas)}</p></aside>`:''}
+        ${p.notas?`<aside class="ap-observacion ${esReposicion(p)?'nota-reposicion':''}"><b>Observación del pedido</b><p>${esc(p.notas)}</p></aside>`:''}
         ${S.ready?p.items.map(producto).join(''):''}
         ${state.who!=='Mateo'&&S.ready&&total&&stage==='listo'?'<button class="ap-operations" data-ap="operaciones">Ver resumen para remito →</button>':''}
       </div>
@@ -282,6 +283,11 @@
     S.busy=true;S.revision++;S.itemError=null;pintar();
     try{
       await iniciarEdicion(d.epoch);
+      // Guardar la foto sigue siendo posible si el lector no encuentra un peso claro.
+      let lectura=null;
+      try{lectura=await window.Balanza.leer(file);}catch(e){console.warn('Lectura de balanza no disponible');}
+      if(d.epoch!==S.epoch)return;
+      d.peso=lectura?.peso!=null||lectura?.opciones?.length?await confirmarPeso(lectura):(state.who==='Mateo'?null:d.peso);
       const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?decimal(d.peso)+' kg':'Sin peso registrado']);
       if(d.epoch!==S.epoch)return;
       if(!blob)throw Error('No se pudo procesar la imagen.');
@@ -289,10 +295,20 @@
       const {error}=await sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false});
       if(error)throw error;
       if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta}:{peso:d.peso,foto:ruta})},d.epoch)){
-        const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast('Foto guardada. Tocá Guardar y seguir cuando esté separado.');
+        const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast(d.peso?'Foto y peso guardados.':'Foto guardada sin peso.');
+        if(!d.peso)S.itemError={id:d.it.id,message:'No quedó un peso confirmado. Podés repetir la foto o revisarlo desde la PC.'};
       }
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
     finally{if(d.epoch===S.epoch){S.busy=false;pintar();cargar();}}
+  }
+  function confirmarPeso(lectura){
+    return new Promise(resolve=>{
+      const v=document.createElement('div');v.className='ap-weight-confirm';v.setAttribute('role','dialog');v.setAttribute('aria-label','Confirmar peso leído');
+      const opciones=lectura.opciones||[lectura.peso];
+      v.innerHTML=`<div><h3>${lectura.opciones?'Revisá el punto decimal: ¿qué peso marca?':`¿La balanza marca ${esc(decimal(lectura.peso))} kg?`}</h3><img src="${esc(lectura.recorte)}" alt="Visor de peso de la balanza"><div><button data-answer="no">Guardar solo foto</button>${opciones.map(p=>`<button class="ap-save" data-answer="${p}">${esc(decimal(p))} kg</button>`).join('')}</div></div>`;
+      v.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-answer]');if(b){v.remove();resolve(b.dataset.answer==='no'?null:Number(b.dataset.answer));}});
+      $('ap-raiz').appendChild(v);v.querySelector('.ap-save').focus();
+    });
   }
   function elegirSustituto(it) {
     const v=document.createElement('div');v.id='ap-selector';v.className='ap-selector';v.setAttribute('role','dialog');v.setAttribute('aria-label','Elegir sustituto');
@@ -328,11 +344,12 @@
     if(!it || S.busy || !editable())return;
     if(a==='medir'){S.extras.add(it.id);pintar();}
     if(a==='medir-sub'){S.extras.add(it.id+'-sub');pintar();}
-    if(a==='falta'){modificar(it.id,{falta:!borrador(it).falta});pintar();}
+    if(a==='falta'){const falta=!borrador(it).falta;modificar(it.id,falta?{falta:true}:{falta:false,enviado:'',reemplazar:false});pintar();}
     if(a==='nada'){modificar(it.id,{falta:true,enviado:'0'});pintar();}
     if(a==='completo'){modificar(it.id,{falta:false,enviado:'',reemplazar:false});pintar();}
     if(a==='reemplazar')return elegirSustituto(it);
     if(a==='quitar-sub'){modificar(it.id,{reemplazar:false,sustituto:''});pintar();}
+    if(a==='despreparar'){S.busy=true;S.revision++;const epoch=S.epoch;pintar();iniciarEdicion(epoch).then(()=>escribir(it,{separado:false},epoch,true)).catch(e=>{if(epoch===S.epoch)S.itemError={id:it.id,message:e.message};}).finally(()=>{if(epoch===S.epoch){S.busy=false;pintar();cargar();}});return;}
     if(a==='guardar')return guardar(it);
     if(a==='foto')return pedirFoto(it);
     if(a==='foto-sub')return pedirFoto(it,true);

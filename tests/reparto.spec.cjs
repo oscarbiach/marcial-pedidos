@@ -213,9 +213,10 @@ test('detalle conserva peso en edición; novedades y navegación de Mateo',async
  s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
  const page=await s.open('Mateo');
  await page.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(page);
- const input=page.locator('[data-ap="peso"]');await input.fill('2,35');
+ await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
+ const input=page.locator('.ap-read-weight');
  await s.emit('prep_items');await page.waitForTimeout(250);
- await expect(input).toHaveValue('2,35');
+ await expect(input).toContainText('Peso desde la foto');
  page.once('dialog',d=>d.accept());
  await page.locator('[data-ap="cerrar"]').click();
  await expect(page.locator('#ap-raiz')).toBeHidden();
@@ -279,7 +280,7 @@ test('toque en móvil abre el armado, sin desbordamiento y con faltante total in
  await expect(page.locator('.ap-inline-error')).toContainText('entre 0 y 2');
  expect(s.writes).toHaveLength(0);
  await page.locator('[data-ap="nada"]').tap();
- await expect(page.locator('[data-ap="peso"]')).toBeDisabled();
+ await expect(page.locator('[data-ap="foto"]')).toBeDisabled();
  await page.locator('[data-ap="guardar"]').tap();
  await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
  expect(s.db.prep_items[0]).toMatchObject({falta:true,enviado:0,peso:null,foto:null,separado:true});
@@ -289,10 +290,10 @@ test('toque en móvil abre el armado, sin desbordamiento y con faltante total in
 
 test('peso y foto opcionales; errores de foto conservan datos y cambiar peso retira la foto vieja',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
- const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
+ const page=await s.open('Oscar');await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
  await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
- await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);
  const peso=page.locator('[data-ap="peso"]');await peso.fill('2abc');
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-inline-error')).toContainText('peso mayor que 0');
  const writes=s.writes.length;await peso.fill('2,35');
@@ -305,7 +306,7 @@ test('peso y foto opcionales; errores de foto conservan datos y cambiar peso ret
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-progress-head b')).toHaveText('1 de 1 productos preparados');
  await page.locator('#ap-finalizar').click();await expect(page.locator('#ap-raiz')).toBeHidden();
- await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);
  const original=s.db.prep_items[0].foto;await peso.fill('2,45');
  await page.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0].peso).toBe(2.45);
  expect(s.db.prep_items[0].foto).toBe(null);
@@ -341,8 +342,8 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
 });
 
 test('novedades remotas preservan borradores; pedido despachado deja de ser editable',async({browser})=>{
- const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Mateo');
- await page.locator('.rv-card h3').click();await abrirProducto(page);await page.locator('[data-ap="medir"]').click();const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
+ const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Oscar');
+ await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);await page.locator('[data-ap="medir"]').click();const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
  s.db.prep_items=[{item_id:1,falta:true,enviado:1}];await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(peso).toBeFocused();await expect(peso).toHaveValue('4,5');
  await page.locator('[data-ap="guardar"]').click();
@@ -514,8 +515,8 @@ test('ventanas centradas: el fondo cierra, soltar fuera desde adentro no cierra'
 test('eliminar fotos conserva pesos y borradores; un fallo conserva la imagen',async({browser})=>{
  const s=await setup(browser);enCola(s,'listo');
  s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:1,peso:1.15,foto:'original.jpg',sustituto:'Otro queso',sustituto_cantidad:1,sustituto_medida:'unidad',sustituye:1,sustituto_peso:1.2,sustituto_foto:'sustituto.jpg'}];
- const page=await s.open('Mateo');await page.locator('.rv-card h3').click();
- await expect(page.locator('.ap-editor')).toHaveCount(0);await expect(page.locator('[data-ap="operaciones"]')).toHaveCount(0);
+ const page=await s.open('Oscar');await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);
+ await expect(page.locator('.ap-editor')).toHaveCount(0);
  await abrirProducto(page);await page.locator('[data-ap="peso"]').fill('1,3');
  s.failItem(true);await page.locator('[data-ap="quitar-foto"]').click();
  await expect(page.locator('.ap-inline-error')).toContainText('No se pudo eliminar');await expect(page.locator('[data-ap="ver-foto"]')).toBeVisible();
@@ -544,13 +545,9 @@ test('desplazamiento vertical desde una tarjeta de Mateo no mueve ni abre pedido
 });
 
 
-test('resumen anticipado y consulta de fotos de una entrega anterior',async({browser})=>{
+test('resumen solo en listos y consulta de fotos de una entrega anterior',async({browser})=>{
  const s=await setup(browser);enCola(s,'por_preparar');s.db.pedidos[0].pedido_items[0].producto='Aceite';
- const page=await s.open('Oscar');await page.locator('[data-rv="remito"][data-id="p1"]').click();
- await page.locator('[data-rc="expandir"]').click();await expect(page.locator('table')).toContainText('2 cajas');
- await expect(page.locator('[data-rc="control"]')).toBeDisabled();
- await page.locator('[data-rc="remito"]').click();await expect(page.locator('[data-rc="remito"]')).toHaveAttribute('aria-pressed','true');
- await page.locator('[data-rc="cerrar"]').click();
+ const page=await s.open('Oscar');await expect(page.locator('[data-rv="remito"][data-id="p1"]')).toHaveCount(0);
  s.db.pedidos[0].estado='Despachado';s.db.pedidos[0].fecha_despacho='2026-11-13';
  s.db.prep_items=[{item_id:1,separado:true,foto:'pedido-p1/antigua.jpg',falta:true,enviado:0,sustituto:'Pan',sustituto_cantidad:1,sustituto_medida:'caja',sustituye:2,sustituto_foto:'pedido-p1/pan.jpg'}];
  await page.evaluate(()=>{state.pedidos=[{id:'p1',cliente:'Entrega anterior',estado:'Despachado',fecha:'2026-11-13',items:[]}];openPedidoDetail('p1');});
@@ -569,4 +566,38 @@ test('selector de sustituto muestra catálogo, busca y permite cancelar sin camb
  await expect(page.locator('.ap-sub-name')).toContainText('Aceite');await expect(page.locator('[data-ap="sustituto_medida"]')).toHaveValue('caja');
  await page.getByRole('button',{name:'Elegir sustituto',exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('#ap-selector')).toHaveCount(0);await expect(page.locator('#ap-raiz')).toBeVisible();
  expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Mateo confirma la lectura antes de guardar; puede conservar solo la foto',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',se_pesa:true}];
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:19,recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
+ await subirFotoPrueba(page);await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toBeVisible();expect(s.uploads).toHaveLength(0);
+ await page.locator('[data-answer="19"]').click();await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(19);
+ await expect(page.locator('.ap-read-weight')).toContainText('19 kg');await expect(page.locator('.ap-photo-preview')).toBeVisible();
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:null,opciones:[1.965,19.65],recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
+ await subirFotoPrueba(page);await expect(page.locator('[data-answer="19.65"]')).toBeVisible();await page.locator('[data-answer="no"]').click();
+ await expect.poll(()=>s.db.prep_items[0].peso).toBe(null);await expect(page.locator('.ap-photo-preview')).toBeVisible();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('desmarcar preparado y deshacer faltante dejan el producto editable',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:0}];
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await page.locator('[data-ap="despreparar"]').click();await expect.poll(()=>s.db.prep_items[0].separado).toBe(false);
+ await page.locator('[data-ap="falta"]').click();await page.locator('[data-ap="guardar"]').click();
+ await expect.poll(()=>s.db.prep_items[0].falta).toBe(false);expect(s.db.prep_items[0].enviado).toBe(null);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('foto grande queda sobre el encabezado y cierra solo su visor',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'foto.jpg'}];
+ const page=await s.open('Oscar');await page.locator('.rv-listo .rv-card h3').click();await page.locator('[data-rc="expandir"]').click();await page.locator('.rc-photo').click();
+ await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1050;c.height=1400;c.getContext('2d').fillRect(0,0,1050,1400);document.querySelector('.rc-viewer img').src=c.toDataURL();});
+ await page.locator('.rc-viewer img').evaluate(img=>img.decode());
+ const box=await page.locator('.rc-viewer img').boundingBox();expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(1000);expect(box.x+box.width).toBeLessThanOrEqual(1440);
+ expect(await page.evaluate(()=>{const h=document.querySelector('.rc-panel header').getBoundingClientRect();return !!document.elementFromPoint(h.x+h.width/2,h.y+h.height/2).closest('.rc-viewer');})).toBe(true);
+ await page.locator('.rc-viewer').click({position:{x:8,y:200}});await expect(page.locator('#rc-raiz')).toBeVisible();await expect(page.locator('.rc-table-wrap')).toBeVisible();
+ expect(s.errors).toEqual([]);await s.close();
 });

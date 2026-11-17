@@ -56,6 +56,9 @@ const assert = require('node:assert/strict');
   assert.equal((await db.query("select count(*)::int as n from pg_publication_tables where pubname='supabase_realtime'")).rows[0].n,6);
   await db.exec("select set_config('test.uid','00000000-0000-0000-0000-000000000001',false); select setval('pedido_items_id_seq',10);");
   await db.exec(fs.readFileSync('supabase/migrations/20261116_reparto_carga.sql','utf8'));
+  await db.exec(`create table productos(nombre text,unidad text,unidades_por_caja integer,alterna_unidad boolean,caja_en text,activo boolean,creado_en timestamptz);`);
+  await db.exec(fs.readFileSync('supabase/migrations/20261117_reparto_peso.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261117_reparto_despacho.sql','utf8'));
   const leer=async id=>(await db.query('select prep_leer($1) as r',[id])).rows[0].r;
   const confirmar=(id,firma,accion='control')=>db.query('select prep_confirmar($1,$2,$3,$4,true)',[''+id,firma,'Oscar',accion]);
   const cargar=(id,firma)=>db.query('select prep_cargar($1,$2,$3) as r',[id,firma,'Mateo']);
@@ -112,6 +115,32 @@ const assert = require('node:assert/strict');
   const cabecera=await nuevo('cabecera');r=await listo('cabecera');await confirmar('cabecera',r.firma);await confirmar('cabecera',r.firma,'remito');
   await db.query("update pedidos set direccion='Nueva dirección' where id='cabecera'");
   assert.equal((await leer('cabecera')).pedido.remito_hecho,false);await assert.rejects(cargar('cabecera',r.firma),/pedido cambió/);
+  // 50 kg pedidos y 19 pesados generan exactamente 31 kg, aunque no se marque faltante.
+  const kg=await nuevo('kilos','Panceta',50);
+  await db.query("update pedido_items set medida='kg' where id=$1",[kg]);
+  await db.query('update prep_items set separado=true,peso=19 where item_id=$1',[kg]);
+  r=await listo('kilos');assert.equal(Number(r.items[0].enviado),19);assert.equal(r.items[0].falta,true);
+  await confirmar('kilos',r.firma);
+  const kgRepo=(await cargar('kilos',r.firma)).rows[0].r.reposicion_id;
+  const kgItems=(await leer(kgRepo)).pedido.pedido_items;
+  assert.equal(Number(kgItems[0].cantidad),31);assert.equal(kgItems[0].medida,'kg');
+  // El peso de una pieza no reduce la cantidad de unidades pedidas.
+  const unidad=await nuevo('unidades-pesadas','Panceta',50);
+  await db.query('update prep_items set peso=19 where item_id=$1',[unidad]);
+  r=await listo('unidades-pesadas');await confirmar('unidades-pesadas',r.firma);
+  assert.equal((await cargar('unidades-pesadas',r.firma)).rows[0].r.reposicion_id,null);
+  // Caso Fadu: el despacho general conserva 4 Tybo pendientes del armado aunque el checklist diga completo.
+  const fadu=await nuevo('fadu','Tybo',7);
+  await db.query('update prep_items set falta=true,enviado=3 where item_id=$1',[fadu]);
+  const despachar=()=>db.query('select despachar_con_faltantes($1,$2,$3) as r',[['fadu'],JSON.stringify({fadu:{[fadu]:{completo:true,cantidadPedida:7}}}),'Oscar']);
+  await db.exec("select set_config('test.repo_fail','true',false)");
+  await assert.rejects(despachar(),/Error simulado/);
+  assert.equal((await leer('fadu')).pedido.estado,'Pendiente');assert.equal((await leer('fadu')).pedido.pedido_items[0].cantidad_entregada,null);
+  await db.exec("select set_config('test.repo_fail','false',false)");
+  const despacho=(await despachar()).rows[0].r;
+  assert.equal(despacho.reposiciones.length,1);assert.equal(Number((await leer(despacho.reposiciones[0])).pedido.pedido_items[0].cantidad),4);
+  assert.equal(Number((await leer('fadu')).pedido.pedido_items[0].cantidad_entregada),3);
+  assert.equal((await despachar()).rows[0].r.reposiciones.length,0);
   // Rechaza sustituciones mal definidas y cantidades fuera de rango, no registros opcionales vacíos.
   await db.query("update prep_items set falta=true,enviado=0,sustituto='Otro',sustituto_cantidad=1,sustituto_medida='unidad',sustituye=4 where item_id=$1",[cambio]);
   await assert.rejects(listo('cambio'),/Revisá los productos/);

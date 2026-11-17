@@ -147,8 +147,8 @@
       <h3>${esc(p.cliente)}</h3>
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
       <ul>${p.items.map(it => `<li><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
-      ${p.notas ? `<p class="rv-note">${esc(p.notas)}</p>` : ''}
-      ${!mateo()&&e!=='listo'?`<button data-rv="remito" data-id="${esc(p.id)}">Resumen para remito</button>`:''}
+      ${p.notas ? `<p class="rv-note ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>` : ''}
+      ${!mateo()&&e==='listo'?`<button data-rv="remito" data-id="${esc(p.id)}">Resumen para remito</button>`:''}
       ${['pendiente','preparando'].includes(e) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
     </article>`;
   }
