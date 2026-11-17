@@ -48,6 +48,7 @@ async function setup(browser){
    db.prep_cola=db.prep_cola.filter(r=>r.pedido_id!==a.p_id).concat(next);setTimeout(()=>emit('prep_cola'),0);return {data:next};
   }
   if(q.name)return {data:[]};
+  if(q.value&&q.table==='pedidos'){const p=db.pedidos.find(p=>(q.filters||[]).every(([,k,v])=>p[k]===v));if(p)Object.assign(p,q.value);return {data:p?[{id:p.id}]:[]};}
   if(q.value){writes.push(q);if(failItem&&q.table==='prep_items')return {error:{message:'Sin conexión'}};const key=q.table==='prep_items'?'item_id':'pedido_id'; const row=db[q.table].find(r=>r[key]===q.value[key]);if(row)Object.assign(row,q.value);else db[q.table].push(q.value);
    if(q.table==='prep_items'){const p=db.pedidos.find(p=>p.pedido_items.some(i=>i.id===q.value.item_id));if(p){p.remito_hecho=false;const c=db.prep_pedidos.find(x=>x.pedido_id===p.id);if(c){c.controlado=false;c.control_firma=null;}}}
    setTimeout(()=>emit(q.table),0);return {data:null};}
@@ -391,7 +392,7 @@ test('sustituto parcial, remito compartido y carga crean solo el faltante pendie
  await expect(mateo.locator('[data-rv="camioneta"]')).toBeDisabled();
  await mateo.locator('.rv-card h3').click();await abrirProducto(mateo);await mateo.locator('[data-ap="falta"]').click();
  await mateo.locator('[data-ap="enviado"]').fill('1');await mateo.locator('[data-ap="reemplazar"]').click();
- await mateo.locator('[data-ap="sustituto"]').fill('Mozzarella alternativa');
+ await mateo.getByRole('textbox',{name:'Buscar producto sustituto'}).fill('Mozzarella alternativa');await mateo.locator('[data-product="Mozzarella alternativa"]').click();
  await mateo.locator('[data-ap="sustituto_cantidad"]').fill('2');await mateo.locator('[data-ap="sustituye"]').fill('2');
  await expect(mateo.locator('.ap-pending')).toContainText('Queda pendiente: 2');
  await mateo.locator('[data-ap="guardar"]').click();await expect(mateo.locator('.ap-item-status')).toHaveText('Con faltante');
@@ -463,8 +464,8 @@ test('Por preparar solo muestra el pedido; Mateo no ve autor ni fecha',async({br
 
 test('Mateo cambia entre Reparto y Pedidos con un único botón redondo',async({browser})=>{
  const s=await setup(browser);enCola(s);
- for(const width of [390,1440]){
-  const page=await s.open('Mateo',{width,height:900},{hasTouch:width===390});
+ for(const width of [320,820,1440]){
+  const page=await s.open('Mateo',{width,height:900},{hasTouch:width<1000});
   await expect(page.locator('#appTitle')).toBeHidden();await expect(page.locator('#bottomNav')).toBeHidden();
   await expect(page.getByText('Tu mesa de preparación')).toHaveCount(0);
   await expect(page.locator('#pcNav')).toBeHidden();
@@ -474,7 +475,7 @@ test('Mateo cambia entre Reparto y Pedidos con un único botón redondo',async({
   await expect(page.locator('#rv-mateo-progress .rv-truck')).toHaveText('');
   await expect(page.locator('#rv-mateo-refresh')).toHaveText('↻');
   const main=await page.locator('main').boundingBox(),bar=await page.locator('#rv-mateo-progress').boundingBox(),nav=await toggle.boundingBox(),refresh=await page.locator('#rv-mateo-refresh').boundingBox();
-  expect(main.width).toBeGreaterThan(width-25);expect(bar.y).toBeLessThan(nav.y);
+  expect(main.width).toBeGreaterThan(width-25);expect(Math.abs(bar.y-nav.y)).toBeLessThan(2);
   expect(refresh.x-nav.x-nav.width).toBe(8);expect(refresh.y).toBe(nav.y);
   await toggle.click();await expect(page.locator('#tab-pedidos')).toHaveClass(/active/);
   await expect(page.locator('#rv-mateo-progress')).toBeHidden();
@@ -540,4 +541,32 @@ test('desplazamiento vertical desde una tarjeta de Mateo no mueve ni abre pedido
  await page.context().setOffline(true);await expect(page.locator('.rv-connection')).toHaveText('Sin conexión');
  await expect(page.locator('.rv-card').first()).toHaveCSS('touch-action','pan-y');
  expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('resumen anticipado y consulta de fotos de una entrega anterior',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');s.db.pedidos[0].pedido_items[0].producto='Aceite';
+ const page=await s.open('Oscar');await page.locator('[data-rv="remito"][data-id="p1"]').click();
+ await page.locator('[data-rc="expandir"]').click();await expect(page.locator('table')).toContainText('2 cajas');
+ await expect(page.locator('[data-rc="control"]')).toBeDisabled();
+ await page.locator('[data-rc="remito"]').click();await expect(page.locator('[data-rc="remito"]')).toHaveAttribute('aria-pressed','true');
+ await page.locator('[data-rc="cerrar"]').click();
+ s.db.pedidos[0].estado='Despachado';s.db.pedidos[0].fecha_despacho='2026-11-13';
+ s.db.prep_items=[{item_id:1,separado:true,foto:'pedido-p1/antigua.jpg',falta:true,enviado:0,sustituto:'Pan',sustituto_cantidad:1,sustituto_medida:'caja',sustituye:2,sustituto_foto:'pedido-p1/pan.jpg'}];
+ await page.evaluate(()=>{state.pedidos=[{id:'p1',cliente:'Entrega anterior',estado:'Despachado',fecha:'2026-11-13',items:[]}];openPedidoDetail('p1');});
+ await page.getByRole('button',{name:'Resumen y fotos de preparación'}).click();await page.locator('[data-rc="expandir"]').click();
+ await expect(page.locator('.rc-not-sent')).toContainText('No se envía');await expect(page.locator('[data-rc="remito"]')).toHaveCount(0);
+ await page.locator('.rc-photo').click();await expect(page.locator('.rc-viewer')).toBeVisible();
+ await page.locator('.rc-viewer').click({position:{x:8,y:200}});await expect(page.locator('.rc-viewer')).toHaveCount(0);await expect(page.locator('#rc-raiz')).toBeVisible();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('selector de sustituto muestra catálogo, busca y permite cancelar sin cambios',async({browser})=>{
+ const s=await setup(browser);enCola(s);const page=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});
+ await page.locator('.rv-card h3').click();await abrirProducto(page);await page.getByRole('button',{name:'Elegir sustituto',exact:true}).click();
+ await expect(page.locator('#ap-selector [data-product]')).toHaveCount(2);await page.getByRole('textbox',{name:'Buscar producto sustituto'}).fill('Aceite');
+ await expect(page.locator('#ap-selector [data-product]')).toHaveCount(1);await page.locator('[data-product="Aceite"]').click();
+ await expect(page.locator('.ap-sub-name')).toContainText('Aceite');await expect(page.locator('[data-ap="sustituto_medida"]')).toHaveValue('caja');
+ await page.getByRole('button',{name:'Elegir sustituto',exact:true}).click();await page.keyboard.press('Escape');await expect(page.locator('#ap-selector')).toHaveCount(0);await expect(page.locator('#ap-raiz')).toBeVisible();
+ expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
 });

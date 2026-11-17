@@ -139,10 +139,11 @@
               ${x.foto?`<button class="ap-photo-remove" data-ap="quitar-foto" data-i="${it.id}">Eliminar foto</button>`:''}
             </div></div>
           </div>`:`<button class="ap-add-weight" data-ap="medir" data-i="${it.id}">Agregar peso o foto</button>`}
-          <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} Faltante o sustituto</button>
+          <button class="ap-change" data-ap="reemplazar" data-i="${it.id}" aria-label="Elegir sustituto" title="Elegir sustituto">⇄</button>
+          <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} Faltante</button>
             ${d.falta?`<div class="ap-shortage-form"><label>De ${esc(it.prod)} se envía <input data-ap="enviado" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(d.enviado)}" placeholder="0" aria-label="Cantidad a enviar de ${esc(it.prod)}"><small>Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">No hay</button><button data-ap="completo" data-i="${it.id}">Está completo</button>
-              <button class="ap-sub-toggle" data-ap="reemplazar" data-i="${it.id}" aria-expanded="${d.reemplazar}">${d.reemplazar?'Quitar sustituto':'Agregar sustituto'}</button>
-              ${d.reemplazar?`<div class="ap-substitute"><label>Producto sustituto<input data-ap="sustituto" data-i="${it.id}" value="${esc(d.sustituto)}" list="ap-productos" autocomplete="off"></label><div><label>Cantidad del sustituto<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label></div><label>Cantidad del original que reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label>
+
+              ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad del sustituto<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label></div><label>Cantidad del original que reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label>
                 ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
@@ -156,7 +157,7 @@
   }
   function pintar() {
     const r=$('ap-raiz'); if(!r || !S.open) return;
-    if(editando() || S.interacting || S.choosing){S.repaint=true;return;} S.repaint=false;
+    if($('ap-selector') || $('ap-raiz')?.querySelector('.ap-viewer') || editando() || S.interacting || S.choosing){S.repaint=true;return;} S.repaint=false;
     const scroll=$('ap-content')?.scrollTop || 0,active=document.activeElement;
     const focus= r.contains(active) ? {a:active.dataset.ap,id:active.dataset.i} : null;
     const p=S.p,done=p.items.filter(listo).length,total=p.items.length,stage=S.cola?.etapa || 'pendiente';
@@ -293,6 +294,28 @@
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
     finally{if(d.epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
+  function elegirSustituto(it) {
+    const v=document.createElement('div');v.id='ap-selector';v.className='ap-selector';v.setAttribute('role','dialog');v.setAttribute('aria-label','Elegir sustituto');
+    v.innerHTML='<div class="ap-selector-panel"><header><h3>Elegir sustituto</h3><button aria-label="Cerrar selector">✕</button></header><input class="ap-search" aria-label="Buscar producto sustituto" placeholder="Buscar producto…" autocomplete="off"><div class="ap-options"></div></div>';
+    const cerrarSelector=()=>{v.remove();pintar();$('ap-item-'+it.id)?.querySelector('[data-ap="reemplazar"]')?.focus();};
+    const buscar=v.querySelector('input'),lista=v.querySelector('.ap-options');
+    const filtrar=()=>{
+      const q=buscar.value.trim(),normal=t=>t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      const productos=(state.products||[]).filter(p=>p.act!==false&&normal(p.n).includes(normal(q))).sort((a,b)=>(b.pop||0)-(a.pop||0)||a.n.localeCompare(b.n,'es'));
+      lista.innerHTML=productos.map(p=>`<button class="pk-item" data-product="${esc(p.n)}"><span>${esc(p.n)}</span><small>${esc(p.u||'')}</small></button>`).join('')+(q&&!productos.some(p=>normal(p.n)===normal(q))?`<button class="pk-item" data-product="${esc(q)}">Agregar “${esc(q)}”</button>`:'');
+    };
+    buscar.addEventListener('input',filtrar);
+    v.addEventListener('click',e=>{
+      e.stopPropagation();
+      if(e.target===v||e.target.closest('[aria-label="Cerrar selector"]'))return cerrarSelector();
+      const b=e.target.closest('[data-product]');if(!b)return;
+      const d=borrador(it),enviado=d.falta?(numero(d.enviado)||0):0,medida=medidaDe(prodInfo(b.dataset.product),false,'')||'unidad';
+      modificar(it.id,{falta:true,reemplazar:true,enviado:decimal(enviado),sustituto:b.dataset.product,sustituto_cantidad:'',sustituto_medida:medida,sustituye:decimal(Math.max(0,Number(it.qty)-enviado)),sustituto_peso:''});
+      cerrarSelector();
+    });
+    v.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();cerrarSelector();}});
+    $('ap-raiz').appendChild(v);filtrar();buscar.focus();
+  }
   function clic(e) {
     if(e.target===$('ap-raiz')){if(S.backdropDown)cerrar();S.backdropDown=false;return;}
     const b=e.target.closest('[data-ap]');if(!b||b.disabled)return;
@@ -308,7 +331,8 @@
     if(a==='falta'){modificar(it.id,{falta:!borrador(it).falta});pintar();}
     if(a==='nada'){modificar(it.id,{falta:true,enviado:'0'});pintar();}
     if(a==='completo'){modificar(it.id,{falta:false,enviado:'',reemplazar:false});pintar();}
-    if(a==='reemplazar'){const d=borrador(it);modificar(it.id,{reemplazar:!d.reemplazar,enviado:d.enviado||'0',sustituye:decimal(Math.max(0,Number(it.qty)-(numero(d.enviado)||0)))});pintar();}
+    if(a==='reemplazar')return elegirSustituto(it);
+    if(a==='quitar-sub'){modificar(it.id,{reemplazar:false,sustituto:''});pintar();}
     if(a==='guardar')return guardar(it);
     if(a==='foto')return pedirFoto(it);
     if(a==='foto-sub')return pedirFoto(it,true);
@@ -317,7 +341,7 @@
       const url=S.fotos.get(a==='ver-foto-sub'?row(it).sustituto_foto:row(it).foto)?.url;if(!url)return;
       const v=document.createElement('div');v.className='ap-viewer';v.setAttribute('role','dialog');v.setAttribute('aria-label','Foto del pesaje');
       v.innerHTML=`<img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"><button aria-label="Cerrar foto">✕</button>`;
-      v.addEventListener('click',()=>{v.remove();b.focus();});$('ap-raiz').appendChild(v);v.querySelector('button').focus();
+      v.addEventListener('click',e=>{e.stopPropagation();v.remove();b.focus();});$('ap-raiz').appendChild(v);v.querySelector('button').focus();
     }
   }
   const soltar=()=>setTimeout(()=>{S.interacting=false;if(S.repaint)pintar();},0);
@@ -325,7 +349,7 @@
   document.addEventListener('focusout',()=>{if(S.open&&S.repaint)setTimeout(pintar,0);});
   document.addEventListener('keydown',e=>{
     if(!S.open)return;
-    const visor=$('ap-raiz').querySelector('.ap-viewer');
+    const visor=$('ap-selector')||$('ap-raiz').querySelector('.ap-viewer');
     if(e.key==='Escape'){e.preventDefault();if(visor)visor.remove();else cerrar();}
     if(e.key==='Tab'){
       const els=[...(visor||$('ap-raiz')).querySelectorAll('button:not(:disabled),input:not([type="file"]):not(:disabled)')].filter(el=>el.getClientRects().length);

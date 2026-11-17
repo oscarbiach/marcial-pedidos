@@ -14,7 +14,7 @@ body.usuario-mateo #rv-mateo-nav:focus-visible { outline:3px solid #5487c7; outl
 #rv-mateo-nav svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; }
 body.usuario-mateo #rv-mateo-refresh { font-size:29px; }
 body.usuario-mateo #rv-mateo-refresh:active { transform:rotate(45deg); }
-body.usuario-mateo.reparto-vivo #rv-mateo-progress { display:block; grid-column:1/-1; padding:0; }
+body.usuario-mateo.reparto-vivo #rv-mateo-progress { display:block; grid-column:1; min-width:0; padding:0; }
 #rv-mateo-progress .rv-summary { margin:0; padding:0; border:0; border-radius:0; background:transparent; gap:12px; }
 #rv-mateo-progress .rv-summary>b { font-size:22px; font-variant-numeric:tabular-nums; }
 #rv-mateo-progress .rv-progress { max-width:none; height:10px; }
@@ -141,3 +141,13 @@ body.reparto-vivo #repBar { display:none !important; }
   .pp-pedido .pp-pasos { grid-template-columns:repeat(2,1fr); }
 }
 @media (prefers-reduced-motion:reduce) { .rv *, .pp.pp-pedido { animation:none !important; transition:none !important; } }
+
+#rv-mateo-progress .rv-summary { flex-wrap:nowrap; gap:8px; }
+#rv-mateo-progress .rv-progress { min-width:20px; }
+
+@media(min-width:1000px) and (pointer:fine) {
+ body:not(.usuario-mateo) .rv-card { padding:12px; }
+ body:not(.usuario-mateo) .rv-card li { font-size:14px; }
+ body:not(.usuario-mateo) .rv-card li b { font-size:16px; }
+ body:not(.usuario-mateo) .rv-dir,body:not(.usuario-mateo) .rv-card-top { font-size:12px; }
+}

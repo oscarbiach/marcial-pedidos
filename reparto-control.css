@@ -37,3 +37,15 @@ body.rc-abierto { overflow:hidden; }
  .rc .rc-photo { width:54px;height:54px; }.rc-actions button { flex:1 1 100%; }.rc .rc-primary { margin-left:0; }
 }
 @media(prefers-reduced-motion:reduce){.rc,.rc * {animation:none!important;transition:none!important;}}
+
+.rc-not-sent td:first-child>b { text-decoration:line-through; color:#788697; }
+.rc-photo img { display:block; max-width:100%; }
+.rc-viewer img { display:block; width:auto; height:auto; max-width:calc(100vw - 32px); max-height:calc(100dvh - 80px); }
+@media(min-width:1000px) and (pointer:fine) {
+ body:not(.usuario-mateo) .rc { font-size:14px; }
+ body:not(.usuario-mateo) .rc-order { padding:16px; margin-bottom:12px; }
+ body:not(.usuario-mateo) .rc h3 { font-size:19px; }
+ body:not(.usuario-mateo) .rc td { padding:10px; }
+ body:not(.usuario-mateo) .rc td b,body:not(.usuario-mateo) .rc td strong { font-size:15px; }
+ body:not(.usuario-mateo) .rc button { min-height:38px; padding:8px 12px; }
+}
