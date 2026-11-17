@@ -591,6 +591,28 @@ test('desmarcar preparado y deshacer faltante dejan el producto editable',async(
  expect(s.errors).toEqual([]);await s.close();
 });
 
+test('OCR sin punto conserva candidatos y nunca guarda un decimal supuesto',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/balanza.js');await page.addScriptTag({url:'/balanza.js'});
+ const results=await page.evaluate(()=>['885\n','025','4.98','texto 885','999999',''].map(t=>Balanza.resultadoTexto(t,'recorte')));
+ expect(results[0]).toMatchObject({peso:null,opciones:[8.85,88.5]});
+ expect(results[1]).toMatchObject({peso:null,opciones:[0.25,2.5]});
+ expect(results[2].peso).toBe(4.98);
+ for(const r of results.slice(3)){expect(r.peso).toBeNull();expect(r.opciones).toBeUndefined();}
+});
+
+test('releer una foto guardada requiere confirmar y conserva la foto original',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'sardo.jpg',peso:null}];
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:null,opciones:[8.85,88.5],recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
+ await page.getByRole('button',{name:'Leer peso de la foto',exact:true}).click();
+ await expect(page.locator('[data-answer="8.85"]')).toBeVisible();expect(s.writes).toHaveLength(0);expect(s.moves).toHaveLength(0);
+ await page.locator('[data-answer="no"]').click();expect(s.db.prep_items[0].peso).toBeNull();
+ await page.getByRole('button',{name:'Leer peso de la foto',exact:true}).click();await page.locator('[data-answer="8.85"]').click();
+ await expect.poll(()=>s.db.prep_items[0].peso).toBe(8.85);expect(s.db.prep_items[0].foto).toBe('sardo.jpg');expect(s.uploads).toHaveLength(0);
+ await expect(page.locator('.ap-read-weight')).toContainText('8,85 kg');expect(s.db.prep_cola[0].etapa).toBe('preparando');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('foto grande queda sobre el encabezado y cierra solo su visor',async({browser})=>{
  const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'foto.jpg'}];
  const page=await s.open('Oscar');await page.locator('.rv-listo .rv-card h3').click();await page.locator('[data-rc="expandir"]').click();await page.locator('.rc-photo').click();

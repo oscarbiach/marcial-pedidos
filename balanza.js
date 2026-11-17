@@ -29,7 +29,7 @@
         const q=pila[j],qx=q%w,qy=Math.floor(q/w);n++;left=Math.min(left,qx);right=Math.max(right,qx);top=Math.min(top,qy);bottom=Math.max(bottom,qy);
         for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){const xx=qx+dx,yy=qy+dy,k=yy*w+xx;if(xx>=0&&xx<w&&yy>=0&&yy<h*.78&&!seen[k]&&rojo(k)){seen[k]=1;pila.push(k);}}
       }
-      if(n>8&&bottom-top>h*.006&&bottom-top<h*.12)grupos.push({left,right,top,bottom,n});
+      if(n>8&&bottom-top>h*.006&&bottom-top<h*.6)grupos.push({left,right,top,bottom,n});
     }
     // El visor de peso es el superior, con varios dígitos rojos alineados.
     const candidatos=[];
@@ -45,6 +45,17 @@
   function interpretar(text){
     const s=String(text).trim().replace(/\s/g,'').replace(',','.');
     return /^\d{1,3}\.\d{1,3}$/.test(s)&&Number(s)>0&&Number(s)<=150?Number(s):null;
+  }
+  function resultadoTexto(text,recorte){
+    const peso=interpretar(text),s=String(text).trim().replace(/\s/g,'');
+    if(peso!==null)return {peso,recorte,texto:text};
+    // El OCR suele perder el punto por el brillo: conservar los dígitos y
+    // pedir al usuario que elija el decimal mirando el visor, sin adivinarlo.
+    const opciones=[];
+    if(/^\d{3,6}$/.test(s))for(let i=Math.max(1,s.length-3);i<s.length;i++){
+      const n=Number(s.slice(0,i)+'.'+s.slice(i));if(n>0&&n<=150&&!opciones.includes(n))opciones.push(n);
+    }
+    return {peso:null,recorte,texto:text,...(opciones.length?{opciones}:{})};
   }
   function segmentos(c,limite=140,diferencia=50,ambiguo=false){
     const w=c.width,h=c.height,d=c.getContext('2d').getImageData(0,0,w,h).data;
@@ -69,7 +80,7 @@
       let digit;
       if(dw/dh<.33)digit='1';
       else{
-        const regs=[[.2,.8,0,.2],[.65,1,.12,.45],[.65,1,.55,.88],[.2,.8,.8,1],[0,.35,.55,.88],[0,.35,.12,.45],[.2,.8,.4,.6]];
+        const regs=[[.2,.8,0,.2],[.65,1,.12,.45],[.65,1,.55,.88],[.2,.8,.8,1],[0,.35,.55,.88],[0,.35,.12,.45],[.35,.65,.42,.58]];
         const bits=regs.map(([a,b,t,z],i)=>{let yes=0,n=0;for(let y=Math.floor(top+t*dh);y<top+z*dh;y++)for(let x=Math.floor(l+a*dw);x<l+b*dw;x++){yes+=mask[y*w+x]||0;n++;}return yes/n>([0,3,6].includes(i)?.38:[4,5].includes(i)?.25:.20)?'1':'0';}).join('');
         digit=map[bits];
       }
@@ -89,8 +100,7 @@
     const led=segmentos(crop)??segmentos(crop,180,10);if(led!==null)return {peso:led,recorte,texto:String(led),metodo:'segmentos'};
     const digitos=segmentos(crop,180,10,true);
     if(typeof digitos==='string'){
-      const opciones=[];for(let i=1;i<digitos.length;i++){const n=Number(digitos.slice(0,i)+'.'+digitos.slice(i));if(n>0&&n<=150)opciones.push(n);}
-      return {peso:null,opciones,recorte,metodo:'segmentos-decimal'};
+      return {...resultadoTexto(digitos,recorte),metodo:'segmentos-decimal'};
     }
     await motor();const base=new URL('vendor/tesseract/',location.href).href;
     let worker;
@@ -101,8 +111,8 @@
       // El verde conserva el núcleo luminoso y descarta el halo rojo.
       for(let i=0;i<data.data.length;i+=4){const k=255-data.data[i+1];data.data[i]=data.data[i+1]=data.data[i+2]=k;}
       ctx.putImageData(data,0,0);const r=await worker.recognize(crop);
-      return {peso:interpretar(r.data.text),recorte,texto:r.data.text};
+      return resultadoTexto(r.data.text,recorte);
     }finally{if(worker)await worker.terminate();}
   }
-  window.Balanza={leer,visor,interpretar,segmentos};
+  window.Balanza={leer,visor,interpretar,segmentos,resultadoTexto};
 })();

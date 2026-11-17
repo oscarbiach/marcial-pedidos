@@ -137,6 +137,7 @@
               ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
               <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
               ${x.foto?`<button class="ap-photo-remove" data-ap="quitar-foto" data-i="${it.id}">Eliminar foto</button>`:''}
+              ${url&&!d.peso?`<button class="ap-photo-button" data-ap="leer-foto" data-i="${it.id}" ${zero?'disabled':''}>Leer peso de la foto</button>`:''}
             </div></div>
           </div>`:`<button class="ap-add-weight" data-ap="medir" data-i="${it.id}">Agregar peso o foto</button>`}
           <button class="ap-change" data-ap="reemplazar" data-i="${it.id}" aria-label="Elegir sustituto" title="Elegir sustituto">⇄</button>
@@ -301,6 +302,21 @@
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
     finally{if(d.epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
+  async function leerFotoGuardada(it){
+    const ruta=row(it).foto,url=S.fotos.get(ruta)?.url,epoch=S.epoch;
+    if(!url)return;
+    let out;try{out=cambios(it,false);}catch(e){S.itemError={id:it.id,message:e.message};pintar();return;}
+    S.busy=true;S.revision++;S.itemError=null;pintar();
+    try{
+      const response=await fetch(url);if(!response.ok)throw Error('No se pudo abrir la foto.');
+      const lectura=await Balanza.leer(await response.blob());if(epoch!==S.epoch)return;
+      if(lectura?.peso==null&&!lectura?.opciones?.length)throw Error('No se distingue el peso. Probá otra foto del visor superior.');
+      const peso=await confirmarPeso(lectura);if(peso===null||epoch!==S.epoch)return;
+      await iniciarEdicion(epoch);
+      if(await escribir(it,{...out,peso,foto:ruta},epoch))toast('Peso confirmado y guardado.');
+    }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:e.message};}
+    finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
+  }
   function confirmarPeso(lectura){
     return new Promise(resolve=>{
       const v=document.createElement('div');v.className='ap-weight-confirm';v.setAttribute('role','dialog');v.setAttribute('aria-label','Confirmar peso leído');
@@ -353,6 +369,7 @@
     if(a==='guardar')return guardar(it);
     if(a==='foto')return pedirFoto(it);
     if(a==='foto-sub')return pedirFoto(it,true);
+    if(a==='leer-foto')return leerFotoGuardada(it);
     if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub');
     if(a==='ver-foto'||a==='ver-foto-sub'){
       const url=S.fotos.get(a==='ver-foto-sub'?row(it).sustituto_foto:row(it).foto)?.url;if(!url)return;

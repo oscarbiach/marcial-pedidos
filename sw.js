@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v102';
+const CACHE = 'dm-pedidos-v103';
 
 const SHELL = [
   './',
@@ -43,15 +43,15 @@ const SHELL = [
   './whatsapp-precios.js',
   './stock.js',
   './stock.css',
-  './preparacion.js?v=102',
+  './preparacion.js?v=103',
   './preparacion.css',
-  './reparto-vivo.js?v=102',
-  './reparto-vivo.css?v=102',
-  './armado-pedido.js?v=102',
-  './balanza.js?v=102',
-  './armado-pedido.css?v=102',
-  './reparto-control.js?v=102',
-  './reparto-control.css?v=102',
+  './reparto-vivo.js?v=103',
+  './reparto-vivo.css?v=103',
+  './armado-pedido.js?v=103',
+  './balanza.js?v=103',
+  './armado-pedido.css?v=103',
+  './reparto-control.js?v=103',
+  './reparto-control.css?v=103',
   './pedidos-a-cargar.js',
   './pedidos-fijos.js'
 ];
