@@ -72,7 +72,7 @@
   const expanded=S.expanded.has(p.id),off=S.busy||!!S.error||!available;
   const remitoOff=S.busy||!!S.error||p.estado!=='Pendiente';
   return `<article class="rc-order ${loaded?'rc-loaded':''}" data-pedido="${esc(p.id)}"><div class="rc-order-top"><div><h3>${esc(p.cliente)}</h3>${p.direccion?`<p>${esc(p.direccion)}</p>`:''}</div><span class="rc-status">${loaded?'✓ Cargado y despachado':p.estado==='Despachado'?'Despachado':!available?'En preparación':short?'Con faltantes':'Completo'}</span></div>
-   ${p.notas?`<p class="rc-notes">${esc(p.notas)}</p>`:''}
+   ${p.notas?`<p class="rc-notes ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>`:''}
    <button class="rc-expand" data-rc="expandir" data-id="${esc(p.id)}" aria-expanded="${expanded}">${expanded?'Ocultar productos':'Ver productos'} ${expanded?'−':'+'}</button>
    ${expanded?tabla(r):''}
    ${!available&&p.estado==='Pendiente'?'<p class="rc-notes">Cantidades pedidas. Si cambia la preparación, habrá que revisar el remito.</p>':''}

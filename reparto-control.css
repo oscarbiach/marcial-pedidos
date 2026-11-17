@@ -49,3 +49,7 @@ body.rc-abierto { overflow:hidden; }
  body:not(.usuario-mateo) .rc td b,body:not(.usuario-mateo) .rc td strong { font-size:15px; }
  body:not(.usuario-mateo) .rc button { min-height:38px; padding:8px 12px; }
 }
+
+.rc-panel { position:relative; }
+.rc-viewer { z-index:1000; padding:50px 16px 16px; overflow:hidden; }
+.rc-viewer img { max-width:100%; max-height:100%; object-fit:contain; }

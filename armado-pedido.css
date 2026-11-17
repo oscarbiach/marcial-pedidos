@@ -140,3 +140,14 @@ body.ap-abierto { overflow:hidden; }
  body:not(.usuario-mateo) .ap-top h2 { font-size:22px; }
  body:not(.usuario-mateo) .ap-content { padding:16px; }
 }
+
+.ap-viewer { position:fixed; z-index:1000; padding:50px 16px 16px; overflow:hidden; }
+.ap-viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+.ap-weight-confirm { position:fixed; inset:0; z-index:1100; background:#10243bd9; display:grid; place-items:center; padding:20px; }
+.ap-weight-confirm>div { background:white; border-radius:20px; padding:24px; width:min(520px,100%); }
+.ap-weight-confirm h3 { font-size:24px; margin:0 0 20px; }
+.ap-weight-confirm img { display:block; max-width:100%; max-height:35dvh; margin:0 auto 20px; object-fit:contain; }
+.ap-weight-confirm>div>div { display:flex; gap:12px; flex-wrap:wrap; }
+.ap-weight-confirm button { min-height:48px; padding:12px; }
+.ap-read-weight { font-size:24px; align-self:center; }
+.nota-reposicion { background:#f3edf9 !important; color:#69428b !important; border:1px solid #e1d5ee !important; border-radius:10px; padding:12px !important; line-height:1.5; }

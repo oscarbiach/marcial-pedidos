@@ -1599,9 +1599,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=101">
-<link rel="stylesheet" href="armado-pedido.css?v=101">
-<link rel="stylesheet" href="reparto-control.css?v=101">
+<link rel="stylesheet" href="reparto-vivo.css?v=102">
+<link rel="stylesheet" href="armado-pedido.css?v=102">
+<link rel="stylesheet" href="reparto-control.css?v=102">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -5198,118 +5198,23 @@ async function finalizarChecklistDespacho() {
   // la operación ya está en vuelo.
   const respAll = JSON.parse(JSON.stringify(despChecklist.resp));
 
-  const llamar = (accion, args) => new Promise((resolve, reject) => {
-    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[accion](...args);
-  });
-
   try {
-    // Primero se confirma el despacho en sí, ANTES de tocar un solo
-    // renglón. Si mientras se llenaba el checklist otra sesión ya
-    // despachó o canceló alguno de estos pedidos, despacharVarios lo va a
-    // dejar afuera (solo toca los que siguen Pendientes) y acá se sabe
-    // exactamente cuáles se despacharon RECIÉN. Todo lo que sigue
-    // (guardar novedades, armar reposición) se hace solo para esos —
-    // nunca para uno que en realidad ya había resuelto otra sesión, que
-    // es lo que antes podía pisarle la novedad ya guardada por esa otra
-    // sesión (o crearle una reposición de más).
-    const r2 = await llamar('despacharVarios', [ids]);
-    const hechosIds = (r2 && r2.ids) || [];
-    const hechosSet = new Set(hechosIds);
-    const hechos = hechosIds.length;
-
-    // De los pedidos recién despachados: por cada renglón se guarda
-    // cuánto ENTREGÓ con novedad (lo pedido menos lo que no se entregó)
-    // si quedó INCOMPLETO, que es el dato que ya sabe leer el resto de la
-    // app. El motivo queda fijo en 'otro': ya no se le pide al vendedor,
-    // pero deja algo cargado para que un reporte futuro
-    // (pedidos_con_faltantes) siga encontrando estos renglones. Un
-    // renglón COMPLETO se guarda "sin novedad" SIEMPRE, sin fijarse en
-    // it.motivoFaltante del estado local: si un intento de despacho
-    // anterior de ESTE MISMO pedido ya había escrito una novedad pero
-    // después falló antes de llegar a este punto, esta sesión —sin haber
-    // recargado— nunca se enteró de ese cambio, y un reintento la
-    // dejaría pisada para siempre creyendo que no había nada que limpiar.
-    //
-    // De paso se junta, pedido por pedido, lo que faltó: con eso se arma
-    // un pedido Pendiente nuevo al mismo cliente (ver más abajo), para que
-    // lo que volvió al depósito no se pierda de vista.
-    const cambios = [];
-    const reposiciones = []; // { ped, faltantes:[{prod,qty,fetear,sinCuero,unidades}] }
-    ids.filter(id => hechosSet.has(id)).forEach(pid => {
-      const ped = state.pedidos.find(x => x.id === pid);
-      const resp = respAll[pid] || {};
-      const faltantes = [];
-      (ped ? ped.items : []).forEach(it => {
-        const r = resp[it.id];
-        if (!r || r.completo) { cambios.push({ itemId: it.id, cantidadEntregada: null, limpiar: true }); return; }
-        const cantidadNoEntregada = round2(Number(r.cantidadNoEntregada || 0));
-        const cantidadEntregada = round2(Number(it.qty) - cantidadNoEntregada);
-        cambios.push({ itemId: it.id, cantidadEntregada });
-        if (cantidadNoEntregada > 0) {
-          faltantes.push({ prod: it.prod, qty: cantidadNoEntregada, fetear: it.fetear, sinCuero: it.sinCuero, unidades: it.unidades });
-        }
-      });
-      if (ped && faltantes.length) reposiciones.push({ ped, faltantes });
-    });
-
-    // El despacho ya se confirmó: de acá en más nada se deshace (no
-    // tendría sentido "des-despachar" algo que ya salió de verdad). Se
-    // intentan todos los renglones y reposiciones igual, y lo que no se
-    // pueda guardar se avisa aparte en vez de frenar todo a mitad de camino.
-    let novedadesFallidas = 0;
-    for (const c of cambios) {
-      try {
-        const r = c.limpiar
-          ? await llamar('guardarNovedadItem', [c.itemId, null, null, ''])
-          : await llamar('guardarNovedadItem', [c.itemId, c.cantidadEntregada, 'otro', '']);
-        if (!r.ok) novedadesFallidas++;
-      } catch (e) { novedadesFallidas++; }
+    for (const id of ids) {
+      const pedido = state.pedidos.find(p => p.id === id);
+      respAll[id] = respAll[id] || {};
+      for (const it of pedido.items) respAll[id][it.id] = {...respAll[id][it.id], cantidadPedida:Number(it.qty)};
     }
-
-    // Un pedido Pendiente nuevo por cada pedido con faltantes, con SOLO
-    // lo que no se entregó, sin fecha de entrega (queda para coordinar
-    // cuándo sale) y con la observación marcada bien visible como
-    // reposición. Si alguno falla, no se deshace el despacho (ya salió
-    // de verdad): se avisa aparte para cargarlo a mano si hace falta.
-    let repoFallidas = 0;
-    for (const rep of reposiciones) {
-      const detalle = rep.faltantes
-        .map(f => `${qtyLabel(f.prod, f.qty, f.fetear, f.unidades)} ${f.prod}`)
-        .join('; ');
-      const datos = {
-        cliente: rep.ped.cliente,
-        direccion: rep.ped.direccion || '',
-        notas: `${REPO_MARCA} — Faltó del pedido del ${fmtDate(rep.ped.fecha)}: ${detalle}`,
-        retiro: !!rep.ped.retiro,
-        quien: state.who,
-        items: rep.faltantes
-      };
-      try {
-        const rr = await llamar('savePedido', [datos]);
-        if (!rr.ok) throw new Error(rr.error || 'sin detalle');
-      } catch (e) {
-        repoFallidas++;
-      }
-    }
-
-    let msg = hechos === ids.length
-      ? `✓ ${hechos} pedido${hechos !== 1 ? 's' : ''} despachado${hechos !== 1 ? 's' : ''}`
-      : `✓ ${hechos} despachados · ${ids.length - hechos} ya no estaban pendientes`;
-    if (reposiciones.length) {
-      const creadas = reposiciones.length - repoFallidas;
-      if (creadas) msg += ` · 🔁 ${creadas} pedido${creadas !== 1 ? 's' : ''} de reposición`;
-      if (repoFallidas) msg += ` · ⚠ ${repoFallidas} reposición${repoFallidas !== 1 ? 'es' : ''} no se pudo crear, cargala a mano`;
-    }
-    if (novedadesFallidas) msg += ` · ⚠ ${novedadesFallidas} novedad${novedadesFallidas !== 1 ? 'es' : ''} no se pudo guardar`;
-    toast(msg);
+    const {data:r2,error} = await sb.rpc('despachar_con_faltantes', {p_ids:ids,p_respuestas:respAll,p_quien:state.who});
+    if(error) throw sbError_(error);
+    if(!r2?.ok) throw new Error('No llegó la confirmación del despacho.');
+    const hechos = r2.ids.length, reposiciones = r2.reposiciones.length;
+    toast(`✓ ${hechos} pedido${hechos!==1?'s':''} despachado${hechos!==1?'s':''}${reposiciones?` · 🔁 ${reposiciones} reposición${reposiciones!==1?'es':''}`:''}`);
     despChecklist = null;
     closeModal('despChecklistModal');
     if (despActivo) salirDespacho();
     reload();
   } catch (e) {
-    // Solo despacharVarios puede llegar hasta acá (lo de abajo ya no
-    // deshace nada): si esto falló, no se despachó ni se tocó ningún
-    // renglón, así que el checklist puede reintentarse tal cual está.
+    // Despacho y reposición se confirman juntos; un error permite reintentar sin duplicarlos.
     btn.disabled = false;
     btnCerrar.disabled = false;
     if (e && e.auth) { volverALogin_('Tu sesión expiró. Entrá de nuevo con tu PIN.'); return; }
@@ -5844,7 +5749,7 @@ function openPedidoDetail(id) {
       <h4>Productos</h4>
       ${p.items.map(it => `<div class="detail-item qty-left"><b>${itemDespachoLabel(p, it)}</b><span>${esc(it.prod)}${itemTags(it)}</span></div>${itemNovedadHtml(p, it)}`).join('')}
     </div>
-    ${!sinConfirmar ? `<button class="btn btn-outline" onclick="closeModal('detailModal');RepartoControl.remito('${p.id}')">${mIco('image')}Resumen y fotos de preparación</button>` : ''}
+    ${!sinConfirmar && p.estado==='Despachado' && !esReposicion(p) ? `<button class="btn btn-outline" onclick="closeModal('detailModal');RepartoControl.remito('${p.id}')">${mIco('image')}Resumen y fotos de preparación</button>` : ''}
     ${acciones}
   `;
   document.getElementById('detailModal').classList.add('open');
@@ -6597,9 +6502,10 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js?v=101"></script>
-<script src="armado-pedido.js?v=101"></script>
-<script src="reparto-control.js?v=101"></script>
-<script src="reparto-vivo.js?v=101"></script>
+<script src="preparacion.js?v=102"></script>
+<script src="balanza.js?v=102"></script>
+<script src="armado-pedido.js?v=102"></script>
+<script src="reparto-control.js?v=102"></script>
+<script src="reparto-vivo.js?v=102"></script>
 </body>
 </html>
