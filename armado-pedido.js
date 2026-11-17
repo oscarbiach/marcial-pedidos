@@ -196,7 +196,7 @@
     if(d.falta && (enviado===null || enviado>Number(it.qty)))throw Error('Indicá cuánto se envía, entre 0 y '+it.qty+', en la misma medida del pedido.');
     const zero=d.falta&&enviado===0;
     if(!zero && String(d.peso).trim()!=='' && !(peso>0))throw Error('Ingresá un peso mayor que 0. Usá coma o punto para los decimales.');
-    if('peso' in draft){out.peso=peso;if(peso!==Number(x.peso))out.foto=null;}
+    if('peso' in draft){out.peso=peso;out.peso_revision=peso?'confirmado':null;if(peso!==Number(x.peso))out.foto=null;}
     if('falta' in draft || 'enviado' in draft){
       out.falta=!!d.falta;out.enviado=enviado;
       if((d.falta?enviado:Number(it.qty))!==(x.falta?Number(x.enviado):Number(it.qty))){
@@ -216,7 +216,7 @@
       if('sustituto_peso' in draft){
         const sp=String(d.sustituto_peso).trim()===''?null:numero(d.sustituto_peso);
         if(sp!==null&&!(sp>0)||String(d.sustituto_peso).trim()!==''&&sp===null)throw Error('Revisá el peso del sustituto.');
-        out.sustituto_peso=sp;if(sp!==Number(x.sustituto_peso))out.sustituto_foto=null;
+        out.sustituto_peso=sp;out.sustituto_peso_revision=sp?'confirmado':null;if(sp!==Number(x.sustituto_peso))out.sustituto_foto=null;
       }
     } else if(subFields.some(k=>k in draft)||'falta' in draft){
       Object.assign(out,{sustituto:null,sustituto_cantidad:null,sustituto_medida:null,sustituye:null,sustituto_peso:null,sustituto_foto:null});
@@ -288,16 +288,18 @@
       let lectura=null;
       try{lectura=await window.Balanza.leer(file);}catch(e){console.warn('Lectura de balanza no disponible');}
       if(d.epoch!==S.epoch)return;
-      d.peso=lectura?.peso!=null||lectura?.opciones?.length?await confirmarPeso(lectura):(state.who==='Mateo'?null:d.peso);
-      const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?decimal(d.peso)+' kg':'Sin peso registrado']);
+      const manual=state.who!=='Mateo'&&Object.hasOwn(d.out,d.sub?'sustituto_peso':'peso')&&d.peso>0;
+      d.peso=manual?d.peso:lectura?.peso??null;
+      const revision=manual?'confirmado':lectura?.peso&&!lectura.dudoso?'automatico':'dudoso';
+      const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?(revision==='dudoso'?'¿'+decimal(d.peso)+' kg?':decimal(d.peso)+' kg'):'Sin peso registrado']);
       if(d.epoch!==S.epoch)return;
       if(!blob)throw Error('No se pudo procesar la imagen.');
       const ruta=`pedido-${d.pid}/${d.it.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
       const {error}=await sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false});
       if(error)throw error;
-      if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta}:{peso:d.peso,foto:ruta})},d.epoch)){
+      if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta,sustituto_peso_revision:revision}:{peso:d.peso,foto:ruta,peso_revision:revision})},d.epoch)){
         const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast(d.peso?'Foto y peso guardados.':'Foto guardada sin peso.');
-        if(!d.peso)S.itemError={id:d.it.id,message:'No quedó un peso confirmado. Podés repetir la foto o revisarlo desde la PC.'};
+        if(!d.peso)S.itemError={id:d.it.id,message:'Foto guardada. El peso se revisa al hacer el remito.'};
       }
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
     finally{if(d.epoch===S.epoch){S.busy=false;pintar();cargar();}}
@@ -310,21 +312,12 @@
     try{
       const response=await fetch(url);if(!response.ok)throw Error('No se pudo abrir la foto.');
       const lectura=await Balanza.leer(await response.blob());if(epoch!==S.epoch)return;
-      if(lectura?.peso==null&&!lectura?.opciones?.length)throw Error('No se distingue el peso. Probá otra foto del visor superior.');
-      const peso=await confirmarPeso(lectura);if(peso===null||epoch!==S.epoch)return;
+      if(lectura?.peso==null)throw Error('No se distingue el peso. Se puede completar desde el resumen para remito.');
+      const peso=lectura.peso;
       await iniciarEdicion(epoch);
-      if(await escribir(it,{...out,peso,foto:ruta},epoch))toast('Peso confirmado y guardado.');
+      if(await escribir(it,{...out,peso,foto:ruta,peso_revision:lectura.dudoso?'dudoso':'automatico'},epoch))toast('Peso leído y guardado.');
     }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:e.message};}
     finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
-  }
-  function confirmarPeso(lectura){
-    return new Promise(resolve=>{
-      const v=document.createElement('div');v.className='ap-weight-confirm';v.setAttribute('role','dialog');v.setAttribute('aria-label','Confirmar peso leído');
-      const opciones=lectura.opciones||[lectura.peso];
-      v.innerHTML=`<div><h3>${lectura.opciones?'Revisá el punto decimal: ¿qué peso marca?':`¿La balanza marca ${esc(decimal(lectura.peso))} kg?`}</h3><img src="${esc(lectura.recorte)}" alt="Visor de peso de la balanza"><div><button data-answer="no">Guardar solo foto</button>${opciones.map(p=>`<button class="ap-save" data-answer="${p}">${esc(decimal(p))} kg</button>`).join('')}</div></div>`;
-      v.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-answer]');if(b){v.remove();resolve(b.dataset.answer==='no'?null:Number(b.dataset.answer));}});
-      $('ap-raiz').appendChild(v);v.querySelector('.ap-save').focus();
-    });
   }
   function elegirSustituto(it) {
     const v=document.createElement('div');v.id='ap-selector';v.className='ap-selector';v.setAttribute('role','dialog');v.setAttribute('aria-label','Elegir sustituto');

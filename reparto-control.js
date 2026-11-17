@@ -5,6 +5,14 @@
  const S={open:false,epoch:0,revision:0,ids:[],rows:[],fotos:new Map(),busy:false,loading:false,again:false,error:'',actionError:'',expanded:new Set(),timer:null,interacting:false,repaint:false};
  const qty=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:3});
  const unit=m=>({unidad:'un.',kg:'kg',caja:'cajas',tira:'tiras'}[m]||'sin medida');
+ const oficina=()=>['Oscar','Thiago','Joaquin'].includes(state.who)&&matchMedia('(min-width:1000px) and (pointer:fine)').matches;
+ function pesoVista(r,x,sub,fallback){
+  const peso=sub?x.sustituto_peso:x.peso,revision=sub?x.sustituto_peso_revision:x.peso_revision,foto=sub?x.sustituto_foto:x.foto;
+  const duda=revision==='dudoso'||!!foto&&!(Number(peso)>0),texto=duda?'¿'+(Number(peso)>0?qty(peso)+' kg':'Sin peso')+'?':fallback;
+  const clase=revision==='confirmado'?'rc-weight-ok':duda?'rc-weight-doubt':'',cantidad=duda&&!(Number(peso)>0)?`<strong>${esc(fallback)}</strong>`:'';
+  if(oficina()&&r.pedido.estado==='Pendiente'&&(duda||revision==='confirmado'))return `${cantidad}<button class="rc-weight ${clase}" data-rc="peso" data-id="${esc(r.pedido.id)}" data-item="${x.item_id}" data-sub="${sub?'1':'0'}" aria-label="Revisar peso: ${esc(texto)}">${esc(texto)}</button>`;
+  return `${cantidad}<strong class="${clase}">${esc(texto)}</strong>`;
+ }
  const faltante=(it,x)=>x.falta?Math.max(0,Number(it.qty)-Number(x.enviado||0)-Number(x.sustituye||0)):0;
  function abrir(ids,modo){
   if(S.busy)return;
@@ -61,8 +69,8 @@
    const pendientePeso=weighted&&!x.separado&&!(Number(x.peso)>0);
    const real=enviado===0?'No se envía':pendientePeso?'Por pesar':Number(x.peso)>0?qty(x.peso)+' kg':qty(enviado)+' '+unit(m);
    return `<tr class="${enviado===0?'rc-not-sent':''}"><td><b>${esc(it.prod)}</b>${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
-    <td><strong>${esc(real)}</strong>${enviado>0&&weighted&&!(Number(x.peso)>0)?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(x.foto,it.prod,weighted):'—'}</td></tr>
-    ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td><strong>${Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+esc(unit(x.sustituto_medida))}</strong>${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(x.sustituto_foto,x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
+    <td>${enviado>0?pesoVista(r,x,false,real):`<strong>${esc(real)}</strong>`}${enviado>0&&weighted&&!(Number(x.peso)>0)&&!x.foto?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(x.foto,it.prod,weighted):'—'}</td></tr>
+    ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td>${pesoVista(r,x,true,Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+unit(x.sustituto_medida))}${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)&&!x.sustituto_foto?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(x.sustituto_foto,x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
   }).join('')}</tbody></table></div>`;
  }
  function tarjeta(r){
@@ -85,7 +93,7 @@
  }
  function pintar(){
   if(!S.open)return;
-  if(S.interacting||$('rc-raiz')?.querySelector('.rc-viewer')){S.repaint=true;return;}S.repaint=false;
+  if(S.interacting||$('rc-raiz')?.querySelector('.rc-viewer,.rc-weight-dialog')){S.repaint=true;return;}S.repaint=false;
   const r=$('rc-raiz'),scroll=$('rc-content')?.scrollTop||0,active=document.activeElement;
   const focus=r.contains(active)?{a:active.dataset.rc,id:active.dataset.id}:null;
   const loaded=S.rows.filter(r=>r.control?.cargado&&r.pedido.estado==='Despachado').length;
@@ -108,11 +116,33 @@
   }catch(e){if(epoch===S.epoch)S.actionError=e.message||'No se pudo guardar. Reintentá.';}
   finally{if(epoch===S.epoch){S.busy=false;await cargar();pintar();}}
  }
+ function revisarPeso(id,itemId,sub){
+  if(!oficina()||S.busy)return;
+  const row=S.rows.find(r=>r.pedido.id===id),x=row?.items.find(x=>x.item_id===itemId);if(!x||row.pedido.estado!=='Pendiente')return;
+  const peso=sub?x.sustituto_peso:x.peso,path=sub?x.sustituto_foto:x.foto,url=S.fotos.get(path)?.url,epoch=S.epoch,firma=row.firma;
+  const v=document.createElement('div');v.className='rc-weight-dialog';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Revisar peso');
+  v.innerHTML=`<div class="rc-weight-panel"><button class="rc-weight-close" data-review="cerrar" aria-label="Cerrar revisión">✕</button><h3>Revisar peso</h3>${url?`<button class="rc-weight-photo" data-review="foto" aria-label="Ampliar foto del peso"><img src="${esc(url)}" alt="Foto del peso a revisar"></button>`:'<div class="rc-weight-no-photo">Sin foto</div>'}<div class="rc-weight-step"></div><p class="rc-weight-error" role="alert"></p></div>`;
+  const step=v.querySelector('.rc-weight-step'),error=v.querySelector('.rc-weight-error');
+  const cerrarRevision=()=>{if(S.busy)return;v.remove();pintar();$('rc-raiz').querySelector('[data-rc="peso"]')?.focus();};
+  const editar=()=>{step.innerHTML=`<form><label for="rc-peso-real">Peso real en kg</label><input id="rc-peso-real" inputmode="decimal" autocomplete="off" type="text" value="${peso?esc(qty(peso)):''}" placeholder="0,000"><button class="rc-weight-yes" type="submit" aria-label="Guardar peso corregido">✓</button></form>`;step.querySelector('form').addEventListener('submit',e=>{e.preventDefault();guardar(step.querySelector('input').value.replace(',','.'));});step.querySelector('input').focus();step.querySelector('input').select();};
+  const guardar=async value=>{
+   const n=Number(value);if(!Number.isFinite(n)||n<=0||n>150){error.textContent='Ingresá un peso válido en kg.';return;}if(S.busy)return;
+   S.busy=true;S.revision++;error.textContent='';v.querySelectorAll('button,input').forEach(b=>b.disabled=true);
+   try{const res=await sb.rpc('prep_revisar_peso',{p_id:id,p_item:itemId,p_sub:sub,p_peso:n,p_firma:firma,p_quien:state.who});if(res.error)throw res.error;if(!res.data?.pedido)throw Error('No llegó la confirmación. Reintentá.');if(epoch!==S.epoch)return;S.rows=S.rows.map(r=>r.pedido.id===id?res.data:r);v.remove();window.RepartoVivo?.refrescar();}
+   catch(e){error.textContent=e.message||'No se pudo guardar.';}
+   finally{S.busy=false;v.querySelectorAll('button,input').forEach(b=>b.disabled=false);if(epoch===S.epoch){pintar();if(!v.isConnected)cargar();}}
+  };
+  step.innerHTML=`<strong>${peso?'¿'+qty(peso)+' kg?':'¿Sin peso?'}</strong><div><button class="rc-weight-yes" data-review="si" aria-label="El peso está bien" ${peso?'':'disabled'}>✓</button><button class="rc-weight-no" data-review="no" aria-label="Corregir peso">✕</button></div>`;
+  v.addEventListener('click',e=>{e.stopPropagation();const a=e.target.closest('[data-review]')?.dataset.review;if(S.busy)return;if(a==='foto'){const viewer=document.createElement('div');viewer.className='rc-viewer rc-review-photo';viewer.innerHTML=`<img src="${esc(url)}" alt="Foto del peso"><button aria-label="Cerrar foto">✕</button>`;viewer.addEventListener('click',ev=>{ev.stopPropagation();viewer.remove();v.querySelector('[data-review="foto"]').focus();});$('rc-raiz').appendChild(viewer);viewer.querySelector('button').focus();return;}if(e.target===v||a==='cerrar')cerrarRevision();if(a==='si')guardar(peso);if(a==='no')editar();});
+  v.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();cerrarRevision();}});
+  $('rc-raiz').appendChild(v);v.querySelector('[data-review="si"]:not(:disabled),[data-review="no"]').focus();
+ }
  function clic(e){
   if(e.target===$('rc-raiz')){if(S.backdropDown)cerrar();S.backdropDown=false;return;}
   const b=e.target.closest('[data-rc]');if(!b||b.disabled)return;const a=b.dataset.rc,id=b.dataset.id;
   if(a==='cerrar')return cerrar();if(a==='actualizar')return cargar();
   if(a==='expandir'){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);pintar();return;}
+  if(a==='peso')return revisarPeso(id,Number(b.dataset.item),b.dataset.sub==='1');
   if(a==='editar'){const r=S.rows.find(x=>x.pedido.id===id);if(r&&cerrar())ArmadoPedido.abrir(mapPedido_(r.pedido));return;}
   if(a==='foto'){
    const url=S.fotos.get(b.dataset.path)?.url;if(!url)return;
@@ -122,10 +152,10 @@
   if(['cargar','remito','control'].includes(a))accion(id,a);
  }
  document.addEventListener('keydown',e=>{
-  if(!S.open)return;const r=$('rc-raiz'),v=r.querySelector('.rc-viewer');
+  if(!S.open)return;const r=$('rc-raiz'),v=r.querySelector('.rc-viewer')||r.querySelector('.rc-weight-dialog');
   if(e.key==='Escape'){e.preventDefault();if(v){v.remove();r.querySelector('[data-rc="cerrar"]')?.focus();}else cerrar();}
   if(e.key==='Tab'){
-   const b=[...(v||r).querySelectorAll('button:not(:disabled)')].filter(x=>x.getClientRects().length),first=b[0],last=b[b.length-1];
+   const b=[...(v||r).querySelectorAll('button:not(:disabled),input:not(:disabled)')].filter(x=>x.getClientRects().length),first=b[0],last=b[b.length-1];
    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
   }
  });

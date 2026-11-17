@@ -59,6 +59,7 @@ const assert = require('node:assert/strict');
   await db.exec(`create table productos(nombre text,unidad text,unidades_por_caja integer,alterna_unidad boolean,caja_en text,activo boolean,creado_en timestamptz);`);
   await db.exec(fs.readFileSync('supabase/migrations/20261117_reparto_peso.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261117_reparto_despacho.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261117_peso_revision.sql','utf8'));
   const leer=async id=>(await db.query('select prep_leer($1) as r',[id])).rows[0].r;
   const confirmar=(id,firma,accion='control')=>db.query('select prep_confirmar($1,$2,$3,$4,true)',[''+id,firma,'Oscar',accion]);
   const cargar=(id,firma)=>db.query('select prep_cargar($1,$2,$3) as r',[id,firma,'Mateo']);
@@ -141,6 +142,25 @@ const assert = require('node:assert/strict');
   assert.equal(despacho.reposiciones.length,1);assert.equal(Number((await leer(despacho.reposiciones[0])).pedido.pedido_items[0].cantidad),4);
   assert.equal(Number((await leer('fadu')).pedido.pedido_items[0].cantidad_entregada),3);
   assert.equal((await despachar()).rows[0].r.reposiciones.length,0);
+  // Una lectura dudosa se prepara sin interrumpir a Mateo, pero no despacha kilos sin revisión.
+  const duda=await nuevo('peso-dudoso','Panceta',50);
+  await db.query("update pedido_items set medida='kg' where id=$1",[duda]);
+  await db.query("update prep_items set separado=true,peso=19,peso_revision='dudoso',foto='peso.jpg' where item_id=$1",[duda]);
+  r=await listo('peso-dudoso');assert.equal(r.items[0].falta,false);
+  await confirmar('peso-dudoso',r.firma);await assert.rejects(cargar('peso-dudoso',r.firma),/peso con dudas/);
+  const revisar=(peso,firma,quien='Oscar')=>db.query('select prep_revisar_peso($1,$2,false,$3,$4,$5) as r',['peso-dudoso',duda,peso,firma,quien]);
+  await assert.rejects(revisar(19,r.firma,'Mateo'),/quien hace el remito/);
+  await assert.rejects(revisar(19,'vieja'),/pedido cambió/);
+  await assert.rejects(revisar(-1,r.firma),/peso válido/);
+  r=(await revisar(19,r.firma)).rows[0].r;assert.equal(r.cola.etapa,'listo');assert.equal(r.items[0].peso_revision,'confirmado');assert.equal(r.items[0].foto,'peso.jpg');assert.equal(Number(r.items[0].enviado),19);assert.equal(r.control.controlado,false);
+  await confirmar('peso-dudoso',r.firma);const repDuda=(await cargar('peso-dudoso',r.firma)).rows[0].r.reposicion_id;
+  assert.equal(Number((await leer(repDuda)).pedido.pedido_items[0].cantidad),31);
+  // El despacho general tampoco saltea la revisión y admite reintentar tras corregir.
+  const general=await nuevo('general-dudoso','Panceta',20);
+  await db.query("update pedido_items set medida='kg' where id=$1",[general]);
+  await db.query("update prep_items set peso=12,peso_revision='dudoso' where item_id=$1",[general]);
+  await assert.rejects(db.query('select despachar_con_faltantes($1,$2,$3)',[['general-dudoso'],JSON.stringify({'general-dudoso':{[general]:{completo:true,cantidadPedida:20}}}),'Oscar']),/peso con dudas/);
+  assert.equal((await leer('general-dudoso')).pedido.estado,'Pendiente');
   // Rechaza sustituciones mal definidas y cantidades fuera de rango, no registros opcionales vacíos.
   await db.query("update prep_items set falta=true,enviado=0,sustituto='Otro',sustituto_cantidad=1,sustituto_medida='unidad',sustituye=4 where item_id=$1",[cambio]);
   await assert.rejects(listo('cambio'),/Revisá los productos/);

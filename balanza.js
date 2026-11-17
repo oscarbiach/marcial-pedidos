@@ -1,5 +1,5 @@
-/* Lectura local del visor rojo de PESO. Las fotos no salen del dispositivo.
-   Toda lectura se confirma viendo el recorte; nunca se deduce el decimal. */
+/* Lectura local: LED rojo con dos decimales; LCD y etiquetas por su formato.
+   Las dudas se revisan en el remito, nunca interrumpen al preparador. */
 (function () {
   'use strict';
   let carga;
@@ -46,16 +46,10 @@
     const s=String(text).trim().replace(/\s/g,'').replace(',','.');
     return /^\d{1,3}\.\d{1,3}$/.test(s)&&Number(s)>0&&Number(s)<=150?Number(s):null;
   }
-  function resultadoTexto(text,recorte){
-    const peso=interpretar(text),s=String(text).trim().replace(/\s/g,'');
-    if(peso!==null)return {peso,recorte,texto:text};
-    // El OCR suele perder el punto por el brillo: conservar los dígitos y
-    // pedir al usuario que elija el decimal mirando el visor, sin adivinarlo.
-    const opciones=[];
-    if(/^\d{3,6}$/.test(s))for(let i=Math.max(1,s.length-3);i<s.length;i++){
-      const n=Number(s.slice(0,i)+'.'+s.slice(i));if(n>0&&n<=150&&!opciones.includes(n))opciones.push(n);
-    }
-    return {peso:null,recorte,texto:text,...(opciones.length?{opciones}:{})};
+  function resultadoTexto(text,recorte,decimales=2){
+    const s=String(text).trim().replace(/\s/g,''),digits=s.replace(/[.,]/g,'');
+    const peso=/^\d{1,6}([.,]\d{1,3})?$/.test(s)&&digits.length>decimales?Number(digits)/10**decimales:null;
+    return {peso:peso>0&&peso<=150?peso:null,recorte,texto:text,dudoso:true,tipo:'led'};
   }
   function segmentos(c,limite=140,diferencia=50,ambiguo=false){
     const w=c.width,h=c.height,d=c.getContext('2d').getImageData(0,0,w,h).data;
@@ -72,7 +66,7 @@
         separados.push([a,cut]);a=cut;}separados.push([a,r]);
       }else separados.push([l,r]);
     }
-    const digits=[],map={'1111110':'0','1111001':'3','1011011':'5','1011111':'6','1110000':'7','1111000':'7','1111111':'8','1111011':'9','1101101':'2','0110011':'4'};
+    const digits=[],map={'1111110':'0','1111001':'3','1011011':'5','1011111':'6','1110000':'7','1111000':'7','1111111':'8','1111011':'9','1110011':'9','1101101':'2','0110011':'4'};
     for(let ri=0;ri<separados.length;ri++){
       const [l,r]=separados[ri];
       let top=h,bottom=0;for(let y=0;y<h;y++){let n=0;for(let x=l;x<r;x++)n+=mask[y*w+x];if(n>1){top=Math.min(top,y);bottom=y+1;}}
@@ -90,28 +84,27 @@
       digits.push({digit,dot:lowRight-midRight>dh*.06});
     }
     if(digits.length<3||digits.length>6)return null;
+    if(ambiguo==='digitos')return digits.map(x=>x.digit).join('');
     if(digits.filter(x=>x.dot).length!==1)return ambiguo?digits.map(x=>x.digit).join(''):null;
     return interpretar(digits.map(x=>x.digit+(x.dot?'.':'')).join(''));
   }
   async function leer(file){
-    const c=await imagen(file),v=visor(c);if(!v)return {peso:null,recorte:null};
+    const c=await imagen(file);if(c.width<32||c.height<32)return {peso:null,dudoso:true};const v=visor(c);let worker;
+    const getWorker=async()=>{if(worker)return worker;await motor();const base=new URL('vendor/tesseract/',location.href).href;return worker=await Tesseract.createWorker('eng',1,{workerPath:base+'worker.min.js',corePath:base,langPath:base,workerBlobURL:false});};
+    try{
+    if(!v)return await PesoFuentes.leer(c,getWorker);
     const crop=lienzo(Math.round(v.w*4),Math.round(v.h*4)),ctx=crop.getContext('2d');ctx.drawImage(c,v.x,v.y,v.w,v.h,0,0,crop.width,crop.height);
     const recorte=crop.toDataURL('image/jpeg');
-    const led=segmentos(crop)??segmentos(crop,180,10);if(led!==null)return {peso:led,recorte,texto:String(led),metodo:'segmentos'};
-    const digitos=segmentos(crop,180,10,true);
-    if(typeof digitos==='string'){
-      return {...resultadoTexto(digitos,recorte),metodo:'segmentos-decimal'};
-    }
-    await motor();const base=new URL('vendor/tesseract/',location.href).href;
-    let worker;
-    try{
-      worker=await Tesseract.createWorker('eng',1,{workerPath:base+'worker.min.js',corePath:base,langPath:base,workerBlobURL:false});
+    const a=segmentos(crop,140,50,'digitos'),b=segmentos(crop,180,10,'digitos'),digitos=a||b;
+    if(digitos){const r=resultadoTexto(digitos,recorte);if(r.peso)return {...r,dudoso:!a||!b||a!==b,metodo:'segmentos'};}
+      await getWorker();
       await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'0123456789.',user_defined_dpi:'300'});
       const data=ctx.getImageData(0,0,crop.width,crop.height);
       // El verde conserva el núcleo luminoso y descarta el halo rojo.
       for(let i=0;i<data.data.length;i+=4){const k=255-data.data[i+1];data.data[i]=data.data[i+1]=data.data[i+2]=k;}
       ctx.putImageData(data,0,0);const r=await worker.recognize(crop);
-      return resultadoTexto(r.data.text,recorte);
+      const lectura=resultadoTexto(r.data.text,recorte);
+      return lectura.peso?lectura:await PesoFuentes.leer(c,getWorker);
     }finally{if(worker)await worker.terminate();}
   }
   window.Balanza={leer,visor,interpretar,segmentos,resultadoTexto};

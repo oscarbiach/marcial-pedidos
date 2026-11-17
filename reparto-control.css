@@ -53,3 +53,16 @@ body.rc-abierto { overflow:hidden; }
 .rc-panel { position:relative; }
 .rc-viewer { z-index:1000; padding:50px 16px 16px; overflow:hidden; }
 .rc-viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+.rc .rc-weight { padding:4px 8px; min-height:34px; font-size:inherit; font-weight:750; }
+.rc .rc-weight-doubt { color:#94651e; background:#fff8e9; border-color:#ead5ab; }
+.rc .rc-weight-ok { color:#267045; background:#eaf6ed; border-color:#aed1b8; }
+.rc-weight-dialog { position:fixed; inset:0; z-index:1001; display:grid; place-items:center; padding:16px; background:#10243a80; }
+.rc-weight-panel { position:relative; width:360px; max-width:100%; height:440px; max-height:calc(100dvh - 32px); padding:22px; border-radius:18px; background:white; box-shadow:0 20px 70px #10243a40; display:flex; flex-direction:column; align-items:stretch; gap:14px; overflow:auto; animation:rc-in .16s ease-out; }
+.rc-weight-panel h3 { font-size:19px; margin:0; }.rc .rc-weight-close { position:absolute; top:10px; right:10px; border:0; background:transparent; padding:6px; }
+.rc .rc-weight-photo,.rc-weight-no-photo { display:block; width:100%; height:210px; flex:none; background:#f3f6f9; border-radius:9px; padding:0; border:0; overflow:hidden; }
+.rc-weight-photo img { display:block; width:100%; height:100%; object-fit:contain; }.rc-review-photo { z-index:1002; }
+.rc-weight-step { height:112px; flex:none; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:12px; }.rc-weight-step>strong { font-size:23px; }
+.rc-weight-step>div { display:flex; gap:20px; }.rc .rc-weight-yes,.rc .rc-weight-no { width:52px; min-height:44px; font-size:23px; padding:6px; }
+.rc .rc-weight-yes { color:#267045; background:#eaf6ed; border-color:#aed1b8; }.rc .rc-weight-no { color:#b43e3e; background:#fff0ef; border-color:#e9b5b5; }
+.rc-weight-step form { display:grid; grid-template-columns:1fr 52px; gap:8px; width:100%; }.rc-weight-step label { grid-column:1/-1; }.rc-weight-step input { width:100%; min-width:0; padding:10px; border:1px solid #b8c8da; border-radius:8px; font-size:20px; }
+.rc-weight-error { margin:0; font-size:13px; color:#9b3029; }

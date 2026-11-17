@@ -17,6 +17,13 @@ async function setup(browser){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='prep_revisar_peso'){
+   const a=q.args;if(failItem)return {error:{message:'Sin conexión'}};
+   if(a.p_firma!==firma(a.p_id))return {error:{message:'El pedido cambió. Volvé a revisar la foto.'}};
+   const x=itemRows(a.p_id).find(x=>x.item_id===a.p_item);if(!x)return {error:{message:'Producto no disponible'}};
+   Object.assign(x,a.p_sub?{sustituto_peso:a.p_peso,sustituto_peso_revision:'confirmado'}:{peso:a.p_peso,peso_revision:'confirmado'});
+   return request({name:'prep_leer',args:{p_id:a.p_id}});
+  }
   if(q.name==='prep_leer'){
    const id=q.args.p_id,p=db.pedidos.find(x=>x.id===id&&!x.eliminado_en);
    return {data:p?structuredClone({pedido:p,cola:db.prep_cola.find(x=>x.pedido_id===id),control:db.prep_pedidos.find(x=>x.pedido_id===id),items:itemRows(id),productos:db.prep_productos,firma:firma(id)}):null};
@@ -568,16 +575,17 @@ test('selector de sustituto muestra catálogo, busca y permite cancelar sin camb
  expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
 });
 
-test('Mateo confirma la lectura antes de guardar; puede conservar solo la foto',async({browser})=>{
+test('Mateo guarda peso automático o dudoso sin confirmaciones y puede guardar sin peso',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',se_pesa:true}];
  const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
  await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
  await page.evaluate(()=>{Balanza.leer=async()=>({peso:19,recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
- await subirFotoPrueba(page);await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toBeVisible();expect(s.uploads).toHaveLength(0);
- await page.locator('[data-answer="19"]').click();await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(19);
+ await subirFotoPrueba(page);await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(19);expect(s.db.prep_items[0].peso_revision).toBe('automatico');
+ await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toHaveCount(0);
  await expect(page.locator('.ap-read-weight')).toContainText('19 kg');await expect(page.locator('.ap-photo-preview')).toBeVisible();
- await page.evaluate(()=>{Balanza.leer=async()=>({peso:null,opciones:[1.965,19.65],recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
- await subirFotoPrueba(page);await expect(page.locator('[data-answer="19.65"]')).toBeVisible();await page.locator('[data-answer="no"]').click();
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:19.65,dudoso:true});});await subirFotoPrueba(page);
+ await expect.poll(()=>s.db.prep_items[0].peso).toBe(19.65);expect(s.db.prep_items[0].peso_revision).toBe('dudoso');
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:null});});await subirFotoPrueba(page);
  await expect.poll(()=>s.db.prep_items[0].peso).toBe(null);await expect(page.locator('.ap-photo-preview')).toBeVisible();
  expect(s.errors).toEqual([]);await s.close();
 });
@@ -591,25 +599,41 @@ test('desmarcar preparado y deshacer faltante dejan el producto editable',async(
  expect(s.errors).toEqual([]);await s.close();
 });
 
-test('OCR sin punto conserva candidatos y nunca guarda un decimal supuesto',async({page})=>{
+test('LED rojo usa dos decimales, incluyendo más de cien kilos; rechaza texto ajeno',async({page})=>{
  await page.goto('http://127.0.0.1:4173/balanza.js');await page.addScriptTag({url:'/balanza.js'});
  const results=await page.evaluate(()=>['885\n','025','4.98','texto 885','999999',''].map(t=>Balanza.resultadoTexto(t,'recorte')));
- expect(results[0]).toMatchObject({peso:null,opciones:[8.85,88.5]});
- expect(results[1]).toMatchObject({peso:null,opciones:[0.25,2.5]});
+ expect(results[0]).toMatchObject({peso:8.85});
+ expect(results[1]).toMatchObject({peso:0.25});
  expect(results[2].peso).toBe(4.98);
  for(const r of results.slice(3)){expect(r.peso).toBeNull();expect(r.opciones).toBeUndefined();}
+ expect(await page.evaluate(()=>Balanza.resultadoTexto('10025').peso)).toBe(100.25);
 });
 
-test('releer una foto guardada requiere confirmar y conserva la foto original',async({browser})=>{
+test('releer una foto guardada conserva la foto y deja la duda para oficina',async({browser})=>{
  const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'sardo.jpg',peso:null}];
  const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
- await page.evaluate(()=>{Balanza.leer=async()=>({peso:null,opciones:[8.85,88.5],recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
+ await page.evaluate(()=>{Balanza.leer=async()=>({peso:8.85,dudoso:true});});
  await page.getByRole('button',{name:'Leer peso de la foto',exact:true}).click();
- await expect(page.locator('[data-answer="8.85"]')).toBeVisible();expect(s.writes).toHaveLength(0);expect(s.moves).toHaveLength(0);
- await page.locator('[data-answer="no"]').click();expect(s.db.prep_items[0].peso).toBeNull();
- await page.getByRole('button',{name:'Leer peso de la foto',exact:true}).click();await page.locator('[data-answer="8.85"]').click();
+ await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toHaveCount(0);
  await expect.poll(()=>s.db.prep_items[0].peso).toBe(8.85);expect(s.db.prep_items[0].foto).toBe('sardo.jpg');expect(s.uploads).toHaveLength(0);
  await expect(page.locator('.ap-read-weight')).toContainText('8,85 kg');expect(s.db.prep_cola[0].etapa).toBe('preparando');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('oficina revisa dudas con tick o corrige en una ventana del mismo tamaño; Mateo no ve botones',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'foto.jpg',peso:5.45,peso_revision:'dudoso'}];
+ const p=await s.open('Oscar');await p.locator('.rv-listo .rv-card h3').click();await p.locator('[data-rc="expandir"]').click();
+ await p.emulateMedia({reducedMotion:'reduce'});await p.getByRole('button',{name:'Revisar peso: ¿5,45 kg?'}).click();const box=await p.locator('.rc-weight-panel').boundingBox();
+ await p.getByRole('button',{name:'Ampliar foto del peso'}).click();await expect(p.locator('.rc-review-photo')).toBeVisible();await p.keyboard.press('Escape');await expect(p.locator('.rc-review-photo')).toHaveCount(0);await expect(p.locator('.rc-weight-dialog')).toBeVisible();
+ await p.getByRole('button',{name:'Corregir peso',exact:true}).click();expect(await p.locator('.rc-weight-panel').boundingBox()).toEqual(box);
+ await p.screenshot({path:'test-results/peso-revision.png',animations:'disabled'});
+ await expect(p.locator('#rc-peso-real')).toHaveAttribute('inputmode','decimal');await p.locator('#rc-peso-real').fill('5,08');s.failItem(true);
+ await p.getByRole('button',{name:'Guardar peso corregido'}).click();await expect(p.locator('.rc-weight-error')).toContainText('Sin conexión');expect(s.db.prep_items[0].peso).toBe(5.45);
+ s.failItem(false);await p.getByRole('button',{name:'Guardar peso corregido'}).click();await expect(p.locator('.rc-weight-dialog')).toHaveCount(0);
+ await expect(p.locator('.rc-weight-ok')).toHaveText('5,08 kg');expect(s.db.prep_items[0].peso_revision).toBe('confirmado');expect(s.db.prep_items[0].foto).toBe('foto.jpg');
+ await p.locator('.rc-weight-ok').click();await p.getByRole('button',{name:'El peso está bien'}).click();await expect(p.locator('.rc-weight-dialog')).toHaveCount(0);
+ const mateo=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});await mateo.evaluate(()=>RepartoControl.remito('p1'));await mateo.locator('[data-rc="expandir"]').click();await expect(mateo.locator('[data-rc="peso"]')).toHaveCount(0);
+ const movil=await s.open('Oscar',{width:390,height:844},{hasTouch:true});await movil.evaluate(()=>RepartoControl.remito('p1'));await movil.locator('[data-rc="expandir"]').click();await expect(movil.locator('[data-rc="peso"]')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
 });
 
