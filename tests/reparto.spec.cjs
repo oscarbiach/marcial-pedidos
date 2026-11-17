@@ -623,7 +623,7 @@ test('releer una foto guardada conserva la foto y deja la duda para oficina',asy
 test('oficina revisa dudas con tick o corrige en una ventana del mismo tamaño; Mateo no ve botones',async({browser})=>{
  const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,foto:'foto.jpg',peso:5.45,peso_revision:'dudoso'}];
  const p=await s.open('Oscar');await p.locator('.rv-listo .rv-card h3').click();await p.locator('[data-rc="expandir"]').click();
- await p.emulateMedia({reducedMotion:'reduce'});await p.getByRole('button',{name:'Revisar peso: ¿5,45 kg?'}).click();const box=await p.locator('.rc-weight-panel').boundingBox();
+ await p.setViewportSize({width:900,height:1000});await p.emulateMedia({reducedMotion:'reduce'});await p.getByRole('button',{name:'Revisar peso: ¿5,45 kg?'}).click();const box=await p.locator('.rc-weight-panel').boundingBox();
  await p.getByRole('button',{name:'Ampliar foto del peso'}).click();await expect(p.locator('.rc-review-photo')).toBeVisible();await p.keyboard.press('Escape');await expect(p.locator('.rc-review-photo')).toHaveCount(0);await expect(p.locator('.rc-weight-dialog')).toBeVisible();
  await p.getByRole('button',{name:'Corregir peso',exact:true}).click();expect(await p.locator('.rc-weight-panel').boundingBox()).toEqual(box);
  await p.screenshot({path:'test-results/peso-revision.png',animations:'disabled'});

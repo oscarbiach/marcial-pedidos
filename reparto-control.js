@@ -5,7 +5,7 @@
  const S={open:false,epoch:0,revision:0,ids:[],rows:[],fotos:new Map(),busy:false,loading:false,again:false,error:'',actionError:'',expanded:new Set(),timer:null,interacting:false,repaint:false};
  const qty=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:3});
  const unit=m=>({unidad:'un.',kg:'kg',caja:'cajas',tira:'tiras'}[m]||'sin medida');
- const oficina=()=>['Oscar','Thiago','Joaquin'].includes(state.who)&&matchMedia('(min-width:1000px) and (pointer:fine)').matches;
+ const oficina=()=>['Oscar','Thiago','Joaquin'].includes(state.who)&&matchMedia('(hover:hover) and (pointer:fine)').matches;
  function pesoVista(r,x,sub,fallback){
   const peso=sub?x.sustituto_peso:x.peso,revision=sub?x.sustituto_peso_revision:x.peso_revision,foto=sub?x.sustituto_foto:x.foto;
   const duda=revision==='dudoso'||!!foto&&!(Number(peso)>0),texto=duda?'¿'+(Number(peso)>0?qty(peso)+' kg':'Sin peso')+'?':fallback;
