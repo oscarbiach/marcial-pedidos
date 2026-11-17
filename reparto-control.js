@@ -58,8 +58,9 @@
   return `<div class="rc-table-wrap"><table><thead><tr><th>Producto</th><th>Se envía</th><th>Foto</th></tr></thead><tbody>${p.items.map(it=>{
    const x=byId.get(it.id)||{},m=x.medida_real||(it.fetear?'kg':typeof it.unidades==='string'?it.unidades:medidaDe(prodInfo(it.prod),false,it.unidades));
    const enviado=x.falta?Number(x.enviado||0):it.qty,missing=faltante(it,x),weighted=!!meta.get(it.prod)?.se_pesa||m==='kg';
-   const real=enviado===0?'No se envía':Number(x.peso)>0?qty(x.peso)+' kg':qty(enviado)+' '+unit(m);
-   return `<tr><td><b>${esc(it.prod)}</b>${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
+   const pendientePeso=weighted&&!x.separado&&!(Number(x.peso)>0);
+   const real=enviado===0?'No se envía':pendientePeso?'Por pesar':Number(x.peso)>0?qty(x.peso)+' kg':qty(enviado)+' '+unit(m);
+   return `<tr class="${enviado===0?'rc-not-sent':''}"><td><b>${esc(it.prod)}</b>${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
     <td><strong>${esc(real)}</strong>${enviado>0&&weighted&&!(Number(x.peso)>0)?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(x.foto,it.prod,weighted):'—'}</td></tr>
     ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td><strong>${Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+esc(unit(x.sustituto_medida))}</strong>${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(x.sustituto_foto,x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
   }).join('')}</tbody></table></div>`;
@@ -69,12 +70,14 @@
   const checked=!!control.controlado&&control.control_firma===r.firma;
   const short=p.items.filter(it=>faltante(it,(r.items||[]).find(x=>x.item_id===it.id)||{})>0).length;
   const expanded=S.expanded.has(p.id),off=S.busy||!!S.error||!available;
-  return `<article class="rc-order ${loaded?'rc-loaded':''}" data-pedido="${esc(p.id)}"><div class="rc-order-top"><div><h3>${esc(p.cliente)}</h3>${p.direccion?`<p>${esc(p.direccion)}</p>`:''}</div><span class="rc-status">${loaded?'✓ Cargado y despachado':!available?'En preparación':short?'Con faltantes':'Completo'}</span></div>
+  const remitoOff=S.busy||!!S.error||p.estado!=='Pendiente';
+  return `<article class="rc-order ${loaded?'rc-loaded':''}" data-pedido="${esc(p.id)}"><div class="rc-order-top"><div><h3>${esc(p.cliente)}</h3>${p.direccion?`<p>${esc(p.direccion)}</p>`:''}</div><span class="rc-status">${loaded?'✓ Cargado y despachado':p.estado==='Despachado'?'Despachado':!available?'En preparación':short?'Con faltantes':'Completo'}</span></div>
    ${p.notas?`<p class="rc-notes">${esc(p.notas)}</p>`:''}
    <button class="rc-expand" data-rc="expandir" data-id="${esc(p.id)}" aria-expanded="${expanded}">${expanded?'Ocultar productos':'Ver productos'} ${expanded?'−':'+'}</button>
    ${expanded?tabla(r):''}
-   ${loaded?control.reposicion_id?'<p class="rc-missing">Pedido violeta de reposición creado.</p>':'':`<div class="rc-actions">
-    ${state.who!=='Mateo'?`<button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${off?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
+   ${!available&&p.estado==='Pendiente'?'<p class="rc-notes">Cantidades pedidas. Si cambia la preparación, habrá que revisar el remito.</p>':''}
+   ${p.estado==='Despachado'?control.reposicion_id?'<p class="rc-missing">Pedido violeta de reposición creado.</p>':'':`<div class="rc-actions">
+    ${state.who!=='Mateo'?`<button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${remitoOff?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
     <button data-rc="control" data-id="${esc(p.id)}" aria-pressed="${checked}" ${off?'disabled':''}>${checked?'✓ Controlado':'Confirmar control'}</button>
     ${S.modo==='camioneta'?`<button class="rc-primary" data-rc="cargar" data-id="${esc(p.id)}" ${off||!checked?'disabled':''}>Cargar y despachar →</button>`:''}
     <button class="rc-edit" data-rc="editar" data-id="${esc(p.id)}" ${S.busy||p.estado!=='Pendiente'?'disabled':''}>Revisar armado</button>
@@ -82,7 +85,7 @@
  }
  function pintar(){
   if(!S.open)return;
-  if(S.interacting){S.repaint=true;return;}S.repaint=false;
+  if(S.interacting||$('rc-raiz')?.querySelector('.rc-viewer')){S.repaint=true;return;}S.repaint=false;
   const r=$('rc-raiz'),scroll=$('rc-content')?.scrollTop||0,active=document.activeElement;
   const focus=r.contains(active)?{a:active.dataset.rc,id:active.dataset.id}:null;
   const loaded=S.rows.filter(r=>r.control?.cargado&&r.pedido.estado==='Despachado').length;
@@ -97,7 +100,7 @@
   const epoch=S.epoch;S.revision++;S.busy=true;S.actionError='';pintar();
   try{
    const args={p_id:id,p_firma:r.firma,p_quien:state.who};
-   const res=a==='cargar'?await sb.rpc('prep_cargar',args):await sb.rpc('prep_confirmar',{...args,p_accion:a,p_valor:a==='remito'?!r.pedido.remito_hecho:!(r.control?.controlado&&r.control.control_firma===r.firma)});
+   const res=a==='remito'&&r.cola?.etapa!=='listo'?{data:await sbMarcarRemito(id,!r.pedido.remito_hecho)}:a==='cargar'?await sb.rpc('prep_cargar',args):await sb.rpc('prep_confirmar',{...args,p_accion:a,p_valor:a==='remito'?!r.pedido.remito_hecho:!(r.control?.controlado&&r.control.control_firma===r.firma)});
    if(res.error)throw res.error;if(!res.data?.ok)throw Error('No llegó la confirmación. Reintentá.');
    if(epoch!==S.epoch)return;
    if(a==='cargar'){toast(res.data.reposicion_id?'Cargado. Reposición pendiente creada.':'Pedido cargado y despachado');reload();}
@@ -114,7 +117,7 @@
   if(a==='foto'){
    const url=S.fotos.get(b.dataset.path)?.url;if(!url)return;
    const v=document.createElement('div');v.className='rc-viewer';v.innerHTML=`<img src="${esc(url)}" alt="Foto del producto"><button aria-label="Cerrar foto">✕</button>`;
-   v.addEventListener('click',()=>{v.remove();b.focus();});$('rc-raiz').appendChild(v);v.querySelector('button').focus();return;
+   v.addEventListener('click',e=>{e.stopPropagation();v.remove();b.focus();});$('rc-raiz').appendChild(v);v.querySelector('button').focus();return;
   }
   if(['cargar','remito','control'].includes(a))accion(id,a);
  }

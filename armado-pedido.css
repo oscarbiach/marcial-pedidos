@@ -120,3 +120,23 @@ body.ap-abierto { overflow:hidden; }
   .ap-progress-head>div:first-child { flex-wrap:wrap; }
 }
 @media(prefers-reduced-motion:reduce) { .ap,.ap * { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+
+.ap-photo,.ap-weigh>* { min-width:0; }
+.ap-photo-preview img { display:block; max-width:100%; }
+.ap-viewer img { display:block; width:auto; height:auto; max-width:calc(100vw - 32px); max-height:calc(100dvh - 80px); }
+
+.ap .ap-change { float:right; margin:0 0 8px 8px; width:48px; font-size:26px; }
+.ap-sub-name { display:flex !important; align-items:center; justify-content:space-between; }
+.ap-selector { position:fixed; inset:0; z-index:3; background:#0b1c3380; display:flex; align-items:center; justify-content:center; padding:16px; }
+.ap-selector-panel { width:min(600px,100%); height:min(700px,90dvh); display:flex; flex-direction:column; border-radius:18px; background:#fff; overflow:hidden; }
+.ap-selector header { position:static; padding:16px; display:flex; justify-content:space-between; }
+.ap-selector h3 { margin:0; }
+.ap-search { margin:12px; padding:14px; border:1px solid #b9cadf; border-radius:12px; font-size:18px !important; }
+.ap-options { overflow:auto; flex:1; padding:0 12px 12px; }
+.ap .ap-options button { width:100%; display:flex; justify-content:space-between; text-align:left; margin-bottom:6px; min-height:54px; }
+@media(min-width:1000px) and (pointer:fine) {
+ body:not(.usuario-mateo) .ap-panel { width:min(760px,100%); }
+ body:not(.usuario-mateo) .ap-item-head { padding:12px; }
+ body:not(.usuario-mateo) .ap-top h2 { font-size:22px; }
+ body:not(.usuario-mateo) .ap-content { padding:16px; }
+}
