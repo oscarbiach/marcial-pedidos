@@ -11,7 +11,7 @@
   const cantidadTarjeta = it => repCantidad(it).replace(/(\d)u\b/g,'$1 un.');
   const S = { filas: new Map(), pedidos: [], canal: null, timer: null, debounce: null, loading: false,
     again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0,
-    dias: new Map(), diaActual: '' };
+    items: new Map(), dias: new Map(), diaActual: '' };
   const mateo = () => state.who === 'Mateo';
   const envia = () => ['Oscar','Thiago','Joaquin'].includes(state.who);
   const opera = () => envia() || mateo();
@@ -96,8 +96,11 @@
       // Aun sin pedidos verificamos la disponibilidad del esquema.
       if (!consultas.length) consultas.push(sb.from('prep_cola').select('*').limit(0));
       const colas = await Promise.all(consultas);
+      const itemIds=pedidos.flatMap(p=>(p.pedido_items||[]).map(i=>i.id)),detalles=[];
+      for(let i=0;i<itemIds.length;i+=150){const r=await sb.from('prep_items').select('*').in('item_id',itemIds.slice(i,i+150));if(r.error)throw r.error;detalles.push(...(r.data||[]));}
       for (const result of colas) if (result.error) throw result.error;
       if (generation !== S.generation) return;
+      S.items=new Map(detalles.map(x=>[x.item_id,x]));
       S.filas = new Map(colas.flatMap(r => r.data || []).map(r => [r.pedido_id,r]));
       S.pedidos = pedidos.map(mapPedido_).filter(elegible);
       S.ready = true; S.error = '';
@@ -144,10 +147,11 @@
     const abre=['preparando','listo'].includes(e);
     return `<article class="rv-card${!navigator.onLine||S.error||busy?' rv-no-drag':''}" tabindex="0" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]}${abre?' · Tocar para ver el pedido':''}" aria-keyshortcuts="ArrowLeft ArrowRight${abre?' Enter Space':''}" aria-busy="${busy}">
       ${!mateo()?`<div class="rv-card-top"><span>${esc(fecha)}</span><span>${esc(p.quien || '')}</span></div>`:''}
-      <h3>${esc(p.cliente)}</h3>
+      <h3>${esc(p.cliente)}</h3>${e==='listo'&&p.remitoHecho?'<div class="rv-remito-done">✓ Remito hecho</div>':''}
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
-      <ul>${p.items.map(it => `<li><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
+      <ul>${p.items.map(it => `<li class="${S.items.get(it.id)?.separado?'rv-product-done':''}"><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
       ${p.notas ? `<p class="rv-note ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>` : ''}
+      ${envia()&&e==='por_preparar'?`<button data-rv="editar" data-id="${esc(p.id)}">Editar pedido</button>`:''}
       ${!mateo()&&e==='listo'?`<button data-rv="remito" data-id="${esc(p.id)}">Resumen para remito</button>`:''}
       ${['pendiente','preparando'].includes(e) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
     </article>`;
@@ -252,6 +256,7 @@
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
+    if(b.dataset.rv==='editar'&&envia()&&etapa(b.dataset.id)==='por_preparar'){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p)openPedidoEdit(p.id,p);}
     if (b.dataset.rv === 'remito' && envia()) RepartoControl.remito(b.dataset.id);
     if (b.dataset.rv === 'camioneta') RepartoControl.camioneta(S.pedidos.filter(p=>etapa(p.id)==='listo').map(p=>p.id));
     if (b.dataset.rv === 'hojas') { S.legacy = true; montar(); renderReparto(); }

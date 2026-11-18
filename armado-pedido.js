@@ -112,7 +112,7 @@
     const x=row(it);
     if(S.drafts.has(it.id))return 'Sin guardar';
     if(listo(it))return x.falta&&Number(x.enviado)+(Number(x.sustituye)||0)<Number(it.qty)?'Con faltante':x.sustituto?'Con sustituto':'Preparado';
-    if(x.falta && x.enviado==null)return 'Indicá cuánto se envía';
+    if(x.falta && x.enviado==null)return 'Indicá cuánto falta';
     return 'Por preparar';
   }
   const opcionesMedida = (value) => ['unidad','kg','caja','tira'].map(m=>`<option value="${m}" ${m===value?'selected':''}>${{unidad:'Unidades',kg:'Kg',caja:'Cajas',tira:'Tiras'}[m]}</option>`).join('');
@@ -121,7 +121,7 @@
     const medir=pesa(it)||S.extras.has(it.id)||x.peso!=null||x.foto;
     const medida=it.fetear?'kg':typeof it.unidades==='string'?it.unidades:medidaDe(prodInfo(it.prod),false,it.unidades);
     const url=x.foto && S.fotos.get(x.foto)?.url,dirty=S.drafts.has(it.id);
-    return `<article class="ap-item ${ok?'ap-done':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
+    return `<article class="ap-item ${ok&&!dirty?'ap-done':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
       <button class="ap-item-head" data-ap="abrir" data-i="${it.id}" aria-expanded="${open}" aria-controls="ap-editor-${it.id}">
         <span class="ap-number">${ok?'✓':index+1}</span><span class="ap-item-name"><b>${esc(it.prod)}</b><small>${esc(cantidad(it))}${repTagsTexto(it)?' · '+esc(repTagsTexto(it)):''}</small></span>
         <span class="ap-item-status">${esc(estadoItem(it))}</span><span aria-hidden="true">${open?'−':'+'}</span>
@@ -142,9 +142,9 @@
           </div>`:`<button class="ap-add-weight" data-ap="medir" data-i="${it.id}">Agregar peso o foto</button>`}
           <button class="ap-change" data-ap="reemplazar" data-i="${it.id}" aria-label="Elegir sustituto" title="Elegir sustituto">⇄</button>
           <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} Faltante</button>
-            ${d.falta?`<div class="ap-shortage-form"><label>De ${esc(it.prod)} se envía <input data-ap="enviado" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(d.enviado)}" placeholder="0" aria-label="Cantidad a enviar de ${esc(it.prod)}"><small>Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">No hay</button><button data-ap="completo" data-i="${it.id}">Está completo</button>
+            ${d.falta?`<div class="ap-shortage-form"><label>Faltan <input data-ap="faltante" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(numero(d.enviado)===null?'':decimal(Number(it.qty)-numero(d.enviado)))}" placeholder="0" aria-label="Cantidad faltante de ${esc(it.prod)}"><small>${esc(medida||'unidad')} · Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">Falta todo</button><button data-ap="completo" data-i="${it.id}">Sin faltante</button>
 
-              ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad del sustituto<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label></div><label>Cantidad del original que reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label>
+              ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label><label>Reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label></div>
                 ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`${state.who==='Mateo'?`<strong>${d.sustituto_peso?esc(d.sustituto_peso)+' kg':'Peso desde la foto'}</strong>`:`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label>`}<button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
@@ -184,8 +184,11 @@
   }
   function input(e) {
     const el=e.target,id=Number(el.dataset.i);
-    if(['peso','enviado','medida_real','sustituto','sustituto_cantidad','sustituto_medida','sustituye','sustituto_peso'].includes(el.dataset.ap)) {
-      modificar(id,{[el.dataset.ap]:el.value});
+    if(['faltante','peso','enviado','medida_real','sustituto','sustituto_cantidad','sustituto_medida','sustituye','sustituto_peso'].includes(el.dataset.ap)) {
+      if(el.dataset.ap==='faltante'){
+        const it=S.p.items.find(x=>x.id===id),n=numero(el.value);
+        modificar(id,{enviado:n===null?'':decimal(Number(it.qty)-n)});
+      }else modificar(id,{[el.dataset.ap]:el.value});
       const it=S.p.items.find(x=>x.id===id),d=it&&borrador(it),pending=$('ap-item-'+id)?.querySelector('.ap-pending');
       if(pending&&d)pending.textContent='Queda pendiente: '+Math.max(0,Number(it.qty)-(numero(d.enviado)||0)-(d.reemplazar?(numero(d.sustituye)||0):0))+' de '+it.prod;
     }
@@ -193,7 +196,7 @@
   function cambios(it,completar) {
     const d=borrador(it),x=row(it),draft=S.drafts.get(it.id)||{},out={};
     const peso=String(d.peso).trim()===''?null:numero(d.peso),enviado=d.falta?numero(d.enviado):null;
-    if(d.falta && (enviado===null || enviado>Number(it.qty)))throw Error('Indicá cuánto se envía, entre 0 y '+it.qty+', en la misma medida del pedido.');
+    if(d.falta && (enviado===null || enviado<0 || enviado>Number(it.qty)))throw Error('Indicá cuánto falta, entre 0 y '+it.qty+', en la misma medida del pedido.');
     const zero=d.falta&&enviado===0;
     if(!zero && String(d.peso).trim()!=='' && !(peso>0))throw Error('Ingresá un peso mayor que 0. Usá coma o punto para los decimales.');
     if('peso' in draft){out.peso=peso;out.peso_revision=peso?'confirmado':null;if(peso!==Number(x.peso))out.foto=null;}
