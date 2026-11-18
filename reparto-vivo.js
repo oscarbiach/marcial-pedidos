@@ -1,6 +1,7 @@
 /* Cola de preparación compartida. La base confirma cada movimiento; nunca despacha. */
 (function () {
   'use strict';
+  const pedir = window.RepartoRed.pedir;
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const etapas = { pendiente: 'Sin enviar', por_preparar: 'Por preparar', preparando: 'Preparando', listo: 'Listos' };
@@ -10,7 +11,7 @@
   const icono = nombre => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="marca/iconos.svg#i-${nombre}"/></svg>`;
   const cantidadTarjeta = it => repCantidad(it).replace(/(\d)u\b/g,'$1 un.');
   const S = { filas: new Map(), pedidos: [], canal: null, timer: null, debounce: null, loading: false,
-    again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0,
+    again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0, revision:0,
     items: new Map(), dias: new Map(), diaActual: '', busqueda:'' };
   const mateo = () => state.who === 'Mateo';
   const envia = () => ['Oscar','Thiago','Joaquin'].includes(state.who);
@@ -79,14 +80,14 @@
   }
   async function cargar() {
     if (!state.pin || document.hidden) return;
-    if (S.loading) { S.again = true; return; }
+    if (S.loading || S.busy.size) { S.again = true; return; }
     S.loading = true;
-    const generation = S.generation;
+    const generation = S.generation, revision = S.revision;
     try {
       // Paginar evita el límite de 1000 de PostgREST. La cola se consulta solo para pedidos vigentes.
       const pedidos = [];
       for (let desde = 0; ; desde += 500) {
-        const {data,error} = await sb.from('pedidos').select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)').eq('estado','Pendiente').is('eliminado_en',null).or('retiro.eq.false,retiro.is.null').order('id').range(desde,desde+499);
+        const {data,error} = await pedir(sb.from('pedidos').select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)').eq('estado','Pendiente').is('eliminado_en',null).or('retiro.eq.false,retiro.is.null').order('id').range(desde,desde+499));
         if (error) throw error;
         pedidos.push(...(data || []));
         if (!data || data.length < 500) break;
@@ -95,17 +96,18 @@
       for (let i=0;i<ids.length;i+=75) consultas.push(sb.from('prep_cola').select('*').in('pedido_id',ids.slice(i,i+75)));
       // Aun sin pedidos verificamos la disponibilidad del esquema.
       if (!consultas.length) consultas.push(sb.from('prep_cola').select('*').limit(0));
-      const colas = await Promise.all(consultas);
+      const colas = await Promise.all(consultas.map(q=>pedir(q)));
       const itemIds=pedidos.flatMap(p=>(p.pedido_items||[]).map(i=>i.id)),detalles=[];
-      for(let i=0;i<itemIds.length;i+=150){const r=await sb.from('prep_items').select('*').in('item_id',itemIds.slice(i,i+150));if(r.error)throw r.error;detalles.push(...(r.data||[]));}
+      for(let i=0;i<itemIds.length;i+=150){const r=await pedir(sb.from('prep_items').select('*').in('item_id',itemIds.slice(i,i+150)));if(r.error)throw r.error;detalles.push(...(r.data||[]));}
       for (const result of colas) if (result.error) throw result.error;
-      if (generation !== S.generation) return;
+      if (generation !== S.generation || revision !== S.revision) { S.again=true; return; }
       S.items=new Map(detalles.map(x=>[x.item_id,x]));
       S.filas = new Map(colas.flatMap(r => r.data || []).map(r => [r.pedido_id,r]));
       S.pedidos = pedidos.map(mapPedido_).filter(elegible);
       S.ready = true; S.error = '';
     } catch (e) {
-      if (generation === S.generation) S.error = 'No se pudo sincronizar. Revisá la conexión y reintentá.';
+      if (generation === S.generation && revision === S.revision) S.error = 'No se pudo sincronizar. Revisá la conexión y reintentá.';
+      else S.again=true;
     } finally {
       S.loading = false;
       pintar();
@@ -234,16 +236,16 @@
     const generation = S.generation;
     if (!permiso(de,to) || S.busy.has(id) || !S.ready || S.error) return;
     if (!navigator.onLine) { toast('Sin conexión. El pedido no se movió.'); return; }
-    S.busy.add(id); pintar();
+    S.revision++; S.busy.add(id); pintar();
     try {
-      const {data,error} = await sb.rpc('prep_mover',{p_id:id,p_etapa:to,p_version:fila?.version || 0,p_quien:state.who});
+      const {data,error} = await pedir(sb.rpc('prep_mover',{p_id:id,p_etapa:to,p_version:fila?.version || 0,p_quien:state.who}));
       if (error) throw error;
       if (generation !== S.generation) return;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error('No llegó la confirmación. Actualizá antes de reintentar.');
-      S.filas.set(id,row);
+      S.revision++; S.filas.set(id,row);
       toast(to === 'por_preparar' && de === 'pendiente' ? 'Enviado a la cola de Mateo' : 'Pedido en ' + etapas[to].toLowerCase());
-    } catch (e) { toast(e.message || 'No se pudo mover el pedido.'); }
+    } catch (e) { if(generation===S.generation){if(e.code==='REPARTO_TIMEOUT')S.error='Verificando el estado del pedido…';toast(e.message || 'No se pudo mover el pedido.');} }
     finally { if (generation === S.generation) { S.busy.delete(id); pintar(); cargar(); } }
   }
   function clic(e) {
@@ -380,6 +382,7 @@
   window.addEventListener('online', () => { if (S.canal) cargar(); });
   window.addEventListener('offline', pintar);
   window.addEventListener('blur', cancel);
+  window.addEventListener('pageshow',()=>{cancel();if(S.canal)cargar();});
   document.addEventListener('keydown', e => { if (e.key === 'Escape') cancel(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); else if (S.canal) cargar(); });
   window.RepartoVivo = { montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
