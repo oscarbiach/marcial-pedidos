@@ -221,9 +221,9 @@ test('detalle conserva peso en edición; novedades y navegación de Mateo',async
  const page=await s.open('Mateo');
  await page.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(page);
  await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
- const input=page.locator('.ap-read-weight');
+ const input=page.locator('[data-ap="foto"]');
  await s.emit('prep_items');await page.waitForTimeout(250);
- await expect(input).toContainText('Foto del producto');
+ await expect(input).toContainText('Agregar foto');
  page.once('dialog',d=>d.accept());
  await page.locator('[data-ap="cerrar"]').click();
  await expect(page.locator('#ap-raiz')).toBeHidden();
@@ -350,7 +350,7 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
 
 test('novedades remotas preservan borradores; pedido despachado deja de ser editable',async({browser})=>{
  const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Oscar');
- await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);await page.locator('[data-ap="medir"]').click();const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
+ await page.evaluate(p=>ArmadoPedido.abrir(mapPedido_(p)),s.db.pedidos[0]);await abrirProducto(page);const peso=page.locator('[data-ap="peso"]');await peso.fill('4,5');
  s.db.prep_items=[{item_id:1,falta:true,enviado:1}];await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(peso).toBeFocused();await expect(peso).toHaveValue('4,5');
  await page.locator('[data-ap="guardar"]').click();
@@ -383,7 +383,7 @@ test('producto fuera de catálogo define medida opcional y foto sin exigir peso'
  const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
  await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
  await page.locator('[data-ap="medida_real"]').selectOption('caja');
- await page.locator('[data-ap="medir"]').click();await subirFotoPrueba(page);
+ await subirFotoPrueba(page);
  await expect(page.locator('.ap-photo-preview')).toBeVisible();
  expect(s.db.prep_items[0].peso).toBe(null);expect(s.db.prep_items[0].medida_real).toBe('caja');
  await page.locator('[data-ap="guardar"]').click();await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
@@ -504,7 +504,7 @@ test('ventanas centradas: el fondo cierra, soltar fuera desde adentro no cierra'
  await expect(page.locator('#ap-raiz')).toBeVisible();
  await page.mouse.click(8,500);await expect(page.locator('#ap-raiz')).toBeHidden();
  await page.locator('.rv-preparando .rv-card h3').click();await abrirProducto(page);
- await page.locator('[data-ap="medir"]').click();await page.locator('[data-ap="peso"]').fill('2,5');
+ await page.locator('[data-ap="peso"]').fill('2,5');
  page.once('dialog',d=>d.dismiss());await page.mouse.click(8,500);await expect(page.locator('[data-ap="peso"]')).toHaveValue('2,5');
  page.once('dialog',d=>d.accept());await page.mouse.click(8,500);await expect(page.locator('#ap-raiz')).toBeHidden();
  s.db.prep_cola[0].etapa='listo';s.db.prep_cola[0].version++;s.db.prep_items=[{item_id:1,separado:true}];await s.emit('prep_cola');
@@ -695,7 +695,7 @@ test('foto de sustituto se guarda sin ejecutar el lector y el faltante no muestr
  const p=await s.open('Mateo');await p.evaluate(()=>{Balanza.leer=()=>{window.lectorInvocado=true;return new Promise(()=>{});};});
  await p.locator('.rv-card h3').click();await abrirProducto(p);
  await expect(p.getByRole('button',{name:'Sin faltante',exact:true})).toHaveCount(0);await expect(p.locator('.ap-shortage-form')).not.toContainText('Pedido:');
- await p.locator('[data-ap="medir-sub"]').click();
+
  const picker=p.waitForEvent('filechooser');await p.locator('[data-ap="foto-sub"]').click();await (await picker).setFiles({name:'foto.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=','base64')});
  await expect.poll(()=>s.db.prep_items[0].sustituto_foto).toBeTruthy();await expect(p.locator('[data-ap="guardar"]')).toBeEnabled();
  expect(await p.evaluate(()=>!!window.lectorInvocado)).toBe(false);expect(s.db.prep_items[0].sustituto_peso_revision).toBe(null);
@@ -710,4 +710,20 @@ test('procesamiento de foto detenido libera Guardando y permite reintentar',asyn
  await subirFotoPrueba(p);await expect.poll(()=>p.evaluate(()=>!!window.fotoProcesando)).toBe(true);await p.clock.fastForward(46000);
  await expect(p.locator('.ap-inline-error')).toContainText('demoró demasiado');await expect(p.locator('[data-ap="guardar"]')).toBeEnabled();expect(s.uploads).toHaveLength(0);
  expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('buscador de Por preparar filtra sin afectar otras columnas y conserva texto en vivo',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');s.db.prep_cola.push({pedido_id:'p2',etapa:'preparando',version:1});const p=await s.open('Mateo');
+ const input=p.getByRole('textbox',{name:'Buscar en Por preparar'});await input.pressSequentially('almacen');await expect(input).toHaveValue('almacen');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await input.fill('nada');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(0);await expect(p.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await s.emit('pedidos');await expect(input).toHaveValue('nada');await input.fill('');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(1);expect(s.moves).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('iPad muestra directamente foto en productos y sustitutos con botón alineado',async({browser})=>{
+ const s=await setup(browser);enCola(s);const p=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});await p.locator('.rv-card h3').click();await abrirProducto(p);
+ await expect(p.locator('[data-ap="foto"]')).toBeVisible();await expect(p.locator('.ap-editor')).not.toContainText('opcional');await expect(p.locator('[data-ap="medir"]')).toHaveCount(0);
+ const photo=await p.locator('[data-ap="foto"]').boundingBox(),sub=await p.locator('[data-ap="reemplazar"]').boundingBox();expect(Math.abs(photo.y-sub.y)).toBeLessThan(2);expect(Math.abs(photo.height-sub.height)).toBeLessThan(2);
+ await p.screenshot({path:'test-results/foto-ipad-v107.png',animations:'disabled'});
+ await p.locator('[data-ap="reemplazar"]').click();await p.locator('[data-product="Aceite"]').click();await expect(p.locator('[data-ap="foto-sub"]')).toBeVisible();expect(await p.evaluate(()=>document.querySelector('.ap-editor').scrollWidth<=document.querySelector('.ap-editor').clientWidth)).toBe(true);expect(s.errors).toEqual([]);await s.close();
 });
