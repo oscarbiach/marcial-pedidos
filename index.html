@@ -1591,6 +1591,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   border-radius:9px; padding:9px 13px; font-size:13px; font-weight:700; cursor:pointer;
 }
 @media(max-width:767.98px) { #installBar { bottom:calc(78px + env(safe-area-inset-bottom)); } }
+
+#pedidoModal.solo-productos .modal-body>.field,#pedidoModal.solo-productos .form-extras-row,#pedidoModal.solo-productos #p_extras {display:none!important}
 </style>
 <link rel="stylesheet" href="marca/tokens.css">
 <link rel="stylesheet" href="marca/marcial.css">
@@ -1599,9 +1601,9 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=105">
-<link rel="stylesheet" href="armado-pedido.css?v=105">
-<link rel="stylesheet" href="reparto-control.css?v=105">
+<link rel="stylesheet" href="reparto-vivo.css?v=106">
+<link rel="stylesheet" href="armado-pedido.css?v=106">
+<link rel="stylesheet" href="reparto-control.css?v=106">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -5790,10 +5792,13 @@ function confirmDeletePedido(id) {
 // ═══════════════════════════════════════════════════════════════
 //  FORM: Editar Pedido
 // ═══════════════════════════════════════════════════════════════
+let edicionSoloProductos = null;
 function openPedidoEdit(id, pedidoActual) {
   const p = pedidoActual || state.pedidos.find(x => x.id === id);
   if (!p) return;
   closeModal('detailModal');
+  edicionSoloProductos=pedidoActual?{...p}:null;
+  document.getElementById('pedidoModal').classList.toggle('solo-productos',!!edicionSoloProductos);
   document.getElementById('p_editId').value = id;
   document.getElementById('p_cliente').value = p.cliente || '';
   document.getElementById('p_direccion').value = p.direccion || '';
@@ -5833,7 +5838,7 @@ function submitEditPedido() {
       else toast('Error: ' + (r.error || 'No se pudo actualizar'));
     })
     .withFailureHandler(e => toast('Error: ' + e.message))
-    .updatePedido({ id: editId, cliente, direccion, fechaEntrega, notas, items, retiro });
+    .updatePedido({ id: editId, cliente:edicionSoloProductos?.cliente??cliente, direccion:edicionSoloProductos?.direccion??direccion, fechaEntrega:edicionSoloProductos?.fechaEntrega??fechaEntrega, notas:edicionSoloProductos?.notas??notas, items, retiro:edicionSoloProductos?.retiro??retiro });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -6502,11 +6507,12 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js?v=105"></script>
-<script src="peso-fuentes.js?v=105"></script>
-<script src="balanza.js?v=105"></script>
-<script src="armado-pedido.js?v=105"></script>
-<script src="reparto-control.js?v=105"></script>
-<script src="reparto-vivo.js?v=105"></script>
+<script src="preparacion.js?v=106"></script>
+<script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>
+<script src="peso-fuentes.js?v=106"></script>
+<script src="balanza.js?v=106"></script>
+<script src="armado-pedido.js?v=106"></script>
+<script src="reparto-control.js?v=106"></script>
+<script src="reparto-vivo.js?v=106"></script>
 </body>
 </html>

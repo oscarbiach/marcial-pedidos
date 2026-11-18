@@ -168,3 +168,5 @@ body.ap-abierto { overflow:hidden; }
 .ap-substitute>div:not(.ap-sub-name):not(.ap-sub-photo) {grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .ap-substitute label {min-width:0}
 .ap-substitute input,.ap-substitute select {min-width:0;max-width:100%}
+
+.ap-shortage-form {grid-template-columns:minmax(100px,1fr) auto}

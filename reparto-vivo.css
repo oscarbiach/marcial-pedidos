@@ -154,3 +154,5 @@ body.reparto-vivo #repBar { display:none !important; }
 
 .rv-remito-done {background:#ddf4e6;color:#17683e;border:1px solid #a4d7b7;border-radius:8px;padding:8px 12px;font-weight:800;margin:8px 0}
 .rv-card li.rv-product-done {color:#197346}
+
+.rv-card [data-rv="editar"] {display:block;width:100%;margin-top:12px}
