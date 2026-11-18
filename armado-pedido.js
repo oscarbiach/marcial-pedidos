@@ -131,7 +131,7 @@
           <legend class="ap-sr">Preparar ${esc(it.prod)}</legend>
           ${!medida?`<label class="ap-measure">Medida del producto <select data-ap="medida_real" data-i="${it.id}"><option value="">Sin definir</option>${opcionesMedida(d.medida_real)}</select></label>`:''}
           <div class="ap-weigh">
-            ${state.who==='Mateo'?(d.peso?`<div class="ap-read-weight"><strong>${esc(d.peso)} kg</strong></div>`:''):`<label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>`}
+            <label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>
             <div class="ap-photo-actions"><div class="ap-photo"><div>
               ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
               <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
@@ -143,7 +143,7 @@
             ${d.falta?`<div class="ap-shortage-form"><label>Faltan <input data-ap="faltante" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(numero(d.enviado)===null?'':decimal(Number(it.qty)-numero(d.enviado)))}" placeholder="0" aria-label="Cantidad faltante de ${esc(it.prod)}"><small>${esc(medida||'unidad')}</small></label><button data-ap="nada" data-i="${it.id}">Falta todo</button>
 
               ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label><label>Reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label></div>
-                ${`${state.who==='Mateo'?(d.sustituto_peso?`<strong>${esc(d.sustituto_peso)} kg</strong>`:''):`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label>`}<button class="ap-photo-button" data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`}
+                ${`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button class="ap-photo-button" data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
             </div>`:''}
@@ -292,7 +292,7 @@
       let lectura=null;
       try{if(window.LECTOR_PESOS_ACTIVO)lectura=await conLimite(window.Balanza.leer(file));}catch(e){console.warn('Lectura de balanza no disponible');}
       if(d.epoch!==S.epoch)return;
-      const manual=state.who!=='Mateo'&&Object.hasOwn(d.out,d.sub?'sustituto_peso':'peso')&&d.peso>0;
+      const manual=d.peso>0&&(!window.LECTOR_PESOS_ACTIVO||Object.hasOwn(d.out,d.sub?'sustituto_peso':'peso'));
       d.peso=manual?d.peso:lectura?.peso??null;
       const revision=manual?'confirmado':lectura?.peso?(lectura.dudoso?'dudoso':'automatico'):null;
       const blob=await conLimite(Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?(revision==='dudoso'?'¿'+decimal(d.peso)+' kg?':decimal(d.peso)+' kg'):'Sin peso registrado']));
