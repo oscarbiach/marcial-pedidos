@@ -11,7 +11,7 @@
   const cantidadTarjeta = it => repCantidad(it).replace(/(\d)u\b/g,'$1 un.');
   const S = { filas: new Map(), pedidos: [], canal: null, timer: null, debounce: null, loading: false,
     again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0,
-    items: new Map(), dias: new Map(), diaActual: '' };
+    items: new Map(), dias: new Map(), diaActual: '', busqueda:'' };
   const mateo = () => state.who === 'Mateo';
   const envia = () => ['Oscar','Thiago','Joaquin'].includes(state.who);
   const opera = () => envia() || mateo();
@@ -33,7 +33,7 @@
     if (S.usuario !== state.who) {
       detener(); S.usuario = state.who; S.legacy = false; S.ready = false;
       S.filas.clear(); S.pedidos = []; S.busy.clear(); S.error = '';
-      S.dias.clear();
+      S.dias.clear(); S.busqueda='';
       if (window.Preparacion) Preparacion.cerrar(false);
       if (window.RepartoControl) RepartoControl.cerrar(true);
       if (mateo()) { activeTab = 'reparto'; repSel = []; }
@@ -121,6 +121,7 @@
       root = document.createElement('section'); root.id = 'rv-raiz'; root.className = 'rv';
       panel.prepend(root);
       root.addEventListener('click', clic);
+      root.addEventListener('input',e=>{if(e.target.dataset.rv!=='buscar')return;const pos=e.target.selectionStart;S.busqueda=e.target.value;pintar();const input=root.querySelector('[data-rv="buscar"]');input?.focus({preventScroll:true});if(input?.type==='text')input.setSelectionRange(pos,pos);});
       root.addEventListener('keydown', e => {
         if (!e.target.matches('.rv-card')) return;
         const id=e.target.dataset.id, de=etapa(id);
@@ -183,6 +184,8 @@
         </section>`;
       }).join('');
   }
+  const normalizar=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  function coincide(p){return normalizar([p.cliente,p.direccion,...p.items.map(it=>it.prod)].join(' ')).includes(normalizar(S.busqueda).trim());}
   function pintar() {
     const r = $('rv-raiz'); if (!r || r.hidden || activeTab !== 'reparto') return;
     if (S.drag) { S.dirty = true; return; }
@@ -208,11 +211,11 @@
       <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button><button data-rv="hojas">Hojas de reparto</button></div></header>${resumen}`}
       ${S.error ? `<div class="rv-error" role="alert">${esc(S.error)} <button data-rv="refresh">Reintentar</button></div>` : ''}
       <div class="rv-board ${mateo() ? 'rv-mateo' : ''}">${cols.map(e => {
-        const pedidos = S.pedidos.filter(p => etapa(p.id) === e).sort((a,b) => {
+        const pedidos = S.pedidos.filter(p => etapa(p.id) === e && (e!=='por_preparar'||coincide(p))).sort((a,b) => {
           if(e === 'pendiente') return (a.fechaEntrega || '9999').localeCompare(b.fechaEntrega || '9999');
           return String(S.filas.get(a.id)?.enviado_en || '').localeCompare(String(S.filas.get(b.id)?.enviado_en || '')) || a.id.localeCompare(b.id);
         });
-        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3><div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : pedidos.map(tarjeta).join('')) || `<div class="rv-empty"><b>${!S.ready ? 'Cargando pedidos…' : e === 'por_preparar' ? 'Todo al día' : 'Sin pedidos'}</b>${!mateo()?`<p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Arrastrá un pedido hasta acá.'}</p>`:''}</div>`}</div></section>`;
+        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3>${e==='por_preparar'?`<input class="rv-search" data-rv="buscar" type="text" inputmode="search" aria-label="Buscar en Por preparar" placeholder="Buscar pedido…" autocomplete="off" value="${esc(S.busqueda)}">`:''}<div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : pedidos.map(tarjeta).join('')) || `<div class="rv-empty"><b>${!S.ready ? 'Cargando pedidos…' : e === 'por_preparar' ? S.busqueda.trim()?'Sin coincidencias':'Todo al día' : 'Sin pedidos'}</b>${!mateo()&&!(e==='por_preparar'&&S.busqueda.trim())?`<p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Arrastrá un pedido hasta acá.'}</p>`:''}</div>`}</div></section>`;
       }).join('')}</div>`;
     if (r._html === html) return;
     r._html = html;
