@@ -1,6 +1,7 @@
 /* Resumen de remito y carga. El servidor confirma control, despacho y reposición. */
 (function(){
  'use strict';
+ const pedir = window.RepartoRed.pedir;
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const S={open:false,epoch:0,revision:0,ids:[],rows:[],fotos:new Map(),busy:false,loading:false,again:false,error:'',actionError:'',expanded:new Set(),timer:null,interacting:false,repaint:false};
  const qty=n=>Number(n).toLocaleString('es-AR',{maximumFractionDigits:3});
@@ -42,7 +43,7 @@
    const rows=[];
    // Acotar las consultas simultáneas cuando la camioneta tiene muchos pedidos.
    for(let i=0;i<S.ids.length;i+=6){
-    const results=await Promise.all(S.ids.slice(i,i+6).map(id=>sb.rpc('prep_leer',{p_id:id})));
+    const results=await Promise.all(S.ids.slice(i,i+6).map(id=>pedir(sb.rpc('prep_leer',{p_id:id}))));
     for(const r of results){if(r.error)throw r.error;if(r.data?.pedido)rows.push(r.data);}
    }
    if(epoch!==S.epoch||revision!==S.revision){S.again=true;return;}
@@ -50,7 +51,7 @@
    const paths=[...new Set(rows.flatMap(r=>(r.items||[]).flatMap(x=>[x.foto,x.sustituto_foto])).filter(Boolean))];
    const missing=paths.filter(p=>!S.fotos.has(p)||S.fotos.get(p).hasta<Date.now());
    if(missing.length){
-    const r=await sb.storage.from('preparacion').createSignedUrls(missing,3600);
+    const r=await pedir(sb.storage.from('preparacion').createSignedUrls(missing,3600));
     if(epoch!==S.epoch)return;
     (r.data||[]).forEach(x=>{if(x.signedUrl)S.fotos.set(x.path,{url:x.signedUrl,hasta:Date.now()+3300000});});
    }
@@ -108,14 +109,14 @@
   const epoch=S.epoch;S.revision++;S.busy=true;S.actionError='';pintar();
   try{
    const args={p_id:id,p_firma:r.firma,p_quien:state.who};
-   if(a==='cargar'){const control=await sb.rpc('prep_confirmar',{...args,p_accion:'control',p_valor:true});if(control.error)throw control.error;if(!control.data?.ok)throw Error('No se pudo registrar el control. Reintentá.');}
-   const res=a==='remito'&&r.cola?.etapa!=='listo'?{data:await sbMarcarRemito(id,!r.pedido.remito_hecho)}:a==='cargar'?await sb.rpc('prep_cargar',args):await sb.rpc('prep_confirmar',{...args,p_accion:a,p_valor:a==='remito'?!r.pedido.remito_hecho:!(r.control?.controlado&&r.control.control_firma===r.firma)});
+   if(a==='cargar'){const control=await pedir(sb.rpc('prep_confirmar',{...args,p_accion:'control',p_valor:true}));if(control.error)throw control.error;if(!control.data?.ok)throw Error('No se pudo registrar el control. Reintentá.');}
+   const res=a==='remito'&&r.cola?.etapa!=='listo'?{data:await pedir(sbMarcarRemito(id,!r.pedido.remito_hecho))}:a==='cargar'?await pedir(sb.rpc('prep_cargar',args)):await pedir(sb.rpc('prep_confirmar',{...args,p_accion:a,p_valor:a==='remito'?!r.pedido.remito_hecho:!(r.control?.controlado&&r.control.control_firma===r.firma)}));
    if(res.error)throw res.error;if(!res.data?.ok)throw Error('No llegó la confirmación. Reintentá.');
    if(epoch!==S.epoch)return;
    if(a==='cargar'){toast(res.data.reposicion_id?'Cargado. Reposición pendiente creada.':'Pedido cargado y despachado');reload();}
    window.RepartoVivo?.refrescar();
   }catch(e){if(epoch===S.epoch)S.actionError=e.message||'No se pudo guardar. Reintentá.';}
-  finally{if(epoch===S.epoch){S.busy=false;await cargar();pintar();}}
+  finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
  }
  function revisarPeso(id,itemId,sub){
   if(!oficina()||S.busy)return;
@@ -129,7 +130,7 @@
   const guardar=async value=>{
    const n=Number(value);if(!Number.isFinite(n)||n<=0||n>150){error.textContent='Ingresá un peso válido en kg.';return;}if(S.busy)return;
    S.busy=true;S.revision++;error.textContent='';v.querySelectorAll('button,input').forEach(b=>b.disabled=true);
-   try{const res=await sb.rpc('prep_revisar_peso',{p_id:id,p_item:itemId,p_sub:sub,p_peso:n,p_firma:firma,p_quien:state.who});if(res.error)throw res.error;if(!res.data?.pedido)throw Error('No llegó la confirmación. Reintentá.');if(epoch!==S.epoch)return;S.rows=S.rows.map(r=>r.pedido.id===id?res.data:r);v.remove();window.RepartoVivo?.refrescar();}
+   try{const res=await pedir(sb.rpc('prep_revisar_peso',{p_id:id,p_item:itemId,p_sub:sub,p_peso:n,p_firma:firma,p_quien:state.who}));if(res.error)throw res.error;if(!res.data?.pedido)throw Error('No llegó la confirmación. Reintentá.');if(epoch!==S.epoch)return;S.rows=S.rows.map(r=>r.pedido.id===id?res.data:r);v.remove();window.RepartoVivo?.refrescar();}
    catch(e){error.textContent=e.message||'No se pudo guardar.';}
    finally{S.busy=false;v.querySelectorAll('button,input').forEach(b=>b.disabled=false);if(epoch===S.epoch){pintar();if(!v.isConnected)cargar();}}
   };
@@ -162,6 +163,7 @@
  });
  const soltar=()=>setTimeout(()=>{S.interacting=false;if(S.repaint)pintar();},0);
  document.addEventListener('pointerup',soltar);document.addEventListener('pointercancel',soltar);
- window.addEventListener('online',refrescar);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refrescar();});
+ window.addEventListener('online',refrescar);document.addEventListener('visibilitychange',()=>{soltar();if(!document.hidden)refrescar();});
+ window.addEventListener('blur',soltar);window.addEventListener('pageshow',()=>{soltar();refrescar();});
  window.RepartoControl={remito:id=>abrir([id],'remito'),camioneta:ids=>abrir(ids,'camioneta'),refrescar,cerrar};
 })();

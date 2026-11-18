@@ -1,6 +1,7 @@
 /* Armado individual: borradores locales, guardado explícito y una tarea por producto. */
 (function () {
   'use strict';
+  const pedir = window.RepartoRed.pedir;
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const numero = v => {
@@ -84,11 +85,11 @@
         sb.from('pedidos').select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)').eq('id',id).is('eliminado_en',null),
         sb.from('prep_cola').select('*').eq('pedido_id',id),
         sb.from('prep_productos').select('nombre,frio,se_pesa')
-      ]);
+      ].map(q=>pedir(q)));
       for(const result of [pedido,cola,prod]) if(result.error) throw result.error;
       const p=pedido.data?.[0] ? mapPedido_(pedido.data[0]) : null;
       const ids=p?.items.map(it=>it.id) || [];
-      const detalle=ids.length ? await sb.from('prep_items').select('*').in('item_id',ids) : {data:[]};
+      const detalle=ids.length ? await pedir(sb.from('prep_items').select('*').in('item_id',ids)) : {data:[]};
       if(detalle.error) throw detalle.error;
       if(epoch!==S.epoch || revision!==S.revision || !S.open) return;
       S.p=p || {...S.p,estado:'No disponible',items:[]}; S.cola=cola.data?.[0] || null;
@@ -101,7 +102,7 @@
       const fotos=[...new Set((detalle.data || []).flatMap(x=>[x.foto,x.sustituto_foto]).filter(Boolean))];
       const faltan=fotos.filter(f=>!S.fotos.has(f) || S.fotos.get(f).hasta<Date.now());
       if(faltan.length){
-        const urls=await sb.storage.from('preparacion').createSignedUrls(faltan,3600);
+        const urls=await pedir(sb.storage.from('preparacion').createSignedUrls(faltan,3600));
         if(epoch!==S.epoch) return;
         (urls.data || []).forEach(f=>{if(f.signedUrl)S.fotos.set(f.path,{url:f.signedUrl,hasta:Date.now()+3300000});});
       }
@@ -226,7 +227,7 @@
     return out;
   }
   async function moverEtapa(to,epoch) {
-    const {data,error}=await sb.rpc('prep_mover',{p_id:S.p.id,p_etapa:to,p_version:S.cola?.version||0,p_quien:state.who});
+    const {data,error}=await pedir(sb.rpc('prep_mover',{p_id:S.p.id,p_etapa:to,p_version:S.cola?.version||0,p_quien:state.who}));
     if(error)throw error;
     if(epoch!==S.epoch)throw Error('La pantalla cambió.');
     const fila=Array.isArray(data)?data[0]:data;
@@ -240,7 +241,7 @@
   async function escribir(it,out,epoch,preservarBorrador=false) {
     if(epoch!==S.epoch)return false;
     const fila={item_id:it.id,...out,quien:state.who,actualizado_en:new Date().toISOString()};
-    const {error}=await sb.from('prep_items').upsert(fila);if(error)throw error;
+    const {error}=await pedir(sb.from('prep_items').upsert(fila));if(error)throw error;
     if(epoch!==S.epoch)return false;
     S.items.set(it.id,{...row(it),...fila});if(!preservarBorrador)S.drafts.delete(it.id);window.RepartoVivo?.refrescar();return true;
   }
@@ -251,7 +252,7 @@
     try{
       await iniciarEdicion(epoch);
       if(await escribir(it,out,epoch))S.active=null;
-    }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:'No se guardó. '+e.message};}
+    }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:(e.code==='REPARTO_TIMEOUT'?'No se pudo confirmar el guardado. ':'No se guardó. ')+e.message};}
     finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
   async function cambiarEtapa() {
@@ -314,8 +315,8 @@
     let out;try{out=cambios(it,false);}catch(e){S.itemError={id:it.id,message:e.message};pintar();return;}
     S.busy=true;S.revision++;S.itemError=null;pintar();
     try{
-      const response=await fetch(url);if(!response.ok)throw Error('No se pudo abrir la foto.');
-      const lectura=await Balanza.leer(await response.blob());if(epoch!==S.epoch)return;
+      const response=await pedir(fetch(url));if(!response.ok)throw Error('No se pudo abrir la foto.');
+      const lectura=await conLimite(Balanza.leer(await pedir(response.blob())));if(epoch!==S.epoch)return;
       if(lectura?.peso==null)throw Error('No se distingue el peso. Se puede completar desde el resumen para remito.');
       const peso=lectura.peso;
       await iniciarEdicion(epoch);
@@ -389,7 +390,9 @@
       else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
     }
   });
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refrescar();});
+  document.addEventListener('visibilitychange',()=>{soltar();if(!document.hidden)refrescar();});
+  window.addEventListener('blur',soltar);
+  window.addEventListener('pageshow',()=>{soltar();refrescar();});
   window.addEventListener('online',refrescar);
   window.ArmadoPedido={abrir,cerrar,refrescar};
 })();

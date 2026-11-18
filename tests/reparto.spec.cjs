@@ -735,3 +735,55 @@ test('Mateo guarda peso manual y luego agrega foto sin perderlo; Listos abre con
  await abrirProducto(p);await subirFotoPrueba(p);await expect(p.locator('.ap-photo-preview')).toBeVisible();expect(s.db.prep_items[0].peso).toBe(3.25);expect(s.db.prep_items[0].peso_revision).toBe('confirmado');
  await p.locator('[data-ap="guardar"]').click();await p.locator('#ap-finalizar').click();const office=await s.open('Oscar');await expect(office.locator('[data-rv="remito"]')).toHaveCount(0);await office.locator('.rv-listo .rv-card h3').click();await expect(office.locator('#rc-title')).toHaveText('Resumen para remito');expect(s.errors).toEqual([]);await s.close();
 });
+
+
+test('Enviar a preparar se recupera de una respuesta que nunca llega sin F5',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{window.sinRecarga=true;const rpc=sb.rpc;sb.rpc=(n,a)=>{if(n==='prep_mover'&&!window.movimientoColgado){window.movimientoColgado=true;return new Promise(()=>{});}return rpc(n,a);};});
+ const button=p.locator('[data-rv="mover"][data-id="p1"]');await button.click();await expect(button).toHaveText('Guardando…');await p.clock.fastForward(21000);
+ await expect(button).toBeEnabled();await button.click();await expect(p.locator('.rv-por_preparar [data-id="p1"].rv-card')).toBeVisible();expect(await p.evaluate(()=>window.sinRecarga)).toBe(true);expect(s.moves).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('guardar producto libera la pantalla si la escritura queda sin respuesta y conserva el borrador',async({browser})=>{
+ const s=await setup(browser);enCola(s);const p=await s.open('Mateo');await p.locator('.rv-card h3').click();await abrirProducto(p);await p.locator('[data-ap="peso"]').fill('2,75');
+ await p.evaluate(()=>{const from=sb.from;sb.from=t=>{const q=from(t),upsert=q.upsert;q.upsert=v=>{if(t==='prep_items'&&!window.guardadoColgado){window.guardadoColgado=true;return new Promise(()=>{});}return upsert(v);};return q;};});
+ await p.locator('[data-ap="guardar"]').click();await expect(p.locator('[data-ap="guardar"]')).toBeDisabled();await p.clock.fastForward(21000);
+ await expect(p.locator('[data-ap="guardar"]')).toBeEnabled();await expect(p.locator('[data-ap="peso"]')).toHaveValue('2,75');await p.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(2.75);expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('movimiento confirmado con respuesta perdida se recupera sin duplicar ni aceptar respuesta tardía',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=async(n,a)=>{const result=await rpc(n,a);if(n==='prep_mover'&&!window.respuestaPerdida){window.respuestaPerdida=true;return new Promise(resolve=>window.resolverTarde=()=>resolve(result));}return result;};});
+ await p.locator('[data-rv="mover"][data-id="p1"]').click();await expect.poll(()=>p.evaluate(()=>!!window.resolverTarde)).toBe(true);await p.clock.fastForward(21000);
+ await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(1);
+ await p.locator('.rv-por_preparar .rv-card[data-id="p1"]').press('ArrowRight');await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();await p.evaluate(()=>window.resolverTarde());await p.waitForTimeout(200);await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(2);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('una lectura iniciada antes de mover no devuelve la tarjeta a la columna vieja',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=async q=>{const data=await db(q);if(q.table==='prep_cola'&&!window.lecturaVieja){window.lecturaVieja=true;return new Promise(resolve=>window.soltarLecturaVieja=()=>resolve(data));}return data;};RepartoVivo.refrescar();});
+ await expect.poll(()=>p.evaluate(()=>!!window.soltarLecturaVieja)).toBe(true);await p.locator('[data-rv="mover"][data-id="p1"]').click();await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();
+ await p.evaluate(()=>{new MutationObserver(()=>{if(document.querySelector('.rv-pendiente .rv-card[data-id="p1"]'))window.retroceso=true;}).observe(document.getElementById('rv-raiz'),{childList:true,subtree:true});window.soltarLecturaVieja();});
+ await p.waitForTimeout(400);expect(await p.evaluate(()=>!!window.retroceso)).toBe(false);await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();expect(s.errors).toEqual([]);await s.close();
+});
+
+test('una sincronización colgada permite actualizar desde la app sin recargar',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=q=>{if(q.table==='pedidos'&&!window.lecturaColgada){window.lecturaColgada=true;return new Promise(()=>{});}return db(q);};RepartoVivo.refrescar();});
+ await expect.poll(()=>p.evaluate(()=>!!window.lecturaColgada)).toBe(true);await p.clock.fastForward(21000);await expect(p.locator('.rv-error')).toBeVisible();await p.locator('.rv-error [data-rv="refresh"]').click();await expect(p.locator('.rv-error')).toHaveCount(0);await expect(p.locator('[data-rv="mover"][data-id="p1"]')).toBeEnabled();expect(s.errors).toEqual([]);await s.close();
+});
+
+test('carga sin respuesta libera la ventana y permite reintentar sin duplicar reposiciones',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:1}];const p=await s.open('Mateo');await p.locator('[data-rv="camioneta"]').click();await expect(p.locator('[data-rc="cargar"]')).toBeEnabled();
+ await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=(n,a)=>{if(n==='prep_cargar'&&!window.cargaColgada){window.cargaColgada=true;return new Promise(()=>{});}return rpc(n,a);};});await p.locator('[data-rc="cargar"]').click();await expect.poll(()=>p.evaluate(()=>!!window.cargaColgada)).toBe(true);await p.clock.fastForward(21000);
+ await expect(p.locator('[data-rc="cargar"]')).toBeEnabled();await p.locator('[data-rc="cargar"]').click();await expect(p.locator('.rc-loaded')).toBeVisible();expect(s.db.pedidos.filter(x=>x.id==='repo_p1')).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('volver a la ventana libera un gesto interrumpido y muestra actualizaciones del armado',async({browser})=>{
+ const s=await setup(browser);enCola(s);const p=await s.open('Mateo');await p.locator('.rv-card h3').click();await expect(p.locator('.ap-item-status')).toHaveText('Por preparar');
+ await p.locator('.ap-item-head').dispatchEvent('pointerdown',{pointerId:8,pointerType:'touch',isPrimary:true});s.db.prep_items=[{item_id:1,separado:true}];await s.emit('prep_items');await p.waitForTimeout(250);
+ await p.evaluate(()=>window.dispatchEvent(new Event('blur')));await expect(p.locator('.ap-item-status')).toHaveText('Preparado');expect(s.errors).toEqual([]);await s.close();
+});
+
+test('límite de red aborta la solicitud disponible y no la reenvía',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{window.intentosRed=0;const q={abortSignal(signal){signal.addEventListener('abort',()=>window.solicitudAbortada=true);return this;},then(){window.intentosRed++;return new Promise(()=>{});}};RepartoRed.pedir(q).catch(e=>window.errorRed=e.code);});await p.clock.fastForward(21000);
+ expect(await p.evaluate(()=>({intentos:window.intentosRed,abortada:window.solicitudAbortada,codigo:window.errorRed}))).toEqual({intentos:1,abortada:true,codigo:'REPARTO_TIMEOUT'});expect(s.errors).toEqual([]);await s.close();
+});
