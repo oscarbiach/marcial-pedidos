@@ -220,7 +220,7 @@ test('detalle conserva peso en edición; novedades y navegación de Mateo',async
  s.db.prep_productos=[{nombre:'Mozzarella',frio:true,se_pesa:true}];
  const page=await s.open('Mateo');
  await page.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(page);
- await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
+ await expect(page.locator('[data-ap="peso"]')).toHaveAttribute('inputmode','decimal');
  const input=page.locator('[data-ap="foto"]');
  await s.emit('prep_items');await page.waitForTimeout(250);
  await expect(input).toContainText('Agregar foto');
@@ -381,7 +381,7 @@ test('arrastrar desde el nombre y los productos no selecciona texto ni abre el a
 test('producto fuera de catálogo define medida opcional y foto sin exigir peso',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.pedidos[0].pedido_items[0].producto='Pan nuevo';
  const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
- await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
+ await expect(page.locator('[data-ap="peso"]')).toHaveAttribute('inputmode','decimal');
  await page.locator('[data-ap="medida_real"]').selectOption('caja');
  await subirFotoPrueba(page);
  await expect(page.locator('.ap-photo-preview')).toBeVisible();
@@ -577,11 +577,11 @@ test('selector de sustituto muestra catálogo, busca y permite cancelar sin camb
 test('Mateo guarda peso automático o dudoso sin confirmaciones y puede guardar sin peso',async({browser})=>{
  const s=await setup(browser);enCola(s);s.db.prep_productos=[{nombre:'Mozzarella',se_pesa:true}];
  const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
- await expect(page.locator('[data-ap="peso"]')).toHaveCount(0);
+ await expect(page.locator('[data-ap="peso"]')).toHaveAttribute('inputmode','decimal');
  await page.evaluate(()=>{window.LECTOR_PESOS_ACTIVO=true;Balanza.leer=async()=>({peso:19,recorte:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='});});
  await subirFotoPrueba(page);await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(19);expect(s.db.prep_items[0].peso_revision).toBe('automatico');
  await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toHaveCount(0);
- await expect(page.locator('.ap-read-weight')).toContainText('19 kg');await expect(page.locator('.ap-photo-preview')).toBeVisible();
+ await expect(page.locator('[data-ap="peso"]')).toHaveValue('19');await expect(page.locator('.ap-photo-preview')).toBeVisible();
  await page.evaluate(()=>{Balanza.leer=async()=>({peso:19.65,dudoso:true});});await subirFotoPrueba(page);
  await expect.poll(()=>s.db.prep_items[0].peso).toBe(19.65);expect(s.db.prep_items[0].peso_revision).toBe('dudoso');
  await page.evaluate(()=>{Balanza.leer=async()=>({peso:null});});await subirFotoPrueba(page);
@@ -615,7 +615,7 @@ test('releer una foto guardada conserva la foto y deja la duda para oficina',asy
  await page.getByRole('button',{name:'Leer peso de la foto',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Confirmar peso leído'})).toHaveCount(0);
  await expect.poll(()=>s.db.prep_items[0].peso).toBe(8.85);expect(s.db.prep_items[0].foto).toBe('sardo.jpg');expect(s.uploads).toHaveLength(0);
- await expect(page.locator('.ap-read-weight')).toContainText('8,85 kg');expect(s.db.prep_cola[0].etapa).toBe('preparando');
+ await expect(page.locator('[data-ap="peso"]')).toHaveValue('8,85');expect(s.db.prep_cola[0].etapa).toBe('preparando');
  expect(s.errors).toEqual([]);await s.close();
 });
 
@@ -713,17 +713,25 @@ test('procesamiento de foto detenido libera Guardando y permite reintentar',asyn
 });
 
 
-test('buscador de Por preparar filtra sin afectar otras columnas y conserva texto en vivo',async({browser})=>{
- const s=await setup(browser);enCola(s,'por_preparar');s.db.prep_cola.push({pedido_id:'p2',etapa:'preparando',version:1});const p=await s.open('Mateo');
- const input=p.getByRole('textbox',{name:'Buscar en Por preparar'});await input.pressSequentially('almacen');await expect(input).toHaveValue('almacen');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
- await input.fill('nada');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(0);await expect(p.locator('.rv-preparando .rv-card')).toHaveCount(1);
- await s.emit('pedidos');await expect(input).toHaveValue('nada');await input.fill('');await expect(p.locator('.rv-por_preparar .rv-card')).toHaveCount(1);expect(s.moves).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+test('buscador de Sin enviar filtra sin afectar otras columnas y conserva texto en vivo',async({browser})=>{
+ const s=await setup(browser);enCola(s,'pendiente');s.db.prep_cola.push({pedido_id:'p2',etapa:'preparando',version:1});const p=await s.open('Oscar');
+ const input=p.getByRole('textbox',{name:'Buscar en Sin enviar'});await input.pressSequentially('almacen');await expect(input).toHaveValue('almacen');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(1);
+ await input.fill('nada');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(0);await expect(p.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await s.emit('pedidos');await expect(input).toHaveValue('nada');await input.fill('');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(1);expect(s.moves).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
 });
 
 test('iPad muestra directamente foto en productos y sustitutos con botón alineado',async({browser})=>{
  const s=await setup(browser);enCola(s);const p=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});await p.locator('.rv-card h3').click();await abrirProducto(p);
- await expect(p.locator('[data-ap="foto"]')).toBeVisible();await expect(p.locator('.ap-editor')).not.toContainText('opcional');await expect(p.locator('[data-ap="medir"]')).toHaveCount(0);
+ await expect(p.locator('[data-ap="foto"]')).toBeVisible();await expect(p.locator('.ap-photo')).not.toContainText('opcional');await expect(p.locator('[data-ap="medir"]')).toHaveCount(0);
  const photo=await p.locator('[data-ap="foto"]').boundingBox(),sub=await p.locator('[data-ap="reemplazar"]').boundingBox();expect(Math.abs(photo.y-sub.y)).toBeLessThan(2);expect(Math.abs(photo.height-sub.height)).toBeLessThan(2);
  await p.screenshot({path:'test-results/foto-ipad-v107.png',animations:'disabled'});
  await p.locator('[data-ap="reemplazar"]').click();await p.locator('[data-product="Aceite"]').click();await expect(p.locator('[data-ap="foto-sub"]')).toBeVisible();expect(await p.evaluate(()=>document.querySelector('.ap-editor').scrollWidth<=document.querySelector('.ap-editor').clientWidth)).toBe(true);expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('Mateo guarda peso manual y luego agrega foto sin perderlo; Listos abre con un toque',async({browser})=>{
+ const s=await setup(browser);enCola(s);const p=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});await p.locator('.rv-card h3').click();await abrirProducto(p);
+ await p.locator('[data-ap="peso"]').fill('3,25');await p.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0]?.peso).toBe(3.25);
+ await abrirProducto(p);await subirFotoPrueba(p);await expect(p.locator('.ap-photo-preview')).toBeVisible();expect(s.db.prep_items[0].peso).toBe(3.25);expect(s.db.prep_items[0].peso_revision).toBe('confirmado');
+ await p.locator('[data-ap="guardar"]').click();await p.locator('#ap-finalizar').click();const office=await s.open('Oscar');await expect(office.locator('[data-rv="remito"]')).toHaveCount(0);await office.locator('.rv-listo .rv-card h3').click();await expect(office.locator('#rc-title')).toHaveText('Resumen para remito');expect(s.errors).toEqual([]);await s.close();
 });
