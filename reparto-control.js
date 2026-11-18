@@ -8,7 +8,7 @@
  const oficina=()=>['Oscar','Thiago','Joaquin'].includes(state.who)&&matchMedia('(hover:hover) and (pointer:fine)').matches;
  function pesoVista(r,x,sub,fallback){
   const peso=sub?x.sustituto_peso:x.peso,revision=sub?x.sustituto_peso_revision:x.peso_revision,foto=sub?x.sustituto_foto:x.foto;
-  const duda=revision==='dudoso'||!!foto&&!(Number(peso)>0),texto=duda?'¿'+(Number(peso)>0?qty(peso)+' kg':'Sin peso')+'?':fallback;
+  const duda=revision==='dudoso'||!!window.LECTOR_PESOS_ACTIVO&&!!foto&&!(Number(peso)>0),texto=duda?'¿'+(Number(peso)>0?qty(peso)+' kg':'Sin peso')+'?':fallback;
   const clase=revision==='confirmado'?'rc-weight-ok':duda?'rc-weight-doubt':'',cantidad=duda&&!(Number(peso)>0)?`<strong>${esc(fallback)}</strong>`:'';
   if(oficina()&&r.pedido.estado==='Pendiente'&&(duda||revision==='confirmado'))return `${cantidad}<button class="rc-weight ${clase}" data-rc="peso" data-id="${esc(r.pedido.id)}" data-item="${x.item_id}" data-sub="${sub?'1':'0'}" aria-label="Revisar peso: ${esc(texto)}">${esc(texto)}</button>`;
   return `${cantidad}<strong class="${clase}">${esc(texto)}</strong>`;
@@ -86,8 +86,8 @@
    ${!available&&p.estado==='Pendiente'?'<p class="rc-notes">Cantidades pedidas. Si cambia la preparación, habrá que revisar el remito.</p>':''}
    ${p.estado==='Despachado'?control.reposicion_id?'<p class="rc-missing">Pedido violeta de reposición creado.</p>':'':`<div class="rc-actions">
     ${state.who!=='Mateo'?`<button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${remitoOff?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
-    <button data-rc="control" data-id="${esc(p.id)}" aria-pressed="${checked}" ${off?'disabled':''}>${checked?'✓ Controlado':'Confirmar control'}</button>
-    ${S.modo==='camioneta'?`<button class="rc-primary" data-rc="cargar" data-id="${esc(p.id)}" ${off||!checked?'disabled':''}>Cargar y despachar →</button>`:''}
+
+    ${S.modo==='camioneta'?`<button class="rc-primary" data-rc="cargar" data-id="${esc(p.id)}" ${off?'disabled':''}>Cargar y despachar →</button>`:''}
     <button class="rc-edit" data-rc="editar" data-id="${esc(p.id)}" ${S.busy||p.estado!=='Pendiente'?'disabled':''}>Revisar armado</button>
    </div>`}</article>`;
  }
@@ -108,6 +108,7 @@
   const epoch=S.epoch;S.revision++;S.busy=true;S.actionError='';pintar();
   try{
    const args={p_id:id,p_firma:r.firma,p_quien:state.who};
+   if(a==='cargar'){const control=await sb.rpc('prep_confirmar',{...args,p_accion:'control',p_valor:true});if(control.error)throw control.error;if(!control.data?.ok)throw Error('No se pudo registrar el control. Reintentá.');}
    const res=a==='remito'&&r.cola?.etapa!=='listo'?{data:await sbMarcarRemito(id,!r.pedido.remito_hecho)}:a==='cargar'?await sb.rpc('prep_cargar',args):await sb.rpc('prep_confirmar',{...args,p_accion:a,p_valor:a==='remito'?!r.pedido.remito_hecho:!(r.control?.controlado&&r.control.control_firma===r.firma)});
    if(res.error)throw res.error;if(!res.data?.ok)throw Error('No llegó la confirmación. Reintentá.');
    if(epoch!==S.epoch)return;

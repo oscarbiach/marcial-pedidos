@@ -132,20 +132,20 @@
           <legend class="ap-sr">Preparar ${esc(it.prod)}</legend>
           ${!medida?`<label class="ap-measure">Medida del producto <select data-ap="medida_real" data-i="${it.id}"><option value="">Sin definir</option>${opcionesMedida(d.medida_real)}</select></label>`:''}
           ${medir?`<div class="ap-weigh">
-            ${state.who==='Mateo'?`<div class="ap-read-weight"><strong>${d.peso?esc(d.peso)+' kg':'Peso desde la foto'}</strong></div>`:`<label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>`}
+            ${state.who==='Mateo'?`<div class="ap-read-weight"><strong>${d.peso?esc(d.peso)+' kg':'Foto del producto'}</strong></div>`:`<label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>`}
             <div class="ap-photo"><span>Foto (opcional)</span><div>
               ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
               <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
               ${x.foto?`<button class="ap-photo-remove" data-ap="quitar-foto" data-i="${it.id}">Eliminar foto</button>`:''}
-              ${url&&!d.peso?`<button class="ap-photo-button" data-ap="leer-foto" data-i="${it.id}" ${zero?'disabled':''}>Leer peso de la foto</button>`:''}
+              ${window.LECTOR_PESOS_ACTIVO&&url&&!d.peso?`<button class="ap-photo-button" data-ap="leer-foto" data-i="${it.id}" ${zero?'disabled':''}>Leer peso de la foto</button>`:''}
             </div></div>
           </div>`:`<button class="ap-add-weight" data-ap="medir" data-i="${it.id}">Agregar peso o foto</button>`}
           <button class="ap-change" data-ap="reemplazar" data-i="${it.id}" aria-label="Elegir sustituto" title="Elegir sustituto">⇄</button>
           <div class="ap-shortage ${d.falta?'ap-shortage-open':''}"><button class="ap-shortage-toggle" data-ap="falta" data-i="${it.id}" aria-expanded="${d.falta}">${d.falta?'−':'+'} Faltante</button>
-            ${d.falta?`<div class="ap-shortage-form"><label>Faltan <input data-ap="faltante" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(numero(d.enviado)===null?'':decimal(Number(it.qty)-numero(d.enviado)))}" placeholder="0" aria-label="Cantidad faltante de ${esc(it.prod)}"><small>${esc(medida||'unidad')} · Pedido: ${esc(cantidad(it))}</small></label><button data-ap="nada" data-i="${it.id}">Falta todo</button><button data-ap="completo" data-i="${it.id}">Sin faltante</button>
+            ${d.falta?`<div class="ap-shortage-form"><label>Faltan <input data-ap="faltante" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(numero(d.enviado)===null?'':decimal(Number(it.qty)-numero(d.enviado)))}" placeholder="0" aria-label="Cantidad faltante de ${esc(it.prod)}"><small>${esc(medida||'unidad')}</small></label><button data-ap="nada" data-i="${it.id}">Falta todo</button>
 
               ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label><label>Reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label></div>
-                ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`${state.who==='Mateo'?`<strong>${d.sustituto_peso?esc(d.sustituto_peso)+' kg':'Peso desde la foto'}</strong>`:`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label>`}<button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
+                ${S.extras.has(it.id+'-sub')||x.sustituto_peso||x.sustituto_foto?`${state.who==='Mateo'?`<strong>${d.sustituto_peso?esc(d.sustituto_peso)+' kg':'Foto del sustituto'}</strong>`:`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label>`}<button data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`:`<button data-ap="medir-sub" data-i="${it.id}">Agregar peso o foto del sustituto</button>`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
             </div>`:''}
@@ -281,6 +281,9 @@
     }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:'No se pudo eliminar la foto. '+e.message};}
     finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
+  async function conLimite(promesa) {
+    let timer;try{return await Promise.race([promesa,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('La foto demoró demasiado. Reintentá la carga.')),45000);})]);}finally{clearTimeout(timer);}
+  }
   async function subirFoto(file) {
     const d=S.fotoPara;S.fotoPara=null;
     if(!file||!d||d.epoch!==S.epoch||S.busy){pintar();return;}
@@ -289,20 +292,20 @@
       await iniciarEdicion(d.epoch);
       // Guardar la foto sigue siendo posible si el lector no encuentra un peso claro.
       let lectura=null;
-      try{lectura=await window.Balanza.leer(file);}catch(e){console.warn('Lectura de balanza no disponible');}
+      try{if(window.LECTOR_PESOS_ACTIVO)lectura=await conLimite(window.Balanza.leer(file));}catch(e){console.warn('Lectura de balanza no disponible');}
       if(d.epoch!==S.epoch)return;
       const manual=state.who!=='Mateo'&&Object.hasOwn(d.out,d.sub?'sustituto_peso':'peso')&&d.peso>0;
       d.peso=manual?d.peso:lectura?.peso??null;
-      const revision=manual?'confirmado':lectura?.peso&&!lectura.dudoso?'automatico':'dudoso';
-      const blob=await Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?(revision==='dudoso'?'¿'+decimal(d.peso)+' kg?':decimal(d.peso)+' kg'):'Sin peso registrado']);
+      const revision=manual?'confirmado':lectura?.peso?(lectura.dudoso?'dudoso':'automatico'):null;
+      const blob=await conLimite(Preparacion.fotoConTexto(file,[d.cliente,d.nombre,d.peso?(revision==='dudoso'?'¿'+decimal(d.peso)+' kg?':decimal(d.peso)+' kg'):'Sin peso registrado']));
       if(d.epoch!==S.epoch)return;
       if(!blob)throw Error('No se pudo procesar la imagen.');
       const ruta=`pedido-${d.pid}/${d.it.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
-      const {error}=await sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false});
+      const {error}=await conLimite(sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false}));
       if(error)throw error;
       if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta,sustituto_peso_revision:revision}:{peso:d.peso,foto:ruta,peso_revision:revision})},d.epoch)){
         const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast(d.peso?'Foto y peso guardados.':'Foto guardada sin peso.');
-        if(!d.peso)S.itemError={id:d.it.id,message:'Foto guardada. El peso se revisa al hacer el remito.'};
+        if(window.LECTOR_PESOS_ACTIVO&&!d.peso)S.itemError={id:d.it.id,message:'Foto guardada. El peso se revisa al hacer el remito.'};
       }
     }catch(e){if(d.epoch===S.epoch)S.itemError={id:d.it.id,message:'No se pudo guardar la foto. '+e.message};}
     finally{if(d.epoch===S.epoch){S.busy=false;pintar();cargar();}}
@@ -365,7 +368,7 @@
     if(a==='guardar')return guardar(it);
     if(a==='foto')return pedirFoto(it);
     if(a==='foto-sub')return pedirFoto(it,true);
-    if(a==='leer-foto')return leerFotoGuardada(it);
+    if(a==='leer-foto'&&window.LECTOR_PESOS_ACTIVO)return leerFotoGuardada(it);
     if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub');
     if(a==='ver-foto'||a==='ver-foto-sub'){
       const url=S.fotos.get(a==='ver-foto-sub'?row(it).sustituto_foto:row(it).foto)?.url;if(!url)return;
