@@ -282,7 +282,7 @@ test('toque en móvil abre el armado, sin desbordamiento y con faltante total in
  expect(s.moves).toHaveLength(0);
  await page.screenshot({path:'test-results/armado-mobile.png',animations:'disabled'});
  await page.locator('[data-ap="falta"]').tap();
- await page.locator('[data-ap="enviado"]').fill('3');
+ await page.locator('[data-ap="faltante"]').fill('3');
  await page.locator('[data-ap="guardar"]').tap();
  await expect(page.locator('.ap-inline-error')).toContainText('entre 0 y 2');
  expect(s.writes).toHaveLength(0);
@@ -321,7 +321,7 @@ test('peso y foto opcionales; errores de foto conservan datos y cambiar peso ret
  await expect.poll(()=>s.db.prep_items[0].foto).not.toBe(original);
  await expect(peso).toHaveValue('2,45');expect(s.db.prep_items[0].peso).toBe(2.45);
  expect(s.uploads.every(u=>u.size>0)).toBe(true);
- await page.locator('[data-ap="falta"]').click();await page.locator('[data-ap="enviado"]').fill('1');
+ await page.locator('[data-ap="falta"]').click();await page.locator('[data-ap="faltante"]').fill('1');
  await page.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0].enviado).toBe(1);
  expect(s.db.prep_items[0].peso).toBe(null);expect(s.db.prep_items[0].foto).toBe(null);
  expect(s.errors).toEqual([]);await s.close();
@@ -330,10 +330,10 @@ test('peso y foto opcionales; errores de foto conservan datos y cambiar peso ret
 test('guardado fallido retiene cambios y los faltantes parciales se pueden corregir',async({browser})=>{
  const s=await setup(browser);enCola(s,'preparando');const page=await s.open('Mateo');
  await page.locator('.rv-card h3').click();await abrirProducto(page);await page.locator('[data-ap="falta"]').click();
- await page.locator('[data-ap="enviado"]').fill('1');s.failItem(true);
+ await page.locator('[data-ap="faltante"]').fill('1');s.failItem(true);
  await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-inline-error')).toContainText('No se guardó');
- await expect(page.locator('[data-ap="enviado"]')).toHaveValue('1');
+ await expect(page.locator('[data-ap="faltante"]')).toHaveValue('1');
  await expect(page.locator('.ap-progress-head b')).toHaveText('0 de 1 productos preparados');
  await expect(page.locator('#ap-finalizar')).toBeDisabled();
  s.failItem(false);await page.locator('[data-ap="guardar"]').click();
@@ -399,7 +399,7 @@ test('sustituto parcial, remito compartido y carga crean solo el faltante pendie
  const mateo=await s.open('Mateo'),oscar=await s.open('Oscar');
  await expect(mateo.locator('[data-rv="camioneta"]')).toBeDisabled();
  await mateo.locator('.rv-card h3').click();await abrirProducto(mateo);await mateo.locator('[data-ap="falta"]').click();
- await mateo.locator('[data-ap="enviado"]').fill('1');await mateo.locator('[data-ap="reemplazar"]').click();
+ await mateo.locator('[data-ap="faltante"]').fill('4');await mateo.locator('[data-ap="reemplazar"]').click();
  await mateo.getByRole('textbox',{name:'Buscar producto sustituto'}).fill('Mozzarella alternativa');await mateo.locator('[data-product="Mozzarella alternativa"]').click();
  await mateo.locator('[data-ap="sustituto_cantidad"]').fill('2');await mateo.locator('[data-ap="sustituye"]').fill('2');
  await expect(mateo.locator('.ap-pending')).toContainText('Queda pendiente: 2');
@@ -645,5 +645,35 @@ test('foto grande queda sobre el encabezado y cierra solo su visor',async({brows
  const box=await page.locator('.rc-viewer img').boundingBox();expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(1000);expect(box.x+box.width).toBeLessThanOrEqual(1440);
  expect(await page.evaluate(()=>{const h=document.querySelector('.rc-panel header').getBoundingClientRect();return !!document.elementFromPoint(h.x+h.width/2,h.y+h.height/2).closest('.rc-viewer');})).toBe(true);
  await page.locator('.rc-viewer').click({position:{x:8,y:200}});await expect(page.locator('#rc-raiz')).toBeVisible();await expect(page.locator('.rc-table-wrap')).toBeVisible();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('Listos muestra remito hecho y preparación distingue productos completos en vivo',async({browser})=>{
+ const s=await setup(browser);enCola(s,'preparando');
+ const page=await s.open('Oscar');
+ await expect(page.locator('.rv-product-done')).toHaveCount(0);
+ s.db.prep_items=[{item_id:1,separado:true,peso:5.45,foto:'peso.jpg'}];await s.emit('prep_items');
+ await expect(page.locator('.rv-product-done')).toHaveCount(1);
+ s.db.prep_cola[0].etapa='listo';s.db.pedidos[0].remito_hecho=true;await s.emit('pedidos');
+ await expect(page.locator('.rv-listo .rv-remito-done')).toHaveText('✓ Remito hecho');
+ s.db.pedidos[0].remito_hecho=false;await s.emit('pedidos');await expect(page.locator('.rv-remito-done')).toHaveCount(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('editar desde Por preparar usa el formulario existente y no está disponible para Mateo',async({browser})=>{
+ const s=await setup(browser);enCola(s,'por_preparar');const page=await s.open('Oscar'),mateo=await s.open('Mateo');
+ await expect(mateo.locator('[data-rv="editar"]')).toHaveCount(0);
+ await page.locator('[data-rv="editar"]').click();await expect(page.locator('#pedidoModal')).toHaveClass(/open/);
+ await expect(page.locator('#p_cliente')).toHaveValue('Almacén del Centro');await expect(page.locator('#p_editId')).toHaveValue('p1');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('faltante expresa lo que falta, no lo enviado, y conserva decimales',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.pedidos[0].pedido_items[0].cantidad=10;
+ const page=await s.open('Mateo');await page.locator('.rv-card h3').click();await abrirProducto(page);
+ await page.locator('[data-ap="falta"]').click();await page.getByRole('textbox',{name:'Cantidad faltante de Mozzarella'}).fill('3,5');
+ await page.locator('[data-ap="guardar"]').click();await expect.poll(()=>s.db.prep_items[0]?.enviado).toBe(6.5);
+ await abrirProducto(page);await expect(page.locator('[data-ap="faltante"]')).toHaveValue('3,5');
  expect(s.errors).toEqual([]);await s.close();
 });

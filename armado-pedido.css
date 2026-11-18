@@ -151,3 +151,20 @@ body.ap-abierto { overflow:hidden; }
 .ap-weight-confirm button { min-height:48px; padding:12px; }
 .ap-read-weight { font-size:24px; align-self:center; }
 .nota-reposicion { background:#f3edf9 !important; color:#69428b !important; border:1px solid #e1d5ee !important; border-radius:10px; padding:12px !important; line-height:1.5; }
+
+/* Estado legible y excepciones compactas. */
+.ap-done .ap-item-name {color:#197346}
+.ap-shortage-open {background:#f7f5fc;border-color:#d8cdec}
+.ap-shortage-open .ap-shortage-toggle {background:#eee8f7;color:#62428a}
+.ap-shortage-form {display:grid;grid-template-columns:minmax(100px,1fr) auto auto;gap:8px}
+.ap-shortage-form label {min-width:0}
+.ap-shortage-form input {border-color:#d8cdec;color:#26364a}
+.ap-shortage-form .ap-substitute,.ap-shortage-form .ap-pending {grid-column:1/-1}
+.ap-substitute {gap:8px;border-color:#d8cdec}
+.ap-substitute>label {max-width:240px}
+.ap-sub-name {align-items:center;grid-template-columns:1fr auto!important}
+.ap-pending {margin:0;color:#704a98;font-weight:600}
+
+.ap-substitute>div:not(.ap-sub-name):not(.ap-sub-photo) {grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ap-substitute label {min-width:0}
+.ap-substitute input,.ap-substitute select {min-width:0;max-width:100%}

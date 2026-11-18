@@ -151,3 +151,6 @@ body.reparto-vivo #repBar { display:none !important; }
  body:not(.usuario-mateo) .rv-card li b { font-size:16px; }
  body:not(.usuario-mateo) .rv-dir,body:not(.usuario-mateo) .rv-card-top { font-size:12px; }
 }
+
+.rv-remito-done {background:#ddf4e6;color:#17683e;border:1px solid #a4d7b7;border-radius:8px;padding:8px 12px;font-weight:800;margin:8px 0}
+.rv-card li.rv-product-done {color:#197346}
