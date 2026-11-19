@@ -2,7 +2,7 @@ const {test,expect}=require('@playwright/test');
 const mockClient = `window.supabase={createClient:()=>({
  auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>({}),signOut:async()=>({})},
  from(table){const filters=[];const q={select(){return q},eq(k,v){filters.push(['eq',k,v]);return q},neq(k,v){filters.push(['neq',k,v]);return q},is(k,v){filters.push(['eq',k,v]);return q},in(k,v){filters.push(['in',k,v]);return q},order(){return q},limit(){return q},range(){return q},or(){return q},upsert(value){q.value=value;return q},update(value){q.value=value;return q},then(a,b){return window.__db({table,filters,value:q.value}).then(a,b)}};return q},
- rpc:(name,args)=>window.__db({name,args}),
+ rpc:(name,args)=>window.__db({name,args,who:typeof state==='undefined'?null:state.who}),
  channel(){const callbacks=[];return {on(type,filter,cb){callbacks.push([filter.table,cb]);return this},subscribe(cb){window.__listeners=(window.__listeners||[]).concat(callbacks);queueMicrotask(()=>cb?.('SUBSCRIBED'));return this}}},
  removeChannel(){window.__listeners=[]},storage:{from:()=>({createSignedUrls:async paths=>({data:paths.map(path=>({path,signedUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='}))}),upload:(path,blob)=>window.__db({upload:path,size:blob.size})})}
 })};`;
@@ -10,6 +10,7 @@ function pedido(id,cliente,extra={}) {return {id,cliente,fecha:'2026-11-16',fech
 async function setup(browser){
  const pages=[],errors=[],moves=[];
  const db={pedidos:[pedido('p1','Almacén del Centro'),pedido('p2','La Esquina'),pedido('p3','Retiro',{retiro:true}),pedido('p4','Eliminado',{eliminado_en:'2026-11-16'}),pedido('p5','Despachado',{estado:'Despachado'})],prep_cola:[],prep_items:[],prep_productos:[],prep_pedidos:[]};
+ db.app_notas=[];db.catalogo_decisiones=[];
  db.productos=[{nombre:'Mozzarella',unidad:'unidad',activo:true},{nombre:'Aceite',unidad:'caja',activo:true}];
  let fail=false,failItem=false,failPhoto=false,failLoad=false,changeOnLoad=false;
  const writes=[],uploads=[];
@@ -17,6 +18,26 @@ async function setup(browser){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='catalogo_aliases')return {data:Object.fromEntries(db.catalogo_decisiones.filter(d=>d.estado==='vinculado').map(d=>[d.clave,db.productos.find(p=>p.id===d.producto_id)?.nombre]))};
+  if(q.name==='notas_leer')return {data:structuredClone(db.app_notas)};
+  if(q.name==='notas_guardar'){
+   if(failItem)return {error:{message:'Sin conexión'}};
+   const a=q.args,old=db.app_notas.find(n=>n.id===a.p_id);if(old&&a.p_version===0)return {data:structuredClone(old)};
+   if(old&&old.version!==a.p_version)return {error:{message:'Otro compañero cambió esta nota'}};
+   const n={id:a.p_id,cliente:a.p_cliente,texto:a.p_texto,fecha:a.p_fecha,estado:a.p_estado,autor:old?.autor||q.who,version:(old?.version||0)+1};
+   db.app_notas=db.app_notas.filter(x=>x.id!==n.id).concat(n);setTimeout(()=>emit('app_notas'),0);return {data:structuredClone(n)};
+  }
+  if(q.name==='catalogo_leer'){
+   const map=new Map();for(const p of db.pedidos.filter(p=>!p.eliminado_en))for(const i of p.pedido_items){const k=i.producto.toLowerCase();if(!db.productos.some(p=>p.nombre.toLowerCase()===k)&&!db.catalogo_decisiones.some(d=>d.clave===k&&d.estado!=='pendiente'))map.set(k,{clave:k,texto:i.producto,cliente:p.cliente,usos:1});}
+   return {data:structuredClone({productos:db.productos,pendientes:[...map.values()],decisiones:db.catalogo_decisiones})};
+  }
+  if(q.name==='catalogo_resolver'){
+   if(failItem)return {error:{message:'Sin conexión'}};const a=q.args,d={clave:a.p_texto.toLowerCase(),texto:a.p_texto,estado:a.p_accion,producto_id:a.p_producto,producto:db.productos.find(p=>p.id===a.p_producto)?.nombre};db.catalogo_decisiones=db.catalogo_decisiones.filter(x=>x.clave!==d.clave).concat(d);return {data:true};
+  }
+  if(q.name==='catalogo_guardar'){
+   if(failItem)return {error:{message:'Sin conexión'}};const a=q.args,p={...a.p_datos,id:a.p_id||'nuevo-'+db.productos.length};db.productos=db.productos.filter(x=>x.id!==p.id).concat(p);
+   if(a.p_origen)db.catalogo_decisiones.push({clave:a.p_origen.toLowerCase(),texto:a.p_origen,estado:'vinculado',producto_id:p.id,producto:p.nombre});return {data:p.id};
+  }
   if(q.name==='prep_foto'){
    if(failItem)return {error:{message:'Sin conexión'}};
    const a=q.args,key=a.p_sub?'sustituto_foto':'foto',extra=a.p_sub?'sustituto_fotos_extra':'fotos_extra';
@@ -848,4 +869,30 @@ test('visor de una sola foto oculta navegación y respeta movimiento reducido',a
  const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,foto:'a.jpg'}];const p=await s.open('Mateo');await p.emulateMedia({reducedMotion:'reduce'});
  await p.locator('.rv-card h3').click();await abrirProducto(p);await p.locator('[data-ap="ver-foto"]').click();const v=p.locator('.ap-viewer');await expect(v.locator('.rf-next')).toBeHidden();await expect(v.locator('.rf-prev')).toBeHidden();await expect(v.locator('.rf-count')).toBeHidden();await p.keyboard.press('ArrowRight');await expect(v).toBeVisible();await p.keyboard.press('Escape');
  s.db.prep_items[0].fotos_extra=['b.jpg'];await s.emit('prep_items');await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);await p.locator('[data-ap="ver-foto"]').first().click();await p.keyboard.press('ArrowRight');await expect(v.locator('.rf-count')).toHaveText('2/2');expect(await v.locator('img').evaluate(i=>i.getAnimations().length)).toBe(0);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Productos detecta, vincula, crea y descarta sin modificar pedidos',async({browser})=>{
+ const s=await setup(browser);s.db.productos.forEach((p,i)=>p.id='prod-'+i);s.db.pedidos[0].pedido_items.push({id:20,producto:'pasar a visitar',cantidad:1},{id:21,producto:'Muzza suelta',cantidad:1},{id:22,producto:'Pan nuevo',cantidad:2});
+ const antes=JSON.stringify(s.db.pedidos),p=await s.open('Oscar');await p.evaluate(()=>goTab('productos'));await p.getByRole('button',{name:'Detectar pendientes',exact:true}).click();await expect(p.locator('#gestion-productos .g-row')).toHaveCount(3);
+ await p.locator('.g-row').filter({hasText:'pasar a visitar'}).getByRole('button',{name:'Descartar',exact:true}).click();await expect(p.locator('#gestion-productos .g-row')).toHaveCount(2);expect(JSON.stringify(s.db.pedidos)).toBe(antes);
+ await p.locator('.g-row').filter({hasText:'Muzza suelta'}).getByRole('button',{name:'Vincular',exact:true}).click();await p.locator('#g-vinculo-buscar').fill('Mozz');await p.locator('#gestion-modal select').selectOption('prod-0');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);expect(await p.evaluate(()=>prodInfo('Muzza suelta').n)).toBe('Mozzarella');
+ await p.locator('.g-row').filter({hasText:'Pan nuevo'}).getByRole('button',{name:'Agregar',exact:true}).click();await p.locator('#gestion-modal [name="unidad"]').selectOption('caja');await p.locator('#gestion-modal [name="unidades_por_caja"]').fill('12');s.failItem(true);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal .g-error')).toContainText('Sin conexión');await expect(p.locator('#gestion-modal [name="nombre"]')).toHaveValue('Pan nuevo');
+ s.failItem(false);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);expect(s.db.productos.find(x=>x.nombre==='Pan nuevo').unidad).toBe('caja');await expect(p.locator('#gestion-productos .g-row')).toHaveCount(0);
+ await p.locator('[data-g="cat-modo"][data-mode="descartados"]').click();await p.getByRole('button',{name:'Volver a pendientes'}).click();await p.locator('[data-g="cat-modo"][data-mode="pendientes"]').click();await expect(p.locator('#gestion-productos .g-row')).toHaveCount(1);
+ await p.locator('[data-g="cat-modo"][data-mode="catalogo"]').click();await p.locator('#g-buscar').fill('Pan nuevo');await expect(p.locator('#gestion-productos .g-row')).toHaveCount(1);await p.screenshot({path:'test-results/productos-pc.png',animations:'disabled'});expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Notas compartidas: campana por fecha, resolver, archivar y reabrir sin pedidos',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar'),j=await s.open('Thiago');const total=s.db.pedidos.length;
+ await p.evaluate(()=>goTab('notas'));await p.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await p.locator('#gestion-modal [name="cliente"]').fill('Cliente A');await p.locator('#gestion-modal [name="texto"]').fill('Pasar a cobrar');await p.locator('#gestion-modal [name="fecha"]').fill('2026-11-16');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(j.locator('#notas-bell b')).toHaveText('1');await j.locator('#notas-bell').click();await expect(j.locator('.g-note')).toContainText('Pasar a cobrar');
+ await j.getByRole('button',{name:'✓ Resolver',exact:true}).click();await expect(p.locator('#notas-bell b')).toHaveText('');await p.locator('[data-g="nota-modo"][data-mode="resuelta"]').click();await expect(p.locator('.g-note')).toHaveCount(1);await p.getByRole('button',{name:'Reabrir',exact:true}).click();await expect(j.locator('#notas-bell b')).toHaveText('1');
+ await j.getByRole('button',{name:'Archivar',exact:true}).click();await expect(p.locator('#notas-bell b')).toHaveText('');await p.locator('[data-g="nota-modo"][data-mode="archivada"]').click();await expect(p.locator('.g-note')).toHaveCount(1);
+ await p.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await p.locator('#gestion-modal [name="texto"]').fill('Visitar la semana próxima');await p.locator('#gestion-modal [name="fecha"]').fill('2026-11-25');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(p.locator('#notas-bell b')).toHaveText('');expect(s.db.pedidos.length).toBe(total);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('acceso a gestión por perfil y Notas en móvil sin desbordamiento',async({browser})=>{
+ const s=await setup(browser),t=await s.open('Thiago',{width:390,height:844},{hasTouch:true}),m=await s.open('Mateo');await expect(t.locator('#bottomNav [data-tab="productos"]')).toBeHidden();await expect(t.locator('#bottomNav [data-tab="notas"]')).toBeVisible();await t.evaluate(()=>goTab('productos'));await expect(t.locator('#tab-pedidos')).toHaveClass(/active/);
+ await m.evaluate(()=>goTab('notas'));await expect(m.locator('#tab-notas')).not.toHaveClass(/active/);await expect(m.locator('#notas-bell')).toBeHidden();
+ await t.locator('#notas-bell').click();await t.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await t.locator('#gestion-modal [name="texto"]').fill('Visitar y revisar próxima entrega');s.failItem(true);await t.locator('#gestion-modal [type="submit"]').click();await expect(t.locator('#gestion-modal .g-error')).toContainText('Sin conexión');await expect(t.locator('#gestion-modal textarea')).toHaveValue('Visitar y revisar próxima entrega');
+ expect(await t.evaluate(()=>document.querySelector('.g-panel').scrollWidth<=document.querySelector('.g-panel').clientWidth)).toBe(true);await t.screenshot({path:'test-results/notas-movil.png',animations:'disabled'});s.failItem(false);await t.locator('#gestion-modal [type="submit"]').click();await expect(t.locator('#gestion-modal')).toHaveCount(0);expect(s.db.app_notas).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
 });

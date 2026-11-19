@@ -1601,10 +1601,11 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=111">
-<link rel="stylesheet" href="armado-pedido.css?v=111">
-<link rel="stylesheet" href="reparto-fotos.css?v=111">
-<link rel="stylesheet" href="reparto-control.css?v=111">
+<link rel="stylesheet" href="reparto-vivo.css?v=116">
+<link rel="stylesheet" href="armado-pedido.css?v=116">
+<link rel="stylesheet" href="reparto-fotos.css?v=116">
+<link rel="stylesheet" href="gestion.css?v=116">
+<link rel="stylesheet" href="reparto-control.css?v=116">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1671,6 +1672,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
       <button data-tab="whatsapp" onclick="goTab('whatsapp')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg>WhatsApp</button>
       <button data-tab="stock" onclick="goTab('stock')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg>Stock</button>
+      <button data-tab="productos" onclick="goTab('productos')">Productos</button>
+      <button data-tab="notas" onclick="goTab('notas')">Notas</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
            y en su panel tab-* / modal correspondiente más abajo):
@@ -1680,6 +1683,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="visitar" onclick="goTab('visitar')">📍 Visitar</button>
       -->
     </nav>
+    <button id="notas-bell" data-g="bell" aria-label="Notas pendientes"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b></b></button>
     <button id="whoBtn" onclick="openWhoModal()" aria-label="Cambiar usuario"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
   </header>
 
@@ -1821,6 +1825,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- STOCK: recuento, stock actual y movimientos. Solo Oscar y Joaquín (stock.js) -->
     <div id="tab-stock" class="tab-panel"><div id="st-raiz"></div></div>
+    <div id="tab-productos" class="tab-panel"><div id="gestion-productos" class="gestion"></div></div>
+    <div id="tab-notas" class="tab-panel"><div id="gestion-notas" class="gestion"></div></div>
 
   </main>
 
@@ -1832,6 +1838,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
     <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg></span>WhatsApp</button>
     <button data-tab="stock" class="bn-item" onclick="goTab('stock')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></span>Stock</button>
+    <button data-tab="productos" class="bn-item" onclick="goTab('productos')"><span>▦</span>Productos</button>
+    <button data-tab="notas" class="bn-item" onclick="goTab('notas')"><span>☷</span>Notas</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
     <button data-tab="fijos" class="bn-item" onclick="goTab('fijos')"><span>📌</span>Fijos</button>
@@ -2678,6 +2686,7 @@ function leerCache() {
 }
 
 function mostrarApp() {
+  if (window.GestionUI) GestionUI.iniciar();
   if (window.RepartoVivo) RepartoVivo.acceso();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
@@ -3092,9 +3101,10 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', productos:'Productos', notas:'Notas' };
 
 function setTab(tab) {
+  if(tab==='productos'&&!window.GestionUI?.admin()||tab==='notas'&&!window.GestionUI?.oficina())tab='pedidos';
   if (state.who === 'Mateo' && !['reparto','pedidos'].includes(tab)) tab = 'reparto';
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
@@ -3139,6 +3149,7 @@ function setTab(tab) {
   if (window.PedidosACargar) { if (tab === 'cargar') PedidosACargar.alMostrar(); else PedidosACargar.alSalir(); }
   if (window.PedidosFijos && tab === 'pedidos') PedidosFijos.refrescar();
   if (tab === 'stock' && window.StockUI) StockUI.abrir();
+  if(window.GestionUI&&['productos','notas'].includes(tab))GestionUI.abrir(tab);
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
@@ -6233,8 +6244,8 @@ function fmtDate(d) {
 
 // Info de catálogo de un producto (hoja "Productos"), por nombre.
 function prodInfo(name) {
-  const k = String(name || '').trim().toLowerCase();
-  return (state.products || []).find(x => x.n.toLowerCase() === k);
+  const k = String(window.GestionUI?GestionUI.alias(name):name || '').trim().toLowerCase();
+  return (state.products || []).find(x => window.GestionUI ? GestionUI.key(x.n)===GestionUI.key(k) : x.n.toLowerCase()===k);
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -6520,14 +6531,15 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
-<script src="preparacion.js?v=111"></script>
+<script src="preparacion.js?v=116"></script>
 <script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>
-<script src="peso-fuentes.js?v=111"></script>
-<script src="balanza.js?v=111"></script>
-<script src="reparto-red.js?v=111"></script>
-<script src="reparto-fotos.js?v=111"></script>
-<script src="armado-pedido.js?v=111"></script>
-<script src="reparto-control.js?v=111"></script>
-<script src="reparto-vivo.js?v=111"></script>
+<script src="peso-fuentes.js?v=116"></script>
+<script src="balanza.js?v=116"></script>
+<script src="reparto-red.js?v=116"></script>
+<script src="gestion.js?v=116"></script>
+<script src="reparto-fotos.js?v=116"></script>
+<script src="armado-pedido.js?v=116"></script>
+<script src="reparto-control.js?v=116"></script>
+<script src="reparto-vivo.js?v=116"></script>
 </body>
 </html>
