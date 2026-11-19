@@ -412,3 +412,16 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 @media (prefers-reduced-motion: reduce) { .sc-fil-b { transition: none; } }
 .sc-acc-tipo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: var(--m-t-md); font-weight: 600; color: var(--m-tinta); }
 .sc-ley b { color: var(--m-tinta); }
+
+/* «Dejó de llevar» en la ficha: sección destacada en ámbar (texto oscuro sobre fondo suave: contraste AA) */
+.sc-dejo { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--m-aviso); border-radius: var(--m-r-md); background: var(--tf); color: var(--tt); }
+.sc-dejo-t { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--m-t-lg); font-weight: 800; color: var(--tt); }
+.sc-dejo-c { padding: 0 8px; border-radius: var(--m-r-pill); background: var(--m-superficie); font-size: var(--m-t-sm); }
+.sc-dejo-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sc-dejo-f { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding-top: 8px; border-top: 1px solid rgba(0, 0, 0, .12); }
+.sc-dejo-f:first-child { padding-top: 0; border-top: 0; }
+.sc-dejo-d { display: grid; gap: 2px; min-width: 0; flex: 1 1 200px; font-size: var(--m-t-md); line-height: 1.4; overflow-wrap: anywhere; }
+.sc-dejo-n { font-size: var(--m-t-lg); font-weight: 800; }
+.sc-dejo-h { font-weight: 500; }
+.sc-btn--chico { min-height: 40px; padding: 0 12px; font-size: var(--m-t-md); }
+@media (max-width: 480px) { .sc-dejo-f .sc-btn--chico { width: 100%; justify-content: center; } }

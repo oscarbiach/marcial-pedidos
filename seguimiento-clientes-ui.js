@@ -260,7 +260,7 @@
   }
 
   // ── Tarjeta del calendario ──
-  // Simple: el nombre y las insignias (Atrasado, Recuperación, Dejó de llevar (n), Movido, Pidió, Le escribí). El detalle (último pedido, frecuencia, día habitual)
+  // Simple: el nombre y las insignias (Pidió, Le escribí, tipo, Atrasado, Movido). «Dejó de llevar» no va acá: se ve en la ficha. El detalle (último pedido, frecuencia, día habitual)
   // va en el tooltip y en el nombre accesible, y completo en la ficha.
   function insignias(t) {
     const c = t.c, b = [], p = (tono, icono, txt) => `<span class="sc-pill sc-t-${tono}">${icono ? ico(icono, 'ico-sm') : ''}${esc(txt)}</span>`;
@@ -271,7 +271,6 @@
     else if (t.tipo === 'recupero') b.push(p('dejo', 'trending-down', 'Dejó de comprar'));
     if (t.atrasado && t.estado === 'pendiente') b.push(p('error', 'clock', 'Atrasado'));
     if (c.manual && c.manual.tipo === 'atender') b.push(p('marca', 'message-circle', 'Atender'));
-    if (c.dejoDeTodos.length) b.push(p('aviso', 'triangle-alert', `Dejó de llevar (${c.dejoDeTodos.length})`));
     if (t.estado !== 'pidio' && t.movido) b.push(p('neutro', 'calendar-days', 'Movido'));
     return b.join('');
   }
@@ -441,16 +440,20 @@
       </div></details>`;
   }
 
+  // «Dejó de llevar»: sección destacada de la ficha (arriba, antes de los gráficos). Una fila por producto con cuántas veces lo compró y cuándo fue la última,
+  // y «Resolver aviso» (producto retirado, con reemplazo o excepción de este cliente) para quien puede editar. Sin productos, no aparece.
+  function dejoSec(c) {
+    if (!c.dejoDeTodos.length) return '';
+    const edit = puedeEditar();
+    const filas = c.dejoDeTodos.map(d => `<li class="sc-dejo-f"><div class="sc-dejo-d"><b class="sc-dejo-n">${esc(d.nombre)}</b><span>lo llevó ${d.veces} ${d.veces === 1 ? 'vez' : 'veces'} · última: ${esc(corta(d.ultima))} <span class="sc-dejo-h">(hace ${d.hace} ${d.hace === 1 ? 'día' : 'días'})</span></span></div>${edit ? `<button type="button" class="sc-btn sc-btn--chico" data-sc="resolver" data-k="${at(c.clave)}" data-p="${at(d.clave)}">Resolver aviso</button>` : ''}</li>`).join('');
+    return `<section class="sc-dejo sc-t-aviso" aria-labelledby="sc-dejo-t"><h4 id="sc-dejo-t" class="sc-dejo-t">${ico('triangle-alert')}Dejó de llevar <span class="sc-dejo-c">${c.dejoDeTodos.length}</span></h4><ul class="sc-dejo-l">${filas}</ul></section>`;
+  }
   // Productos: lo que suele llevar y los avisos «Dejó de llevar» (ya sin los productos retirados o reemplazados ni las excepciones de este cliente).
   function productos(c) {
     const lista = (items, icono) => `<ul class="sc-prods">${items.map(t => `<li>${ico(icono, 'ico-sm')}<span>${esc(t)}</span></li>`).join('')}</ul>`;
-    const edit = puedeEditar();
-    const avisos = c.dejoDeTodos.length
-      ? `<div class="sc-nota sc-t-aviso">${ico('triangle-alert', 'ico-sm')}<div class="sc-avisos"><p><b>Dejó de llevar:</b></p><ul>${c.dejoDeTodos.map(d => `<li><span>${esc(`${d.nombre} (lo llevó ${d.veces} veces; la última, hace ${d.hace} días)`)}</span>${edit ? `<button type="button" class="sc-link" data-sc="resolver" data-k="${at(c.clave)}" data-p="${at(d.clave)}">Resolver aviso</button>` : ''}</li>`).join('')}</ul></div></div>`
-      : '';
     return `<section class="sc-f-sec"><h4>Productos</h4>
       ${c.lleva.length ? `<p class="sc-lbl">Suele llevar</p>${lista(c.lleva, 'package')}` : '<p class="sc-vacio">Todavía sin productos registrados.</p>'}
-      ${avisos}${cambiosProductos(c)}</section>`;
+      ${cambiosProductos(c)}</section>`;
   }
   // Lo que ya se explicó: producto retirado, otro producto parecido, excepción. Es contexto y se puede deshacer.
   // «Hay otro producto parecido» NO dice que sean lo mismo: se anota si el cliente ya pasó al otro y, si todavía no lo compró, se deja una nota visible para ofrecérselo.
@@ -528,6 +531,7 @@
       ${E.aviso ? bannerAviso() : ''}
       <div class="sc-f-cab">${pill(c)}<span class="sc-wa-slot">${contactadoPill(c)}</span></div>
       ${accionesFicha(c)}
+      ${dejoSec(c)}
       <p class="sc-f-dir">${ico('map-pin', 'ico-sm')}<span>${dir ? esc(dir) : 'Dirección sin completar'}</span></p>
       <p class="sc-f-ult">${ico('calendar', 'ico-sm')}<span>Último pedido: <b>${esc(F.fechaLarga(c.ultimo))}</b> <span class="sc-muted">(${c.ultimoDespacho ? 'fecha de despacho' : 'fecha de carga: todavía no se despachó'})</span></span></p>
       ${panelSeguimiento(c)}
