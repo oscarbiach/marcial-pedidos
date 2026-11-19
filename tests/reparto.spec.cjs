@@ -34,6 +34,9 @@ async function setup(browser){
   if(q.name==='catalogo_resolver'){
    if(failItem)return {error:{message:'Sin conexión'}};const a=q.args,d={clave:a.p_texto.toLowerCase(),texto:a.p_texto,estado:a.p_accion,producto_id:a.p_producto,producto:db.productos.find(p=>p.id===a.p_producto)?.nombre};db.catalogo_decisiones=db.catalogo_decisiones.filter(x=>x.clave!==d.clave).concat(d);return {data:true};
   }
+  if(q.name==='catalogo_eliminar'){
+   if(failItem)return {error:{message:'Sin conexión'}};const p=db.productos.find(p=>p.id===q.args.p_id);p.eliminado_en=q.args.p_restaurar?null:'2026-11-19';p.activo=q.args.p_restaurar;return {data:true};
+  }
   if(q.name==='catalogo_guardar'){
    if(failItem)return {error:{message:'Sin conexión'}};const a=q.args,p={...a.p_datos,id:a.p_id||'nuevo-'+db.productos.length};db.productos=db.productos.filter(x=>x.id!==p.id).concat(p);
    if(a.p_origen)db.catalogo_decisiones.push({clave:a.p_origen.toLowerCase(),texto:a.p_origen,estado:'vinculado',producto_id:p.id,producto:p.nombre});return {data:p.id};
@@ -895,4 +898,13 @@ test('acceso a gestión por perfil y Notas en móvil sin desbordamiento',async({
  await m.evaluate(()=>goTab('notas'));await expect(m.locator('#tab-notas')).not.toHaveClass(/active/);await expect(m.locator('#notas-bell')).toBeHidden();
  await t.locator('#notas-bell').click();await t.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await t.locator('#gestion-modal [name="texto"]').fill('Visitar y revisar próxima entrega');s.failItem(true);await t.locator('#gestion-modal [type="submit"]').click();await expect(t.locator('#gestion-modal .g-error')).toContainText('Sin conexión');await expect(t.locator('#gestion-modal textarea')).toHaveValue('Visitar y revisar próxima entrega');
  expect(await t.evaluate(()=>document.querySelector('.g-panel').scrollWidth<=document.querySelector('.g-panel').clientWidth)).toBe(true);await t.screenshot({path:'test-results/notas-movil.png',animations:'disabled'});s.failItem(false);await t.locator('#gestion-modal [type="submit"]').click();await expect(t.locator('#gestion-modal')).toHaveCount(0);expect(s.db.app_notas).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('eliminar producto conserva pedidos, permite reintentar y restaurar',async({browser})=>{
+ const s=await setup(browser);s.db.productos.forEach((p,i)=>p.id='prod-'+i);const antes=JSON.stringify(s.db.pedidos),p=await s.open('Oscar');await p.evaluate(()=>goTab('productos'));
+ const row=p.locator('#gestion-productos .g-row').filter({hasText:'Mozzarella'});await row.getByRole('button',{name:'Eliminar',exact:true}).click();await p.locator('#gestion-modal').getByRole('button',{name:'Cancelar',exact:true}).click();await expect(row).toBeVisible();
+ await row.getByRole('button',{name:'Eliminar',exact:true}).click();s.failItem(true);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal .g-error')).toContainText('Sin conexión');await expect(p.locator('#gestion-modal [type="submit"]')).toHaveText('Eliminar producto');
+ s.failItem(false);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(row).toHaveCount(0);expect(s.db.productos[0].activo).toBe(false);expect(JSON.stringify(s.db.pedidos)).toBe(antes);
+ await p.locator('[data-g="cat-modo"][data-mode="eliminados"]').click();await expect(row).toBeVisible();await row.getByRole('button',{name:'Restaurar',exact:true}).click();await expect(row).toHaveCount(0);await p.locator('[data-g="cat-modo"][data-mode="catalogo"]').click();await expect(row).toBeVisible();expect(s.db.productos[0].activo).toBe(true);expect(s.errors).toEqual([]);await s.close();
 });

@@ -32,10 +32,10 @@
   const root=$('gestion-productos');if(!root||!admin())return;
   if(!root.querySelector('.g-tools'))root.innerHTML=`<div class="g-head"><h2>Productos</h2><button data-g="nuevo-producto" class="g-primary">+ Nuevo producto</button></div><div class="g-tools"><input id="g-buscar" type="search" placeholder="Buscar producto…" aria-label="Buscar producto"><button data-g="detectar">Detectar pendientes</button></div><div class="g-tabs"></div><div class="g-error" role="alert"></div><div class="g-list"></div>`;
   const data=S.cat||{productos:[],pendientes:[],decisiones:[]};
-  root.querySelector('.g-tabs').innerHTML=[['catalogo','Todos',data.productos.length],['pendientes','Pendientes',data.pendientes.length],['descartados','Descartados',data.decisiones.filter(d=>d.estado==='descartado').length],['vinculados','Vinculados',data.decisiones.filter(d=>d.estado==='vinculado').length]].map(([m,t,n])=>`<button data-g="cat-modo" data-mode="${m}" aria-pressed="${S.mode===m}">${t} <b>${n}</b></button>`).join('');
+  root.querySelector('.g-tabs').innerHTML=[['catalogo','Todos',data.productos.filter(p=>!p.eliminado_en).length],['eliminados','Eliminados',data.productos.filter(p=>p.eliminado_en).length],['pendientes','Pendientes',data.pendientes.length],['descartados','Descartados',data.decisiones.filter(d=>d.estado==='descartado').length],['vinculados','Vinculados',data.decisiones.filter(d=>d.estado==='vinculado').length]].map(([m,t,n])=>`<button data-g="cat-modo" data-mode="${m}" aria-pressed="${S.mode===m}">${t} <b>${n}</b></button>`).join('');
   root.querySelector('.g-error').textContent=S.catError;
-  const list=S.mode==='catalogo'?data.productos:S.mode==='pendientes'?data.pendientes:data.decisiones.filter(d=>d.estado===(S.mode==='descartados'?'descartado':'vinculado'));
-  root.querySelector('.g-list').innerHTML=list.filter(p=>key(p.nombre||p.texto).includes(key(S.q))).map(p=>S.mode==='catalogo'?`<article class="g-row"><div><b>${esc(p.nombre)}</b><span>${esc(p.unidad||'Sin medida')} ${p.se_pesa?'· Se pesa':''} ${p.activo===false?'· Inactivo':''}</span></div><button data-g="editar-producto" data-id="${esc(p.id)}">Editar</button></article>`:`<article class="g-row"><div><b>${esc(p.texto)}</b><span>${S.mode==='pendientes'?`${p.usos} pedido${p.usos===1?'':'s'}${p.cliente?' · '+esc(p.cliente):''}`:p.producto?'→ '+esc(p.producto):'Descartado de pendientes'}</span></div><div class="g-actions">${S.mode==='pendientes'?`<button data-g="crear-pendiente" data-key="${esc(p.clave)}">Agregar</button><button data-g="vincular" data-key="${esc(p.clave)}">Vincular</button><button data-g="descartar" data-key="${esc(p.clave)}">Descartar</button>`:`<button data-g="restaurar" data-key="${esc(p.clave)}">Volver a pendientes</button>`}</div></article>`).join('')||`<p class="g-empty">${S.catLoading&&!S.cat?'Cargando catálogo…':S.catError&&!S.cat?'No se pudo cargar el catálogo.':'No hay productos en esta vista.'}</p>`;
+  const list=S.mode==='catalogo'?data.productos.filter(p=>!p.eliminado_en):S.mode==='eliminados'?data.productos.filter(p=>p.eliminado_en):S.mode==='pendientes'?data.pendientes:data.decisiones.filter(d=>d.estado===(S.mode==='descartados'?'descartado':'vinculado'));
+  root.querySelector('.g-list').innerHTML=list.filter(p=>key(p.nombre||p.texto).includes(key(S.q))).map(p=>['catalogo','eliminados'].includes(S.mode)?`<article class="g-row"><div><b>${esc(p.nombre)}</b><span>${esc(p.unidad||'Sin medida')} ${p.se_pesa?'· Se pesa':''} ${p.activo===false?'· Inactivo':''}</span></div><div class="g-actions">${p.eliminado_en?`<button data-g="restaurar-producto" data-id="${esc(p.id)}">Restaurar</button>`:`<button data-g="editar-producto" data-id="${esc(p.id)}">Editar</button><button class="g-danger" data-g="eliminar-producto" data-id="${esc(p.id)}">Eliminar</button>`}</div></article>`:`<article class="g-row"><div><b>${esc(p.texto)}</b><span>${S.mode==='pendientes'?`${p.usos} pedido${p.usos===1?'':'s'}${p.cliente?' · '+esc(p.cliente):''}`:p.producto?'→ '+esc(p.producto):'Descartado de pendientes'}</span></div><div class="g-actions">${S.mode==='pendientes'?`<button data-g="crear-pendiente" data-key="${esc(p.clave)}">Agregar</button><button data-g="vincular" data-key="${esc(p.clave)}">Vincular</button><button data-g="descartar" data-key="${esc(p.clave)}">Descartar</button>`:`<button data-g="restaurar" data-key="${esc(p.clave)}">Volver a pendientes</button>`}</div></article>`).join('')||`<p class="g-empty">${S.catLoading&&!S.cat?'Cargando catálogo…':S.catError&&!S.cat?'No se pudo cargar el catálogo.':'No hay productos en esta vista.'}</p>`;
   root.querySelector('[data-g="detectar"]').textContent=S.catLoading?'Buscando…':'Detectar pendientes';root.querySelectorAll('button').forEach(b=>b.disabled=S.busy||S.catLoading);
  }
  function renderNotes(){
@@ -53,10 +53,10 @@
   const close=()=>{if(S.busy)return;v.remove();origin?.isConnected&&origin.focus();};let down=false;
   v.addEventListener('pointerdown',e=>{down=e.target===v;});v.addEventListener('click',e=>{if(e.target.closest('[data-close]')||e.target===v&&down)close();});
   v.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){const els=[...v.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)')];if(e.shiftKey&&document.activeElement===els[0]){e.preventDefault();els.at(-1).focus();}else if(!e.shiftKey&&document.activeElement===els.at(-1)){e.preventDefault();els[0].focus();}}});
-  v.querySelector('form').addEventListener('submit',async e=>{e.preventDefault();if(S.busy)return;const epoch=S.epoch,form=e.currentTarget,data=new FormData(form);S.busy=true;form.querySelectorAll('button,input,textarea,select').forEach(x=>x.disabled=true);form.querySelector('[type="submit"]').textContent='Guardando…';
+  v.querySelector('form').addEventListener('submit',async e=>{e.preventDefault();if(S.busy)return;const epoch=S.epoch,form=e.currentTarget,data=new FormData(form),submitLabel=form.querySelector('[type="submit"]').textContent;S.busy=true;form.querySelectorAll('button,input,textarea,select').forEach(x=>x.disabled=true);form.querySelector('[type="submit"]').textContent='Guardando…';
    try{await save(data);if(epoch===S.epoch){v.remove();toast('Guardado');}}
    catch(e){if(epoch===S.epoch)v.querySelector('.g-error').textContent=error(e);}
-   finally{if(epoch===S.epoch){S.busy=false;form.querySelectorAll('button,input,textarea,select').forEach(x=>x.disabled=false);form.querySelector('[type="submit"]').textContent='Guardar';renderCat();renderNotes();}}
+   finally{if(epoch===S.epoch){S.busy=false;form.querySelectorAll('button,input,textarea,select').forEach(x=>x.disabled=false);form.querySelector('[type="submit"]').textContent=submitLabel;renderCat();renderNotes();}}
   });document.body.appendChild(v);v.querySelector('input:not([readonly]),textarea,select,button').focus();return v;
  }
  function productForm(p={},origen=null){
@@ -74,14 +74,20 @@
   if(a==='bell'){S.noteMode='pendiente';goTab('notas');return;}
   if(a==='nuevo-producto'&&admin())productForm();
   if(a==='editar-producto'&&admin()){const p=S.cat?.productos.find(p=>p.id===b.dataset.id);if(p)productForm(p);}
+  if(a==='eliminar-producto'&&admin()){
+   const p=S.cat?.productos.find(p=>p.id===b.dataset.id);if(!p)return;
+   const v=modal('Eliminar producto',`<p>¿Eliminar <b>${esc(p.nombre)}</b> del catálogo?</p><p>Los pedidos anteriores se conservan. Podés recuperarlo desde Eliminados.</p>`,async()=>{await rpc('catalogo_eliminar',{p_id:p.id,p_restaurar:false});await loadCat();});
+   v.querySelector('[type="submit"]').textContent='Eliminar producto';v.querySelector('[type="submit"]').classList.add('g-danger');
+  }
+  if(a==='restaurar-producto'&&admin())quick(async()=>{await rpc('catalogo_eliminar',{p_id:b.dataset.id,p_restaurar:true});await loadCat();});
   if(a==='detectar'&&admin()){S.mode='pendientes';loadCat();}
   if(a==='cat-modo'&&admin()){S.mode=b.dataset.mode;renderCat();}
   if(['crear-pendiente','vincular','descartar','restaurar'].includes(a)&&admin()){
    const p=[...S.cat.pendientes,...S.cat.decisiones].find(p=>p.clave===b.dataset.key);if(!p)return;
    if(a==='crear-pendiente')productForm({},p.texto);
    if(a==='vincular'){
-    const v=modal('Vincular producto',`<p>${esc(p.texto)}</p><label>Buscar en el catálogo<input id="g-vinculo-buscar" type="search" placeholder="Buscar producto"></label><label>Producto<select name="producto" size="7" required>${S.cat.productos.map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('')}</select></label>`,async f=>{await rpc('catalogo_resolver',{p_texto:p.texto,p_accion:'vinculado',p_producto:f.get('producto')});await loadCat();});
-    v.querySelector('#g-vinculo-buscar').addEventListener('input',e=>{v.querySelector('select').innerHTML=S.cat.productos.filter(p=>key(p.nombre).includes(key(e.target.value))).map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');});
+    const v=modal('Vincular producto',`<p>${esc(p.texto)}</p><label>Buscar en el catálogo<input id="g-vinculo-buscar" type="search" placeholder="Buscar producto"></label><label>Producto<select name="producto" size="7" required>${S.cat.productos.filter(p=>!p.eliminado_en).map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('')}</select></label>`,async f=>{await rpc('catalogo_resolver',{p_texto:p.texto,p_accion:'vinculado',p_producto:f.get('producto')});await loadCat();});
+    v.querySelector('#g-vinculo-buscar').addEventListener('input',e=>{v.querySelector('select').innerHTML=S.cat.productos.filter(p=>!p.eliminado_en&&key(p.nombre).includes(key(e.target.value))).map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');});
    }
    if(a==='descartar'||a==='restaurar')quick(async()=>{await rpc('catalogo_resolver',{p_texto:p.texto,p_accion:a==='descartar'?'descartado':'pendiente',p_producto:null});await loadCat();});
   }
