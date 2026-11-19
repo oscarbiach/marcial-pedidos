@@ -150,9 +150,8 @@
   if(a==='peso')return revisarPeso(id,Number(b.dataset.item),b.dataset.sub==='1');
   if(a==='editar'){const r=S.rows.find(x=>x.pedido.id===id);if(r&&cerrar())ArmadoPedido.abrir(mapPedido_(r.pedido));return;}
   if(a==='foto'){
-   const url=S.fotos.get(b.dataset.path)?.url;if(!url)return;
-   const v=document.createElement('div');v.className='rc-viewer';v.innerHTML=`<img src="${esc(url)}" alt="Foto del producto"><button aria-label="Cerrar foto">✕</button>`;
-   v.addEventListener('click',e=>{e.stopPropagation();v.remove();b.focus();});$('rc-raiz').appendChild(v);v.querySelector('button').focus();return;
+   const fotos=[...b.closest('td').querySelectorAll('[data-rc="foto"]')].map(el=>({path:el.dataset.path,url:S.fotos.get(el.dataset.path)?.url}));
+   RepartoFotos.abrir({parent:$('rc-raiz'),clase:'rc-viewer',fotos,seleccionada:b.dataset.path,origen:b,titulo:b.closest('tr').querySelector('td b')?.textContent||'Fotos del producto',onClose:pintar});return;
   }
   if(['cargar','remito','control'].includes(a))accion(id,a);
  }

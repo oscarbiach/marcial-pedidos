@@ -1,0 +1,9 @@
+.rf-viewer{touch-action:pan-y pinch-zoom;user-select:none;-webkit-user-select:none}
+.rf-viewer img{touch-action:pan-y pinch-zoom;-webkit-user-drag:none}
+.rf-viewer button.rf-close,.rf-viewer button.rf-prev,.rf-viewer button.rf-next{position:absolute;display:grid;place-items:center;width:48px;height:48px;min-height:48px;padding:0;background:#fff;color:#193959;border:1px solid #d8e3ef;border-radius:50%;z-index:2;line-height:1}
+.rf-viewer button.rf-close{top:14px;right:14px;font-size:22px}
+.rf-viewer button.rf-prev,.rf-viewer button.rf-next{top:50%;transform:translateY(-50%);font-size:36px}
+.rf-viewer button.rf-prev{left:12px;right:auto}
+.rf-viewer button.rf-next{right:12px;left:auto}
+.rf-viewer .rf-count{position:absolute;top:24px;left:50%;transform:translateX(-50%);color:white;font-size:16px;font-weight:750;pointer-events:none}
+.rf-viewer [hidden]{display:none!important}
