@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v116';
+const CACHE = 'dm-pedidos-v117';
 
 const SHELL = [
   './',
@@ -43,21 +43,21 @@ const SHELL = [
   './whatsapp-precios.js',
   './stock.js',
   './stock.css',
-  './preparacion.js?v=116',
+  './preparacion.js?v=117',
   './preparacion.css',
-  './reparto-vivo.js?v=116',
-  './reparto-vivo.css?v=116',
-  './reparto-red.js?v=116',
-  './gestion.js?v=116',
-  './gestion.css?v=116',
-  './reparto-fotos.js?v=116',
-  './reparto-fotos.css?v=116',
-  './armado-pedido.js?v=116',
-  './peso-fuentes.js?v=116',
-  './balanza.js?v=116',
-  './armado-pedido.css?v=116',
-  './reparto-control.js?v=116',
-  './reparto-control.css?v=116',
+  './reparto-vivo.js?v=117',
+  './reparto-vivo.css?v=117',
+  './reparto-red.js?v=117',
+  './gestion.js?v=117',
+  './gestion.css?v=117',
+  './reparto-fotos.js?v=117',
+  './reparto-fotos.css?v=117',
+  './armado-pedido.js?v=117',
+  './peso-fuentes.js?v=117',
+  './balanza.js?v=117',
+  './armado-pedido.css?v=117',
+  './reparto-control.js?v=117',
+  './reparto-control.css?v=117',
   './pedidos-a-cargar.js',
   './pedidos-fijos.js'
 ];
