@@ -45,8 +45,6 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 
 /* ── Ficha ── */
 .sc-f { padding: 20px 22px 22px; display: grid; gap: 0; }
-.sc-volver { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: -6px 0 6px -6px; padding: 0 10px 0 6px; cursor: pointer; font-size: var(--m-t-lg); font-weight: 700; color: var(--m-azul-500); border-radius: var(--m-r-sm); }
-.sc-volver:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
 .sc-f-cab { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
 .sc-f-nom { margin: 0; font-size: var(--m-t-2xl); font-weight: 800; line-height: 1.2; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .sc-f-dir, .sc-f-ult { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 0; font-size: var(--m-t-lg); line-height: 1.4; color: var(--m-tinta); overflow-wrap: anywhere; }
@@ -252,35 +250,13 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 .sc-warn { color: var(--m-aviso-tinta); }
 .sc-warn b { font-weight: 800; }
 
-/* Área: angosto, una sola columna (la ficha ocupa el lugar del calendario). Desde 1024 px: calendario | ficha. */
-.sc-area { display: block; }
-.sc-col--ficha { display: none; }
-.sc-area--ficha .sc-col--lista { display: none; }
-.sc-area--ficha .sc-col--ficha { display: block; }
-@media (min-width: 1024px) {
-  .sc-area { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 440px); gap: 20px; align-items: start; }
-  /* Sin cliente elegido el calendario usa todo el ancho; la ficha aparece al costado al elegir uno. */
-  .sc-area:not(.sc-area--ficha) { grid-template-columns: minmax(0, 1fr); }
-  .sc-area:not(.sc-area--ficha) .sc-col--ficha { display: none; }
-  .sc-area--ficha .sc-col--lista { display: block; }
-  .sc-col--ficha, .sc-area--ficha .sc-col--ficha {
-    display: block; position: sticky; top: calc(var(--sandbox-banner-h, 0px) + var(--sc-hdr) + 16px);
-    max-height: calc(100vh - var(--sandbox-banner-h, 0px) - var(--sc-hdr) - 32px); overflow-y: auto; overscroll-behavior: contain;
-    background: var(--m-superficie); border: 1px solid var(--m-linea); border-radius: var(--m-r-lg); box-shadow: var(--m-sombra-1);
-  }
-  .sc-volver { display: none !important; }
-}
-
-/* Con la ficha abierta el calendario es más angosto: los días pasan a 4 columnas (dos filas por semana) para que las tarjetas se lean */
-@media (min-width: 1024px) { .sc-area--ficha .sc-sem-g, .sc-area--ficha .sc-sem-g--dom { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-
 /* Semanas: siete columnas de lunes a domingo (el domingo queda angosto si está vacío) */
 .sc-sem { margin: 0 0 18px; }
 .sc-sem-t { margin: 0 2px 8px; font-size: var(--m-t-xl); font-weight: 800; }
 .sc-sem-t .sc-muted { font-size: var(--m-t-md); font-weight: 600; margin-left: 6px; }
 .sc-sem-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .sc-sem-g--dom { grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(58px, .38fr); }
-.sc-dia { min-width: 0; min-height: 96px; padding: 8px; background: var(--m-superficie-2); border: 1px solid var(--m-linea); border-radius: var(--m-r-md); }
+.sc-dia { display: flex; flex-direction: column; min-width: 0; min-height: 96px; padding: 8px; background: var(--m-superficie-2); border: 1px solid var(--m-linea); border-radius: var(--m-r-md); }
 .sc-dia--hoy { background: var(--m-azul-50); border-color: var(--m-azul-500); box-shadow: inset 0 3px 0 var(--m-azul-500); }
 .sc-dia--pasado { background: var(--m-superficie); border-style: dashed; }
 .sc-dia--pasado .sc-dia-h, .sc-dia--pasado .sc-dia-d { color: var(--m-tinta-2); }
@@ -290,7 +266,22 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 .sc-dia-h b { font-variant-numeric: tabular-nums; }
 .sc-dia-hoy { padding: 0 8px; border-radius: var(--m-r-pill); background: var(--m-azul-500); color: #fff; font-size: var(--m-t-sm); font-weight: 800; }
 .sc-dia-h .sc-cant { margin-left: auto; min-width: 22px; padding: 0 6px; font-size: var(--m-t-sm); }
-.sc-dia-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.sc-dia-l { list-style: none; margin: 0; padding: 0 2px 0 0; display: grid; gap: 5px; align-content: start; min-height: 0; max-height: min(60vh, 560px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--m-linea-2) transparent; }
+.sc-dia-l::-webkit-scrollbar { width: 6px; }
+.sc-dia-l::-webkit-scrollbar-thumb { background: var(--m-linea-2); border-radius: 3px; }
+/* Hay más tarjetas abajo: el borde se difumina */
+.sc-dia-l--mas { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); }
+/* En celular cada día es una lista plegable que crece normalmente */
+.sc-dcel .sc-dia-l { max-height: none; overflow: visible; -webkit-mask-image: none; mask-image: none; padding-right: 0; }
+/* Separador fino «Hechos (N)» y tarjetas discretas (Pidió / Le escribí): una línea, nombre en gris y un tilde */
+.sc-sep { list-style: none; display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: var(--m-t-xs); font-weight: 700; letter-spacing: .02em; color: var(--m-tinta-2); }
+.sc-sep::after { content: ""; flex: 1; height: 1px; background: var(--m-linea-2); }
+.sc-card.sc-card--hecha { flex-direction: row; align-items: center; gap: 6px; padding: 3px 8px; background: transparent; border-color: var(--m-linea); box-shadow: none; }
+.sc-card.sc-card--hecha .sc-nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: var(--m-t-sm); font-weight: 600; color: var(--m-tinta-2); line-height: 1.25; }
+.sc-hecha-ic, .sc-ley-ic { display: inline-flex; flex: none; }
+.sc-ley-ic { vertical-align: -3px; }
+.sc-hecha-ic--pidio { color: var(--m-ok-tinta); }
+.sc-hecha-ic--escribi { color: var(--m-azul-500); }
 .sc-dia-nadie { margin: 10px 0 0; text-align: center; color: var(--m-tinta-3); }
 .sc-dia .sc-link { margin-top: 6px; min-height: 32px; font-size: var(--m-t-sm); }
 .sc-dia--vacio { min-height: 0; padding: 8px 6px; }
@@ -310,8 +301,6 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 .sc-card:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
 .sc-card[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--m-azul-500); }
 .sc-card--atr { border-color: #E6A8B1; }
-.sc-card--pidio { background: var(--m-ok-fondo); border-color: #A9D9BE; }
-.sc-card--escribi { background: var(--m-azul-100); border-color: var(--m-azul-300); }
 .sc-card[data-arr] { cursor: grab; touch-action: pan-y; }
 .sc-card--guardando { opacity: .6; cursor: progress; }
 .sc-card--arr { background: var(--m-superficie-3); border-style: dashed; box-shadow: none; }
@@ -385,11 +374,7 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 @media (hover: hover) and (pointer: fine) { .sc-dop:hover:not(:disabled) { background: var(--m-superficie-2); border-color: var(--m-azul-400); } }
 @media (max-width: 480px) { .sc-dops { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
-/* Angosto: con la ficha abierta ocupa toda la pantalla (sin cabecera ni leyenda) */
-@media (max-width: 1023.98px) {
-  .sc--ficha .sc-cab, .sc--ficha .sc-ley, .sc--ficha .sc-aviso--agenda { display: none; }
-  .sc-bus { width: 100%; }
-}
+@media (max-width: 1023.98px) { .sc-bus { width: 100%; } }
 /* En celular la barra de abajo es fija: hay que dejar lugar para que el final de la lista y de la ficha no quede tapado */
 @media (max-width: 767.98px) {
   .sc { padding-bottom: 96px; }
@@ -407,3 +392,11 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
   .sc-dlg-pie .sc-btn, .sc-dlg-pie .sc-accion { flex: 1 1 140px; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) { .sc-btn, .sc-card { transition: none; } }
+
+/* ═══ La ficha del cliente como ventana emergente (#scModal: .overlay + .modal de index.html, igual que los demás modales) ═══ */
+#scModal .modal { max-width: 640px; font-family: var(--m-fuente); font-size: var(--m-t-lg); color: var(--m-tinta); }
+#scModal button { font-family: inherit; }
+#scModal .modal-header .sc-f-nom { margin: 0; font-size: var(--m-t-xl); line-height: 1.2; overflow-wrap: anywhere; }
+#scModal .close-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; margin-left: 12px; cursor: pointer; }
+#scModal .close-btn:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
+#scModal .sc-f { padding-top: 14px; }
