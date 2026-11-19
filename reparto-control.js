@@ -1,6 +1,7 @@
 /* Resumen de remito y carga. El servidor confirma control, despacho y reposición. */
 (function(){
  'use strict';
+ const fotosDe=(x,sub=false)=>{const first=sub?x.sustituto_foto:x.foto;return first?[...new Set([first,...(sub?x.sustituto_fotos_extra:x.fotos_extra)||[]])]:[];};
  const pedir = window.RepartoRed.pedir;
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const S={open:false,epoch:0,revision:0,ids:[],rows:[],fotos:new Map(),busy:false,loading:false,again:false,error:'',actionError:'',expanded:new Set(),timer:null,interacting:false,repaint:false};
@@ -48,7 +49,7 @@
    }
    if(epoch!==S.epoch||revision!==S.revision){S.again=true;return;}
    S.rows=rows;S.error='';
-   const paths=[...new Set(rows.flatMap(r=>(r.items||[]).flatMap(x=>[x.foto,x.sustituto_foto])).filter(Boolean))];
+   const paths=[...new Set(rows.flatMap(r=>(r.items||[]).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)])).filter(Boolean))];
    const missing=paths.filter(p=>!S.fotos.has(p)||S.fotos.get(p).hasta<Date.now());
    if(missing.length){
     const r=await pedir(sb.storage.from('preparacion').createSignedUrls(missing,3600));
@@ -58,7 +59,9 @@
   }catch(e){if(epoch===S.epoch)S.error='No se pudo actualizar. '+e.message;}
   finally{S.loading=false;if(epoch===S.epoch)pintar();if(S.again)refrescar();}
  }
- function foto(path,nombre,expected){
+ function foto(paths,nombre,expected){
+  if(paths.length>1)return `<div class="rc-photo-gallery">${paths.map((p,i)=>foto([p],nombre+' · '+(i+1),expected)).join('')}</div>`;
+  const path=paths[0];
   const url=path&&S.fotos.get(path)?.url;
   return url?`<button class="rc-photo" data-rc="foto" data-path="${esc(path)}" aria-label="Ver foto de ${esc(nombre)}"><img src="${esc(url)}" alt="${esc(nombre)}"></button>`:path?'<span class="rc-warning">Foto no disponible</span>':expected?'<span class="rc-warning">Sin foto</span>':'—';
  }
@@ -70,8 +73,8 @@
    const pendientePeso=weighted&&!x.separado&&!(Number(x.peso)>0);
    const real=enviado===0?'No se envía':pendientePeso?'Por pesar':Number(x.peso)>0?qty(x.peso)+' kg':qty(enviado)+' '+unit(m);
    return `<tr class="${enviado===0?'rc-not-sent':''}"><td><b>${esc(it.prod)}</b>${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
-    <td>${enviado>0?pesoVista(r,x,false,real):`<strong>${esc(real)}</strong>`}${enviado>0&&weighted&&!(Number(x.peso)>0)&&!x.foto?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(x.foto,it.prod,weighted):'—'}</td></tr>
-    ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td>${pesoVista(r,x,true,Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+unit(x.sustituto_medida))}${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)&&!x.sustituto_foto?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(x.sustituto_foto,x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
+    <td>${enviado>0?pesoVista(r,x,false,real):`<strong>${esc(real)}</strong>`}${enviado>0&&weighted&&!(Number(x.peso)>0)&&!x.foto?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(fotosDe(x),it.prod,weighted):'—'}</td></tr>
+    ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td>${pesoVista(r,x,true,Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+unit(x.sustituto_medida))}${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)&&!x.sustituto_foto?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(fotosDe(x,true),x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
   }).join('')}</tbody></table></div>`;
  }
  function tarjeta(r){
