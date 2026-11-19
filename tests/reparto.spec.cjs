@@ -806,10 +806,10 @@ test('varias fotos por caja persisten, llegan a oficina y se quitan individualme
  expect(s.db.prep_items[0].foto).toBe('anterior.jpg');expect(s.db.prep_items[0].fotos_extra).toHaveLength(2);expect(s.db.prep_items[0].peso).toBe(3.25);
  expect(await p.evaluate(()=>document.querySelector('.ap-editor').scrollWidth<=document.querySelector('.ap-editor').clientWidth)).toBe(true);
  await p.screenshot({path:'test-results/varias-fotos-ipad.png',animations:'disabled'});
- await p.locator('[data-ap="ver-foto"]').nth(2).click();await expect(p.locator('.ap-viewer')).toBeVisible();await p.locator('.ap-viewer button').click();
+ await p.locator('[data-ap="ver-foto"]').nth(2).click();await expect(p.locator('.ap-viewer')).toBeVisible();await p.locator('.ap-viewer [aria-label="Cerrar foto"]').click();
  await p.locator('[data-ap="guardar"]').click();await p.locator('#ap-cerrar').click();await p.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(p);await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(3);
  await office.evaluate(()=>RepartoControl.remito('p1'));await office.locator('[data-rc="expandir"]').click();await expect(office.locator('.rc-photo')).toHaveCount(3);
- await office.locator('.rc-photo').nth(2).click();await office.locator('.rc-viewer button').click();await expect(office.locator('.rc-panel')).toBeVisible();
+ await office.locator('.rc-photo').nth(2).click();await office.locator('.rc-viewer [aria-label="Cerrar foto"]').click();await expect(office.locator('.rc-panel')).toBeVisible();
  await p.locator('[data-ap="quitar-foto"]').first().click();await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);expect(s.db.prep_items[0].foto).not.toBe('anterior.jpg');
  await expect(office.locator('.rc-photo')).toHaveCount(2);expect(s.errors).toEqual([]);await s.close();
 });
@@ -821,4 +821,31 @@ test('varias fotos del sustituto conservan originales y una falla permite reinte
  s.failPhoto(true);await upload();await expect(p.locator('.ap-inline-error')).toContainText('No se pudo guardar');await expect(p.locator('[data-ap="foto-sub"]')).toBeEnabled();expect(s.db.prep_items[0].sustituto_foto).toBe('sub.jpg');
  s.failPhoto(false);await upload();await expect(p.locator('[data-ap="ver-foto-sub"]')).toHaveCount(2);expect(s.db.prep_items[0].foto).toBe('original.jpg');
  await p.locator('[data-ap="quitar-foto-sub"]').nth(1).click();await expect(p.locator('[data-ap="ver-foto-sub"]')).toHaveCount(1);expect(s.db.prep_items[0].sustituto_foto).toBe('sub.jpg');expect(s.errors).toEqual([]);await s.close();
+});
+
+test('visor PC navega solo las fotos del producto y vuelve al remito al cerrar',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:1,foto:'a.jpg',fotos_extra:['b.jpg','c.jpg'],sustituto:'Pan',sustituto_cantidad:1,sustituye:1,sustituto_medida:'caja',sustituto_foto:'s1.jpg',sustituto_fotos_extra:['s2.jpg']}];
+ const p=await s.open('Oscar');await p.locator('.rv-listo .rv-card h3').click();await p.locator('[data-rc="expandir"]').click();
+ await p.locator('[data-path="b.jpg"]').click();const v=p.locator('.rc-viewer');await expect(v.locator('.rf-count')).toHaveText('2/3');
+ await v.getByRole('button',{name:'Foto siguiente'}).click();await expect(v.locator('.rf-count')).toHaveText('3/3');await p.keyboard.press('ArrowRight');await expect(v.locator('.rf-count')).toHaveText('1/3');
+ await p.keyboard.press('ArrowLeft');await expect(v.locator('.rf-count')).toHaveText('3/3');await v.getByRole('button',{name:'Foto anterior'}).click();await expect(v.locator('.rf-count')).toHaveText('2/3');
+ await v.locator('img').click();await expect(v).toBeVisible();await p.keyboard.press('Escape');await expect(v).toHaveCount(0);await expect(p.locator('.rc-table-wrap')).toBeVisible();await expect(p.locator('[data-path="b.jpg"]')).toBeFocused();
+ await p.locator('[data-path="s1.jpg"]').click();await expect(v.locator('.rf-count')).toHaveText('1/2');await expect(v).toHaveAttribute('aria-label','Pan');await p.keyboard.press('ArrowRight');await expect(v.locator('.rf-count')).toHaveText('2/2');
+ await v.click({position:{x:8,y:200}});await expect(v).toHaveCount(0);await expect(p.locator('.rc-table-wrap')).toBeVisible();expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('visor iPad desliza fotos sin cerrar, ignora gesto vertical y conserva preparación',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,foto:'a.jpg',fotos_extra:['b.jpg','c.jpg']}];
+ const p=await s.open('Mateo',{width:834,height:1112},{hasTouch:true});await p.locator('.rv-card h3').click();await abrirProducto(p);await p.locator('[data-path="a.jpg"][data-ap="ver-foto"]').click();const v=p.locator('.ap-viewer');
+ await touch(p,[{x:650,y:450},{x:500,y:455},{x:300,y:460}]);await expect(v.locator('.rf-count')).toHaveText('2/3');
+ await touch(p,[{x:300,y:450},{x:450,y:455},{x:650,y:460}]);await expect(v.locator('.rf-count')).toHaveText('1/3');
+ await touch(p,[{x:400,y:350},{x:405,y:450},{x:410,y:550}]);await expect(v.locator('.rf-count')).toHaveText('1/3');await expect(v).toBeVisible();
+ await p.screenshot({path:'test-results/visor-fotos-ipad.png',animations:'disabled'});
+ await v.getByRole('button',{name:'Cerrar foto'}).click();await expect(v).toHaveCount(0);await expect(p.locator('.ap-editor')).toBeVisible();expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('visor de una sola foto oculta navegación y respeta movimiento reducido',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,foto:'a.jpg'}];const p=await s.open('Mateo');await p.emulateMedia({reducedMotion:'reduce'});
+ await p.locator('.rv-card h3').click();await abrirProducto(p);await p.locator('[data-ap="ver-foto"]').click();const v=p.locator('.ap-viewer');await expect(v.locator('.rf-next')).toBeHidden();await expect(v.locator('.rf-prev')).toBeHidden();await expect(v.locator('.rf-count')).toBeHidden();await p.keyboard.press('ArrowRight');await expect(v).toBeVisible();await p.keyboard.press('Escape');
+ s.db.prep_items[0].fotos_extra=['b.jpg'];await s.emit('prep_items');await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);await p.locator('[data-ap="ver-foto"]').first().click();await p.keyboard.press('ArrowRight');await expect(v.locator('.rf-count')).toHaveText('2/2');expect(await v.locator('img').evaluate(i=>i.getAnimations().length)).toBe(0);expect(s.errors).toEqual([]);await s.close();
 });

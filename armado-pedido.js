@@ -383,10 +383,7 @@
     if(a==='leer-foto'&&window.LECTOR_PESOS_ACTIVO)return leerFotoGuardada(it);
     if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub',b.dataset.path);
     if(a==='ver-foto'||a==='ver-foto-sub'){
-      const url=S.fotos.get(b.dataset.path)?.url;if(!url)return;
-      const v=document.createElement('div');v.className='ap-viewer';v.setAttribute('role','dialog');v.setAttribute('aria-label','Foto del pesaje');
-      v.innerHTML=`<img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"><button aria-label="Cerrar foto">✕</button>`;
-      v.addEventListener('click',e=>{e.stopPropagation();v.remove();b.focus();});$('ap-raiz').appendChild(v);v.querySelector('button').focus();
+      RepartoFotos.abrir({parent:$('ap-raiz'),clase:'ap-viewer',fotos:fotosDe(row(it),a==='ver-foto-sub').map(path=>({path,url:S.fotos.get(path)?.url})),seleccionada:b.dataset.path,origen:b,titulo:a==='ver-foto-sub'?row(it).sustituto:it.prod,onClose:pintar});
     }
   }
   const soltar=()=>setTimeout(()=>{S.interacting=false;if(S.repaint)pintar();},0);
