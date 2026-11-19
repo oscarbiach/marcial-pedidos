@@ -17,6 +17,15 @@ async function setup(browser){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='prep_foto'){
+   if(failItem)return {error:{message:'Sin conexión'}};
+   const a=q.args,key=a.p_sub?'sustituto_foto':'foto',extra=a.p_sub?'sustituto_fotos_extra':'fotos_extra';
+   let x=db.prep_items.find(x=>x.item_id===a.p_item);if(!x){x={item_id:a.p_item};db.prep_items.push(x);}
+   Object.assign(x,a.p_cambios);if(x.foto===null)x.fotos_extra=[];if(x.sustituto_foto===null)x.sustituto_fotos_extra=[];
+   const paths=x[key]?[x[key],...(x[extra]||[])]:[];
+   const next=a.p_quitar?paths.filter(p=>p!==a.p_ruta):[...new Set([...paths,a.p_ruta])];x[key]=next[0]||null;x[extra]=next.slice(1);
+   setTimeout(()=>emit('prep_items'),0);return {data:structuredClone(x)};
+  }
   if(q.name==='prep_revisar_peso'){
    const a=q.args;if(failItem)return {error:{message:'Sin conexión'}};
    if(a.p_firma!==firma(a.p_id))return {error:{message:'El pedido cambió. Volvé a revisar la foto.'}};
@@ -585,7 +594,7 @@ test('Mateo guarda peso automático o dudoso sin confirmaciones y puede guardar 
  await page.evaluate(()=>{Balanza.leer=async()=>({peso:19.65,dudoso:true});});await subirFotoPrueba(page);
  await expect.poll(()=>s.db.prep_items[0].peso).toBe(19.65);expect(s.db.prep_items[0].peso_revision).toBe('dudoso');
  await page.evaluate(()=>{Balanza.leer=async()=>({peso:null});});await subirFotoPrueba(page);
- await expect.poll(()=>s.db.prep_items[0].peso).toBe(null);await expect(page.locator('.ap-photo-preview')).toBeVisible();
+ await expect.poll(()=>s.db.prep_items[0].peso).toBe(null);await expect(page.locator('.ap-photo-preview')).toHaveCount(3);
  expect(s.errors).toEqual([]);await s.close();
 });
 
@@ -786,4 +795,30 @@ test('volver a la ventana libera un gesto interrumpido y muestra actualizaciones
 test('límite de red aborta la solicitud disponible y no la reenvía',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{window.intentosRed=0;const q={abortSignal(signal){signal.addEventListener('abort',()=>window.solicitudAbortada=true);return this;},then(){window.intentosRed++;return new Promise(()=>{});}};RepartoRed.pedir(q).catch(e=>window.errorRed=e.code);});await p.clock.fastForward(21000);
  expect(await p.evaluate(()=>({intentos:window.intentosRed,abortada:window.solicitudAbortada,codigo:window.errorRed}))).toEqual({intentos:1,abortada:true,codigo:'REPARTO_TIMEOUT'});expect(s.errors).toEqual([]);await s.close();
+});
+
+test('varias fotos por caja persisten, llegan a oficina y se quitan individualmente',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,foto:'anterior.jpg',peso:3.25,separado:false}];
+ const p=await s.open('Mateo',{width:834,height:1112}),office=await s.open('Oscar');
+ await p.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(p);
+ await subirFotoPrueba(p);await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);
+ await subirFotoPrueba(p);await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(3);
+ expect(s.db.prep_items[0].foto).toBe('anterior.jpg');expect(s.db.prep_items[0].fotos_extra).toHaveLength(2);expect(s.db.prep_items[0].peso).toBe(3.25);
+ expect(await p.evaluate(()=>document.querySelector('.ap-editor').scrollWidth<=document.querySelector('.ap-editor').clientWidth)).toBe(true);
+ await p.screenshot({path:'test-results/varias-fotos-ipad.png',animations:'disabled'});
+ await p.locator('[data-ap="ver-foto"]').nth(2).click();await expect(p.locator('.ap-viewer')).toBeVisible();await p.locator('.ap-viewer button').click();
+ await p.locator('[data-ap="guardar"]').click();await p.locator('#ap-cerrar').click();await p.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(p);await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(3);
+ await office.evaluate(()=>RepartoControl.remito('p1'));await office.locator('[data-rc="expandir"]').click();await expect(office.locator('.rc-photo')).toHaveCount(3);
+ await office.locator('.rc-photo').nth(2).click();await office.locator('.rc-viewer button').click();await expect(office.locator('.rc-panel')).toBeVisible();
+ await p.locator('[data-ap="quitar-foto"]').first().click();await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);expect(s.db.prep_items[0].foto).not.toBe('anterior.jpg');
+ await expect(office.locator('.rc-photo')).toHaveCount(2);expect(s.errors).toEqual([]);await s.close();
+});
+
+test('varias fotos del sustituto conservan originales y una falla permite reintentar',async({browser})=>{
+ const s=await setup(browser);enCola(s);s.db.prep_items=[{item_id:1,foto:'original.jpg',falta:true,enviado:1,sustituto:'Pan',sustituto_cantidad:1,sustituye:1,sustituto_medida:'caja',sustituto_foto:'sub.jpg'}];
+ const p=await s.open('Mateo');await p.locator('.rv-card[data-id="p1"] h3').click();await abrirProducto(p);
+ const upload=async()=>{const picker=p.waitForEvent('filechooser');await p.locator('[data-ap="foto-sub"]').click();await (await picker).setFiles(fotoPrueba);};
+ s.failPhoto(true);await upload();await expect(p.locator('.ap-inline-error')).toContainText('No se pudo guardar');await expect(p.locator('[data-ap="foto-sub"]')).toBeEnabled();expect(s.db.prep_items[0].sustituto_foto).toBe('sub.jpg');
+ s.failPhoto(false);await upload();await expect(p.locator('[data-ap="ver-foto-sub"]')).toHaveCount(2);expect(s.db.prep_items[0].foto).toBe('original.jpg');
+ await p.locator('[data-ap="quitar-foto-sub"]').nth(1).click();await expect(p.locator('[data-ap="ver-foto-sub"]')).toHaveCount(1);expect(s.db.prep_items[0].sustituto_foto).toBe('sub.jpg');expect(s.errors).toEqual([]);await s.close();
 });

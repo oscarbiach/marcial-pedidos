@@ -13,6 +13,10 @@
   const S = { open:false, epoch:0, revision:0, p:null, cola:null, items:new Map(), productos:new Map(),
     drafts:new Map(), fotos:new Map(), active:null, ready:false, loading:false, busy:false, again:false,
     error:'', itemError:null, timer:null, debounce:null, interacting:false, repaint:false, choosing:false, extras:new Set() };
+  const fotosDe = (x,sub=false) => {const first=sub?x.sustituto_foto:x.foto;return first?[...new Set([first,...(sub?x.sustituto_fotos_extra:x.fotos_extra)||[]])]:[];};
+  function miniaturas(it,sub=false){
+    return fotosDe(row(it),sub).map((path,i)=>{const url=S.fotos.get(path)?.url;return `<div class="ap-photo-tile">${url?`<button class="ap-photo-preview" data-ap="${sub?'ver-foto-sub':'ver-foto'}" data-i="${it.id}" data-path="${esc(path)}" aria-label="Ver foto ${i+1} de ${esc(sub?'sustituto':it.prod)}"><img src="${esc(url)}" alt="Foto ${i+1}"></button>`:'<span>Foto no disponible</span>'}<button class="ap-photo-remove" data-ap="${sub?'quitar-foto-sub':'quitar-foto'}" data-i="${it.id}" data-path="${esc(path)}" aria-label="Eliminar foto ${i+1}${sub?' del sustituto':''}">✕</button></div>`;}).join('');
+  }
   const row = it => S.items.get(it.id) || {};
   const pesa = it => !!S.productos.get(it.prod)?.se_pesa;
   const editable = () => S.ready && S.p?.estado === 'Pendiente' && !S.p.retiro;
@@ -99,7 +103,7 @@
       for(const itemId of S.drafts.keys()) if(!ids.includes(itemId)) S.drafts.delete(itemId);
       if(S.active!==null && !ids.includes(S.active)) S.active=null;
       S.ready=true; S.error='';
-      const fotos=[...new Set((detalle.data || []).flatMap(x=>[x.foto,x.sustituto_foto]).filter(Boolean))];
+      const fotos=[...new Set((detalle.data || []).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)]).filter(Boolean))];
       const faltan=fotos.filter(f=>!S.fotos.has(f) || S.fotos.get(f).hasta<Date.now());
       if(faltan.length){
         const urls=await pedir(sb.storage.from('preparacion').createSignedUrls(faltan,3600));
@@ -134,9 +138,8 @@
           <div class="ap-weigh">
             <label>Peso real (opcional)<div class="ap-input-unit"><input data-ap="peso" data-i="${it.id}" inputmode="decimal" autocomplete="off" placeholder="Sin pesar" value="${esc(d.peso)}" aria-label="Peso de ${esc(it.prod)} en kg" ${zero?'disabled':''}><b>kg</b></div></label>
             <div class="ap-photo-actions"><div class="ap-photo"><div>
-              ${url?`<button class="ap-photo-preview" data-ap="ver-foto" data-i="${it.id}" aria-label="Ver foto de ${esc(it.prod)}"><img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"></button>`:''}
-              <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Cambiar foto':'Agregar foto'}</button>
-              ${x.foto?`<button class="ap-photo-remove" data-ap="quitar-foto" data-i="${it.id}">Eliminar foto</button>`:''}
+              <button class="ap-photo-button" data-ap="foto" data-i="${it.id}" ${zero?'disabled':''}>${x.foto?'Agregar otra foto':'Agregar foto'}</button>
+              <div class="ap-photo-gallery">${miniaturas(it)}</div>
               ${window.LECTOR_PESOS_ACTIVO&&url&&!d.peso?`<button class="ap-photo-button" data-ap="leer-foto" data-i="${it.id}" ${zero?'disabled':''}>Leer peso de la foto</button>`:''}
             </div></div>
           <button class="ap-change" data-ap="reemplazar" data-i="${it.id}" aria-label="Elegir sustituto" title="Elegir sustituto">⇄</button></div></div>
@@ -144,7 +147,7 @@
             ${d.falta?`<div class="ap-shortage-form"><label>Faltan <input data-ap="faltante" data-i="${it.id}" inputmode="decimal" autocomplete="off" value="${esc(numero(d.enviado)===null?'':decimal(Number(it.qty)-numero(d.enviado)))}" placeholder="0" aria-label="Cantidad faltante de ${esc(it.prod)}"><small>${esc(medida||'unidad')}</small></label><button data-ap="nada" data-i="${it.id}">Falta todo</button>
 
               ${d.reemplazar?`<div class="ap-substitute"><div class="ap-sub-name"><b>${esc(d.sustituto)}</b><button data-ap="quitar-sub" data-i="${it.id}" aria-label="Quitar sustituto">✕</button></div><div><label>Cantidad<input data-ap="sustituto_cantidad" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_cantidad)}"></label><label>Medida<select data-ap="sustituto_medida" data-i="${it.id}">${opcionesMedida(d.sustituto_medida)}</select></label><label>Reemplaza<input data-ap="sustituye" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituye)}"></label></div>
-                ${`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button class="ap-photo-button" data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Cambiar foto del sustituto':'Agregar foto del sustituto'}</button>${x.sustituto_foto?`<div class="ap-sub-photo">${S.fotos.get(x.sustituto_foto)?.url?`<button class="ap-photo-preview" data-ap="ver-foto-sub" data-i="${it.id}" aria-label="Ver foto del sustituto"><img src="${esc(S.fotos.get(x.sustituto_foto).url)}" alt="${esc(x.sustituto)}"></button>`:''}<button class="ap-photo-remove" data-ap="quitar-foto-sub" data-i="${it.id}">Eliminar foto del sustituto</button></div>`:''}`}
+                ${`<label>Peso del sustituto en kg (opcional)<input data-ap="sustituto_peso" data-i="${it.id}" inputmode="decimal" value="${esc(d.sustituto_peso)}" placeholder="Sin pesar"></label><button class="ap-photo-button" data-ap="foto-sub" data-i="${it.id}">${x.sustituto_foto?'Agregar otra foto del sustituto':'Agregar foto del sustituto'}</button><div class="ap-photo-gallery">${miniaturas(it,true)}</div>`}
               </div>`:''}
               <p class="ap-pending">${numero(d.enviado)!==null?`Queda pendiente: ${Math.max(0,Number(it.qty)-numero(d.enviado)-(d.reemplazar?(numero(d.sustituye)||0):0))} de ${esc(it.prod)}`:''}</p>
             </div>`:''}
@@ -223,6 +226,8 @@
     } else if(subFields.some(k=>k in draft)||'falta' in draft){
       Object.assign(out,{sustituto:null,sustituto_cantidad:null,sustituto_medida:null,sustituye:null,sustituto_peso:null,sustituto_foto:null});
     }
+    if(out.foto===null)out.fotos_extra=[];
+    if(out.sustituto_foto===null)out.sustituto_fotos_extra=[];
     if(completar)out.separado=true;
     return out;
   }
@@ -271,12 +276,20 @@
       const file=$('ap-camara');file.value='';file.click();
     }catch(e){S.itemError={id:it.id,message:e.message};pintar();}
   }
-  async function quitarFoto(it,sub=false) {
+  async function guardarFoto(it,ruta,sub,quitar,out,epoch,preservar=false){
+    if(epoch!==S.epoch)return false;
+    const patch={...out};delete patch.fotos_extra;delete patch.sustituto_fotos_extra;
+    const {data,error}=await pedir(sb.rpc('prep_foto',{p_item:it.id,p_ruta:ruta,p_sub:sub,p_quitar:quitar,p_quien:state.who,p_cambios:patch}));
+    if(error)throw error;if(!data)throw Error('No llegó la confirmación de la foto.');
+    if(epoch!==S.epoch)return false;
+    S.items.set(it.id,Array.isArray(data)?data[0]:data);if(!preservar)S.drafts.delete(it.id);window.RepartoVivo?.refrescar();return true;
+  }
+  async function quitarFoto(it,sub=false,ruta) {
     S.extras.add(sub?it.id+'-sub':it.id);
     S.busy=true;S.revision++;S.itemError=null;const epoch=S.epoch;pintar();
     try{
       await iniciarEdicion(epoch);
-      await escribir(it,sub?{sustituto_foto:null}:{foto:null},epoch,true);
+      await guardarFoto(it,ruta,sub,true,{},epoch,true);
     }catch(e){if(epoch===S.epoch)S.itemError={id:it.id,message:'No se pudo eliminar la foto. '+e.message};}
     finally{if(epoch===S.epoch){S.busy=false;pintar();cargar();}}
   }
@@ -302,7 +315,7 @@
       const ruta=`pedido-${d.pid}/${d.it.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
       const {error}=await conLimite(sb.storage.from('preparacion').upload(ruta,blob,{contentType:'image/jpeg',upsert:false}));
       if(error)throw error;
-      if(await escribir(d.it,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_foto:ruta,sustituto_peso_revision:revision}:{peso:d.peso,foto:ruta,peso_revision:revision})},d.epoch)){
+      if(await guardarFoto(d.it,ruta,d.sub,false,{...d.out,...(d.sub?{sustituto_peso:d.peso,sustituto_peso_revision:revision}:{peso:d.peso,peso_revision:revision})},d.epoch)){
         const url=URL.createObjectURL(blob);S.fotos.set(ruta,{url,hasta:Infinity});toast(d.peso?'Foto y peso guardados.':'Foto guardada sin peso.');
         if(window.LECTOR_PESOS_ACTIVO&&!d.peso)S.itemError={id:d.it.id,message:'Foto guardada. El peso se revisa al hacer el remito.'};
       }
@@ -368,9 +381,9 @@
     if(a==='foto')return pedirFoto(it);
     if(a==='foto-sub')return pedirFoto(it,true);
     if(a==='leer-foto'&&window.LECTOR_PESOS_ACTIVO)return leerFotoGuardada(it);
-    if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub');
+    if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub',b.dataset.path);
     if(a==='ver-foto'||a==='ver-foto-sub'){
-      const url=S.fotos.get(a==='ver-foto-sub'?row(it).sustituto_foto:row(it).foto)?.url;if(!url)return;
+      const url=S.fotos.get(b.dataset.path)?.url;if(!url)return;
       const v=document.createElement('div');v.className='ap-viewer';v.setAttribute('role','dialog');v.setAttribute('aria-label','Foto del pesaje');
       v.innerHTML=`<img src="${esc(url)}" alt="Pesaje de ${esc(it.prod)}"><button aria-label="Cerrar foto">✕</button>`;
       v.addEventListener('click',e=>{e.stopPropagation();v.remove();b.focus();});$('ap-raiz').appendChild(v);v.querySelector('button').focus();

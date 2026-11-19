@@ -66,3 +66,5 @@ body.rc-abierto { overflow:hidden; }
 .rc .rc-weight-yes { color:#267045; background:#eaf6ed; border-color:#aed1b8; }.rc .rc-weight-no { color:#b43e3e; background:#fff0ef; border-color:#e9b5b5; }
 .rc-weight-step form { display:grid; grid-template-columns:1fr 52px; gap:8px; width:100%; }.rc-weight-step label { grid-column:1/-1; }.rc-weight-step input { width:100%; min-width:0; padding:10px; border:1px solid #b8c8da; border-radius:8px; font-size:20px; }
 .rc-weight-error { margin:0; font-size:13px; color:#9b3029; }
+
+.rc-photo-gallery{display:flex;flex-wrap:wrap;gap:8px;max-width:260px}
