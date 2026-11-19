@@ -1,7 +1,7 @@
 /* Pestaña "Clientes" de la app de Pedidos: CALENDARIO de 2 semanas (lunes de esta semana a domingo de la que viene) con el día en que hay que escribirle
    a cada cliente. Los atrasados (2 días o más de su día, o en recuperación) van directo a hoy, primero, con la insignia «Atrasado» (motor: seguimiento-clientes.js, función agenda()). Prioridad: PC; también anda en celular.
-   · PC: «Esta semana» y «La semana que viene» (7 columnas, lunes a domingo) y, al pie, la bandeja «Sin seguimiento». Se agarra una
-     tarjeta y se suelta en otro día (o en la bandeja). Cuando un día tiene muchas tarjetas, su lista se desplaza por dentro (la columna no se estira).
+   · PC: «Esta semana» y «La semana que viene» (6 columnas, lunes a sábado). Se agarra una
+     tarjeta y se suelta en otro día. Cuando un día tiene muchas tarjetas, su lista se desplaza por dentro (la columna no se estira).
      Los que ya pidieron o a los que ya se les escribió quedan al final de cada día, discretos, bajo «Hechos». Celular: una lista por día.
    · La ficha del cliente es una ventana emergente (#scModal, el mismo sistema .overlay/.modal que los demás modales de la app): se cierra con la X, Escape o
      tocando el fondo, y el foco vuelve a la tarjeta. El calendario no cambia de forma al abrirla. «Mover a…» y la confirmación van encima de la ficha.
@@ -35,7 +35,7 @@
     ver: 0,                  // sube con cada cambio de lo que se ve antes de que la base conteste (para recalcular)
     guardando: new Set(),    // clientes con un guardado en curso: no se los puede volver a mover
     abiertos: new Map(),     // celular: qué días están desplegados (la clave es el día)
-    pausaAbierta: false,
+    todosAbierto: false, tq: '',   // ventana «Todos los clientes» y su buscador
     dlg: null, aviso: null, deshacer: null, arr: null, ocupado: false, renderPendiente: false, cerrados: new Set(),
   };
   const $ = id => document.getElementById(id);
@@ -249,6 +249,7 @@
   const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const mayus = t => t[0].toUpperCase() + t.slice(1);
   const diaTxt = f => `${ABREV[F.diaSemana(f)]} ${F.fmtCorta(f)}`;
+  const diaCorto = f => `${ABREV[F.diaSemana(f)]} ${F.aFecha(f).getDate()}`;
   const diaLargo = f => (f === hoy() ? 'hoy' : f === F.sumarDias(hoy(), 1) ? 'mañana' : F.fechaLarga(f));
   // Último WhatsApp que se le mandó después de su último pedido (lo da whatsapp-inbox.js con una lectura liviana; sin acceso a WhatsApp no aparece).
   function contactadoPill(c) {
@@ -265,10 +266,10 @@
   function insignias(t) {
     const c = t.c, b = [], p = (tono, icono, txt) => `<span class="sc-pill sc-t-${tono}">${icono ? ico(icono, 'ico-sm') : ''}${esc(txt)}</span>`;
     if (t.estado === 'pidio') b.push(p('ok', 'circle-check', 'Pidió'));
-    else if (t.estado === 'escribi') b.push(p('marca', 'check', 'Le escribí'));
     // la etiqueta del tipo va primero: el color de la franja no es la única señal
     if (t.tipo === 'unica') b.push(p('unica', 'user-plus', 'Única compra'));
     else if (t.tipo === 'recupero') b.push(p('dejo', 'trending-down', 'Dejó de comprar'));
+    if (t.reescribir && t.estado === 'pendiente') b.push(p('marca', 'rotate-ccw', 'Volver a escribir'));
     if (t.atrasado && t.estado === 'pendiente') b.push(p('error', 'clock', 'Atrasado'));
     if (c.manual && c.manual.tipo === 'atender') b.push(p('marca', 'message-circle', 'Atender'));
     if (t.estado !== 'pidio' && t.movido) b.push(p('neutro', 'calendar-days', 'Movido'));
@@ -280,7 +281,8 @@
   function detalleTarjeta(t) {
     const c = t.c, cada = Math.max(1, Math.round(c.intervalo)), d = [c.nombre];
     if (t.estado === 'pidio') d.push('Pidió esta semana');
-    else if (t.estado === 'escribi') d.push('Le escribiste');
+    else if (t.estado === 'escribi') d.push(`Le escribiste ${diaLargo(t.escrito)}: esperando ${t.tipo === 'habitual' ? 'pedido' : 'respuesta'}; si no pide, vuelve el ${diaCorto(t.vuelveEl)}`);
+    else if (t.reescribir) d.push(`Volver a escribir: le escribiste ${diaLargo(t.escrito)} y no pidió`);
     if (t.atrasado && t.estado === 'pendiente') d.push(`Atrasado: su día era el ${F.fechaLarga(t.calculado)}`);
     d.push(TIPO_FRASE[t.tipo]);
     if (c.dejoDeTodos.length) d.push(`Dejó de llevar ${c.dejoDeTodos.length === 1 ? 'un producto' : c.dejoDeTodos.length + ' productos'}`);
@@ -290,22 +292,25 @@
     return d.join('. ') + '.';
   }
   function tarjeta(t) {
-    const c = t.c, ocup = E.guardando.has(t.clave), arr = puedeEditar() && !ocup && t.estado !== 'pidio' && ancho(), det = detalleTarjeta(t), hecha = t.estado !== 'pendiente';
-    const clases = `sc-card sc-card--${t.estado}${hecha ? ' sc-card--hecha' : ''}${t.atrasado && !hecha ? ' sc-card--atr' : ''}${!hecha && t.tipo !== 'habitual' ? ' sc-card--seg sc-card--seg-' + t.tipo : ''}${t.movido ? ' sc-card--mov' : ''}${ocup ? ' sc-card--guardando' : ''}`;
+    const c = t.c, ocup = E.guardando.has(t.clave), arr = puedeEditar() && !ocup && t.estado !== 'pidio' && ancho(), det = detalleTarjeta(t), hecha = t.estado === 'pidio', espera = t.estado === 'escribi', pend = t.estado === 'pendiente';
+    const clases = `sc-card sc-card--${t.estado}${hecha ? ' sc-card--hecha' : ''}${espera ? ' sc-card--espera' : ''}${pend && t.tipo === 'habitual' ? ' sc-card--hab' : ''}${t.atrasado && pend ? ' sc-card--atr' : ''}${pend && t.tipo !== 'habitual' ? ' sc-card--seg sc-card--seg-' + t.tipo : ''}${t.movido ? ' sc-card--mov' : ''}${ocup ? ' sc-card--guardando' : ''}`;
     const attrs = `data-sc="fila" data-k="${at(t.clave)}" data-est="${t.estado}" data-tipo="${t.tipo}" title="${at(det)}" aria-label="${at(det)}"${arr ? ' data-arr="1"' : ''}${E.sel === t.clave ? ' aria-current="true"' : ''}${ocup ? ' aria-busy="true"' : ''}`;
-    // Las hechas (Pidió / Le escribí) son discretas: una sola línea, el nombre en gris y un tilde. El texto del estado queda en el tooltip y el nombre accesible.
-    if (hecha) return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}><span class="sc-hecha-ic sc-hecha-ic--${t.estado}" aria-hidden="true">${ico(t.estado === 'pidio' ? 'circle-check' : 'check', 'ico-sm')}</span><span class="sc-nom">${esc(c.nombre)}</span></button></li>`;
+    // Pidió («Hechos»): una sola línea, el nombre en gris y un tilde. El texto del estado queda en el tooltip y el nombre accesible.
+    if (hecha) return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}><span class="sc-hecha-ic sc-hecha-ic--${t.estado}" aria-hidden="true">${ico('circle-check', 'ico-sm')}</span><span class="sc-nom">${esc(c.nombre)}</span></button></li>`;
+    // Le escribí («Esperando»): compacta y atenuada, con cuándo se le escribió
+    if (espera) return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}><span class="sc-nom">${esc(c.nombre)}</span><span class="sc-espera-t" aria-hidden="true">${ico('message-circle', 'ico-sm')}Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + esc(diaCorto(t.escrito))}</span></button></li>`;
     return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}>
       <span class="sc-nom">${esc(c.nombre)}</span>
       <span class="sc-card-b" aria-hidden="true">${insignias(t)}</span></button></li>`;
   }
-  // Dentro de un día: primero los habituales («Hablarles»), después los de seguimiento, cada grupo con su separador fino, y al final «Hechos (N)».
+  // Dentro de un día: primero los pendientes (los habituales, «Hablarles», y después los de seguimiento), después los que esperan (le escribiste: «Esperando pedido» los habituales
+  // y «Esperando respuesta» los de seguimiento) y al final «Hechos (N)» (pidió). Cada grupo con su separador fino.
   const filtrar = ts => (E.filtro === 'todos' ? ts : ts.filter(t => (E.filtro === 'habitual') === (t.tipo === 'habitual')));
   const lista = (ts, cls) => {
-    const pend = ts.filter(t => t.estado === 'pendiente'), hechas = ts.filter(t => t.estado !== 'pendiente');
-    const hab = pend.filter(t => t.tipo === 'habitual'), seg = pend.filter(t => t.tipo !== 'habitual');
-    const sep = (txt, g) => `<li class="sc-sep${g ? ' sc-sep--g' : ''}"><span>${txt}</span></li>`;
-    return `<ul class="${cls}">${hab.length ? sep('Hablarles', 1) + hab.map(tarjeta).join('') : ''}${seg.length ? sep('Seguimiento', 1) + seg.map(tarjeta).join('') : ''}${hechas.length ? sep(`Hechos (${hechas.length})`) + hechas.map(tarjeta).join('') : ''}</ul>`;
+    const pend = ts.filter(t => t.estado === 'pendiente'), esp = ts.filter(t => t.estado === 'escribi'), hechas = ts.filter(t => t.estado === 'pidio');
+    const hab = pend.filter(t => t.tipo === 'habitual'), seg = pend.filter(t => t.tipo !== 'habitual'), eHab = esp.filter(t => t.tipo === 'habitual'), eSeg = esp.filter(t => t.tipo !== 'habitual');
+    const sep = (txt, g) => `<li class="sc-sep${g ? ' sc-sep--g' : ''}"><span>${txt}</span></li>`, grupo = (txt, l, g) => (l.length ? sep(txt, g) + l.map(tarjeta).join('') : '');
+    return `<ul class="${cls}">${grupo('Hablarles', hab, 1)}${grupo('Seguimiento', seg, 1)}${grupo(`Esperando pedido (${eHab.length})`, eHab, 1)}${grupo(`Esperando respuesta (${eSeg.length})`, eSeg, 1)}${grupo(`Hechos (${hechas.length})`, hechas)}</ul>`;
   };
   // Cuando la lista de un día tiene más tarjetas de las que entran, se difumina el borde de abajo (hay más para ver al desplazar).
   function marcarMas() {
@@ -340,18 +345,10 @@
     });
     return `<div class="sc-cel">${h}</div>`;
   }
-  // Bandeja «Sin seguimiento»: plegable; soltar una tarjeta ahí la deja sin seguimiento (con confirmación). «Retomar» la vuelve al calendario.
-  function bandeja(ag) {
-    if (!datosOk()) return '';
-    const l = ag.pausados, ed = puedeEditar();
-    const items = l.map(c => `<li><button type="button" class="sc-pau-n" data-sc="fila" data-k="${at(c.clave)}">${esc(c.nombre)}</button><span class="sc-muted">${c.manual && c.manual.desde ? 'desde el ' + esc(corta(c.manual.desde)) : ''}${c.manual && c.manual.revisar ? ' · revisar' : ''}</span>${ed ? `<button type="button" class="sc-link" data-sc="retomar" data-k="${at(c.clave)}" aria-label="${at('Retomar a ' + c.nombre)}">${ico('play', 'ico-sm')}Retomar</button>` : ''}</li>`).join('');
-    return `<section class="sc-pau" id="sc-pau"${ed ? ' data-zona="pausa"' : ''}><h3 class="sc-pau-h"><button type="button" class="sc-pau-t" data-sc="pau-toggle" aria-expanded="${E.pausaAbierta}" aria-controls="sc-pau-c">${ico('pause')}<span>Sin seguimiento</span><span class="sc-cant">${l.length}</span>${ico('chevron-down', 'ico-sm sc-chev')}</button></h3>
-      <div class="sc-pau-c" id="sc-pau-c"${E.pausaAbierta ? '' : ' hidden'}>${l.length ? `<ul class="sc-pau-l">${items}</ul>` : '<p class="sc-nadie">Nadie.</p>'}<p class="sc-pau-n2">No les marcamos día para escribirles. Sus pedidos se siguen cargando y despachando con normalidad.${ed ? ' Para sacar a alguien del calendario, soltá su tarjeta acá o usá «Sin seguimiento» en su ficha.' : ''}</p></div></section>`;
-  }
   function cuerpo(calc, ag) {
     if (bloqueado()) return estadoDatos();
     const mas = ag.masAdelante ? `<p class="sc-mas">Más adelante: <b>${ag.masAdelante}</b> ${ag.masAdelante === 1 ? 'cliente' : 'clientes'} con su día después del sábado de la semana que viene. Se los encuentra con el buscador.</p>` : '';
-    return (ancho() ? semanaPC(ag, 0) + semanaPC(ag, 1) : calendarioCel(ag)) + mas + bandeja(ag);
+    return (ancho() ? semanaPC(ag, 0) + semanaPC(ag, 1) : calendarioCel(ag)) + mas;
   }
 
   // ── Ficha ──
@@ -482,9 +479,12 @@
     const t = ag.porCliente.get(c.clave), p = ag.pidieron.get(c.clave), partes = [];
     if (p) partes.push(`<b>Pidió</b> ${esc(diaLargo(p))}.`);
     if (!t) { if (!p) partes.push('No figura en el calendario: hace más de 150 días que no pide.'); return partes.join(' '); }
-    if (t.estado === 'escribi') partes.push(`<b>Le escribiste</b> ${esc(diaLargo(t.escrito))}.`);
-    partes.push(t.atrasado && t.estado === 'pendiente' ? `Está <b>atrasado</b>: su día era el ${esc(F.fechaLarga(t.calculado))}. Le toca escribirle <b>hoy</b>.`
-      : `Le toca escribirle <b>${esc(diaLargo(t.dia))}</b>${t.fuera ? ' (después de la semana que viene)' : ''}.`);
+    if (t.estado === 'escribi') partes.push(`<b>Esperando ${t.tipo === 'habitual' ? 'pedido' : 'respuesta'}</b> desde el ${esc(diaCorto(t.escrito))} · si no pide, vuelve el ${esc(diaCorto(t.vuelveEl))}.`);
+    else {
+      if (t.reescribir) partes.push(`<b>Volver a escribir</b>: le escribiste ${esc(diaLargo(t.escrito))} y no pidió.`);
+      partes.push(t.atrasado && t.estado === 'pendiente' ? `Está <b>atrasado</b>: su día era el ${esc(F.fechaLarga(t.calculado))}. Le toca escribirle <b>hoy</b>.`
+            : `Le toca escribirle <b>${esc(diaLargo(t.dia))}</b>${t.fuera ? ' (después de la semana que viene)' : ''}.`);
+    }
     if (t.movido) partes.push(`Lo movieron a mano; su día calculado es el ${esc(F.fechaLarga(t.calculado))}.`);
     return partes.join(' ');
   }
@@ -572,6 +572,53 @@
       if (el) el.focus({ preventScroll: true });
     }
   }
+  // ── «Todos los clientes»: ventana con la lista simple de toda la cartera (solo nombres, de la A a la Z) ──
+  // Tocar un nombre abre la ficha; «Sacar de seguimiento» (con confirmación) lo pasa a «Fuera de seguimiento», al final, de donde se lo vuelve a poner con «Volver a seguimiento».
+  const clientesOrden = calc => calc.clientes.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  function listaTodos(calc) {
+    const q = S.norm(E.tq), todos = clientesOrden(calc).filter(c => !q || S.norm(c.nombre).includes(q)), edit = puedeEditar();
+    const dentro = todos.filter(c => !(c.manual && c.manual.tipo === 'pausa')), fuera = todos.filter(c => c.manual && c.manual.tipo === 'pausa');
+    const fila = (c, esFuera) => {
+      const k = at(c.clave), dis = E.guardando.has(c.clave) ? ' disabled' : '';
+      return `<li class="sc-tl-f${esFuera ? ' sc-tl-f--fuera' : ''}" data-k="${k}"><button type="button" class="sc-tl-n" data-sc="fila" data-k="${k}"${E.sel === c.clave ? ' aria-current="true"' : ''}>${esc(c.nombre)}</button>${edit ? (esFuera ? `<button type="button" class="sc-btn sc-btn--chico" data-sc="volver-seg" data-k="${k}" aria-label="${at('Volver a seguimiento: ' + c.nombre)}"${dis}>${ico('play', 'ico-sm')}Volver a seguimiento</button>` : `<button type="button" class="sc-btn sc-btn--chico" data-sc="sacar" data-k="${k}" aria-label="${at('Sacar de seguimiento: ' + c.nombre)}" aria-haspopup="dialog"${dis}>Sacar de seguimiento</button>`) : ''}</li>`;
+    };
+    if (!todos.length) return '<p class="sc-bus-nada">Ningún cliente coincide.</p>';
+    return (dentro.length ? `<ul class="sc-tl" aria-label="Clientes en seguimiento">${dentro.map(c => fila(c, false)).join('')}</ul>` : '')
+      + (fuera.length ? `<h4 class="sc-tl-h">Fuera de seguimiento (${fuera.length})</h4><ul class="sc-tl sc-tl--fuera" aria-label="Fuera de seguimiento">${fuera.map(c => fila(c, true)).join('')}</ul>` : '');
+  }
+  const esqueletoTodos = () => `<div class="modal-handle"></div><div class="modal-header"><h3 class="sc-todos-t" id="sc-todos-t">Todos los clientes</h3><button type="button" class="close-btn" data-sc="cerrar-todos" aria-label="Cerrar">${ico('x')}</button></div>
+    <div class="sc-todos-c"><div id="sc-tl-av"></div><label class="sc-buscar">${ico('search', 'ico-sm')}<input type="search" id="sc-tq" placeholder="Buscar un cliente" aria-label="Buscar en todos los clientes" autocomplete="off" value="${at(E.tq)}"></label><div id="sc-tl-cont"></div></div>`;
+  // Al volver a dibujar (cada refresco o acción) solo cambia la lista: el buscador, el desplazamiento y el foco se conservan.
+  function pintarTodos(calc) {
+    const ov = $('scTodos'), m = $('sc-todos'); if (!ov || !m) return;
+    if (!E.todosAbierto) { if (ov.classList.contains('open')) ov.classList.remove('open'); return; }
+    const nuevo = !ov.classList.contains('open');
+    if (nuevo || !$('sc-tl-cont')) m.innerHTML = esqueletoTodos();
+    const cont = $('sc-tl-cont'), act = document.activeElement, dentro = !nuevo && act && cont.contains(act) ? { s: act.dataset.sc, k: act.dataset.k } : null, top = m.scrollTop;
+    cont.innerHTML = listaTodos(calc);
+    const av = $('sc-tl-av'); if (av) av.innerHTML = E.aviso && !E.fichaAbierta ? bannerAviso() : '';
+    ov.classList.add('open');
+    if (nuevo) { m.scrollTop = 0; const q = $('sc-tq'); if (q) q.focus({ preventScroll: true }); }
+    else {
+      m.scrollTop = top;
+      if (dentro && dentro.k) { const el = cont.querySelector(`[data-sc="${dentro.s}"][data-k="${CSS.escape(dentro.k)}"]:not([disabled])`) || cont.querySelector(`[data-k="${CSS.escape(dentro.k)}"] button:not([disabled])`); if (el) el.focus({ preventScroll: true }); }
+    }
+  }
+  function abrirTodos() { if (!E.calc) return; E.todosAbierto = true; E.tq = ''; pintarTodos(E.calc); }
+  function cerrarTodos() { const ov = $('scTodos'); if (ov) ov.classList.remove('open'); }
+  function alCerrarTodos() {
+    if (!E.todosAbierto) return;
+    E.todosAbierto = false; E.tq = ''; E.foco = null;
+    if (E.aviso) render();   // el aviso que se veía dentro de la ventana pasa a verse arriba del calendario
+    const m = $('sc-todos'); if (m) m.innerHTML = '';
+    const b = document.querySelector('#sc-raiz [data-sc="abrir-todos"]'); if (b) b.focus({ preventScroll: true });
+  }
+  (function vigilarTodos() {
+    const ov = $('scTodos'); if (!ov || !window.MutationObserver) return;
+    new MutationObserver(() => { if (!ov.classList.contains('open')) alCerrarTodos(); }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+  })();
+  const cerrarVentanas = () => { cerrarFicha(); cerrarTodos(); };
+
   function cerrarFicha() { const ov = $('scModal'); if (ov) ov.classList.remove('open'); }
   // Cierre desde cualquier lado (X, Escape, tocar el fondo —que lo hace el código general de los .overlay—): el foco vuelve a la tarjeta de donde se abrió.
   function alCerrarFicha() {
@@ -584,7 +631,7 @@
     const f = $('sc-ficha'); if (f) f.innerHTML = '';
     let el = null;
     if (o && o.tipo === 'card') el = document.querySelector(`#sc-raiz .sc-card[data-k="${CSS.escape(o.k)}"][data-est="${o.est}"]`) || document.querySelector(`#sc-raiz .sc-card[data-k="${CSS.escape(o.k)}"]`);
-    else if (o && o.tipo === 'pau') el = document.querySelector(`#sc-raiz .sc-pau-n[data-k="${CSS.escape(o.k)}"]`);
+    else if (o && o.tipo === 'todos') el = document.querySelector(`#sc-todos .sc-tl-n[data-k="${CSS.escape(o.k)}"]`);
     if (!el) el = $('sc-q');
     if (el) el.focus({ preventScroll: true });
   }
@@ -600,7 +647,7 @@
     const t = [];
     if (E.datos.error) t.push(`<p class="sc-aviso sc-aviso--error" role="alert">No se pudieron actualizar las pausas y movimientos. Lo que ves es de las ${esc(hora(E.datos.ultimoOk))} y puede estar desactualizado. <button type="button" class="sc-link" data-sc="reintentar-datos">Reintentar</button></p>`);
     else if (esEditor() && (E.datos.estado === 'ok' || E.datos.estado === 'noInstalado') && !E.datos.agendaOk) t.push(`<p class="sc-aviso sc-aviso--agenda">El calendario muestra los días calculados. Todavía no se puede mover a los clientes de día ni marcar «Le escribí»${E.datos.agendaMensaje ? ` <span class="sc-muted">(${esc(E.datos.agendaMensaje)})</span>` : ''}.</p>`);
-    if (E.aviso && !E.fichaAbierta) t.push(bannerAviso());   // con la ficha abierta el aviso se ve dentro de la ventana (la tapa)
+    if (E.aviso && !E.fichaAbierta && !E.todosAbierto) t.push(bannerAviso());   // con una ventana abierta el aviso se ve dentro de ella (la tapa)
     return t.join('');
   }
   // Sin poder leer las decisiones guardadas no se muestra el calendario: podría incluir a clientes que están sin seguimiento.
@@ -609,11 +656,11 @@
     const sinPermiso = E.datos.estado === 'sinPermiso';
     return `<div class="sc-estado" role="alert"><b>${sinPermiso ? 'Tu usuario todavía no tiene permiso para el seguimiento.' : 'No se pudieron cargar las pausas y los movimientos.'}</b><p>${sinPermiso ? 'Avisale a quien administra la app. Mientras tanto no se muestra el calendario.' : 'Sin eso, el calendario podría incluir a clientes que están sin seguimiento. Revisá la conexión y probá de nuevo.'}${E.datos.mensaje ? ` <span class="sc-muted">(${esc(E.datos.mensaje)})</span>` : ''}</p><button type="button" class="sc-accion" data-sc="reintentar-datos">Reintentar</button></div>`;
   }
-  const leyenda = () => `<p class="sc-ley"><b>Hablarles</b>: compran siempre y les toca. <b>Seguimiento</b>, para que vuelvan: <span class="sc-pill sc-t-unica">${ico('user-plus', 'ico-sm')}Única compra</span> (franja violeta) y <span class="sc-pill sc-t-dejo">${ico('trending-down', 'ico-sm')}Dejó de comprar</span> (franja naranja). Los que ya pidieron <span class="sc-ley-ic sc-hecha-ic--pidio">${ico('circle-check', 'ico-sm')}</span> o a los que ya les escribiste <span class="sc-ley-ic sc-hecha-ic--escribi">${ico('check', 'ico-sm')}</span> quedan al final de cada día, en «Hechos».${puedeAgendar() ? (ancho() ? ' Agarrá una tarjeta y soltala en otro día, o abrila y usá «Mover a…».' : ' Abrí una tarjeta y usá «Mover a…» para cambiarla de día.') : ''}</p>`;
+  const leyenda = () => `<p class="sc-ley"><b>Hablarles</b>: compran siempre y les toca. <b>Seguimiento</b>, para que vuelvan: <span class="sc-pill sc-t-unica">${ico('user-plus', 'ico-sm')}Única compra</span> (franja violeta) y <span class="sc-pill sc-t-dejo">${ico('trending-down', 'ico-sm')}Dejó de comprar</span> (franja naranja). A los que les escribiste pasan a <b>Esperando</b> (pedido o respuesta) y, si no piden en 2 días hábiles, vuelven como <span class="sc-pill sc-t-marca">${ico('rotate-ccw', 'ico-sm')}Volver a escribir</span>. Los que ya pidieron <span class="sc-ley-ic sc-hecha-ic--pidio">${ico('circle-check', 'ico-sm')}</span> quedan al final, en «Hechos».${puedeAgendar() ? (ancho() ? ' Agarrá una tarjeta y soltala en otro día, o abrila y usá «Mover a…».' : ' Abrí una tarjeta y usá «Mover a…» para cambiarla de día.') : ''}</p>`;
   // Selector de arriba del calendario: qué clientes se ven (los contadores de cada día se ajustan)
   function selectorFiltro(ag) {
     const k = ag.conteo, b = (v, txt, n) => `<button type="button" class="sc-fil-b" data-sc="filtro" data-f="${v}" aria-pressed="${E.filtro === v}">${txt} <span class="sc-fil-n">(${n})</span></button>`;
-    return `<div class="sc-fil" role="group" aria-label="Qué clientes mostrar">${b('todos', 'Todos', k.todos)}${b('habitual', 'Hablarles: habituales', k.habitual)}${b('seguimiento', 'Seguimiento', k.seguimiento)}</div>`;
+    return `<div class="sc-fil" role="group" aria-label="Qué clientes mostrar">${b('todos', 'Todos', k.todos)}${b('habitual', 'Hablarles: habituales', k.habitual)}${b('seguimiento', 'Seguimiento', k.seguimiento)}<button type="button" class="sc-btn sc-todos-b" data-sc="abrir-todos" aria-haspopup="dialog">${ico('users', 'ico-sm')}Todos los clientes (${E.calc.clientes.length})</button></div>`;
   }
   const buscador = () => `<div class="sc-bus"><label class="sc-buscar">${ico('search', 'ico-sm')}<input type="search" id="sc-q" placeholder="Buscar un cliente" aria-label="Buscar un cliente" aria-controls="sc-bus-l" autocomplete="off" value="${at(E.q)}"></label><div id="sc-bus-l" class="sc-bus-l" aria-live="polite">${resultadosBusqueda()}</div></div>`;
   function render() {
@@ -631,6 +678,7 @@
     E.ag = S.agenda(calc, { hoy: hoy(), agenda: E.agendaMapa, pedidos: mezclar() });
     const aviso = E.cargando ? '<p class="sc-aviso">Actualizando historial…</p>'
       : E.error ? `<p class="sc-aviso sc-aviso--error" role="alert">No se pudo actualizar el historial. Lo que ves es de las ${esc(hora(E.ts))} y puede estar desactualizado. <button type="button" class="sc-link" data-sc="reintentar">Reintentar</button></p>` : '';
+    pintarTodos(calc);
     pintarFicha(calc);   // antes de armar los avisos: si el cliente abierto ya no figura, se cierra y se avisa
     const foco = document.activeElement && document.activeElement.id === 'sc-q' ? { a: document.activeElement.selectionStart, b: document.activeElement.selectionEnd } : null;
     raiz.className = 'sc';
@@ -661,11 +709,11 @@
   }
 
   // ── Acciones ──
-  // Elegir una tarjeta (o un resultado del buscador, o alguien de la bandeja) abre su ficha en la ventana emergente; el calendario no se mueve.
+  // Elegir una tarjeta (o un resultado del buscador, o alguien de «Todos los clientes») abre su ficha en la ventana emergente; el calendario no se mueve.
   function seleccionar(k, boton) {
     const c = E.calc && E.calc.clientes.find(x => x.clave === k); if (!c) return;
     E.sel = k; E.fichaAbierta = true;
-    E.origen = !boton ? { tipo: 'bus', k } : boton.classList.contains('sc-card') ? { tipo: 'card', k, est: boton.dataset.est } : boton.classList.contains('sc-pau-n') ? { tipo: 'pau', k } : { tipo: 'bus', k };
+    E.origen = !boton ? { tipo: 'bus', k } : boton.classList.contains('sc-card') ? { tipo: 'card', k, est: boton.dataset.est } : boton.classList.contains('sc-tl-n') ? { tipo: 'todos', k } : { tipo: 'bus', k };
     if (E.q) { E.q = ''; const q = $('sc-q'); if (q) q.value = ''; renderBusqueda(); }
     document.querySelectorAll('#sc-raiz [aria-current]').forEach(x => x.removeAttribute('aria-current'));
     document.querySelectorAll(`#sc-raiz .sc-card[data-k="${CSS.escape(k)}"]`).forEach(x => x.setAttribute('aria-current', 'true'));
@@ -676,7 +724,7 @@
     const hab = items.filter(t => t.tipo === 'habitual'), seg = items.filter(t => t.tipo !== 'habitual');
     const bloque = (tit, l, f) => (l.length ? `${tit}\n` + l.map((t, i) => f(t, i)).join('\n') : '');
     return [`Para escribir hoy (${fechaTitulo()})`,
-      bloque('Hablarles:', hab, (t, i) => S.lineaTexto(t.c, i) + (t.atrasado ? ' [atrasado]' : '')),
+      bloque('Hablarles:', hab, (t, i) => S.lineaTexto(t.c, i) + (t.atrasado ? ' [atrasado]' : '') + (t.reescribir ? ' [volver a escribir]' : '')),
       bloque('Seguimiento:', seg, (t, i) => S.lineaTexto(t.c, i) + (t.tipo === 'unica' ? ' (única compra)' : ' (dejó de comprar)'))].filter(Boolean).join('\n');
   }
   function copiar(clave) {
@@ -695,6 +743,11 @@
   function restaurarFoco() {
     const f = E.foco; if (!f) return;
     const d = $('sc-dlg'); if (d && d.open) return;   // con un diálogo abierto el foco es del diálogo; se restaura al cerrarlo
+    if (f.tl) {   // la acción se hizo desde «Todos los clientes»: el foco vuelve a esa fila (que puede haber cambiado de sección)
+      const kk = CSS.escape(f.k), el = E.todosAbierto && (document.querySelector(`#sc-todos [data-sc="sacar"][data-k="${kk}"]:not([disabled]), #sc-todos [data-sc="volver-seg"][data-k="${kk}"]:not([disabled])`) || document.querySelector(`#sc-todos [data-k="${kk}"] button:not([disabled])`));
+      if (el) { E.foco = null; el.focus({ preventScroll: true }); } else if (!E.todosAbierto) E.foco = null;
+      return;
+    }
     if (f.acc && !E.fichaAbierta) { E.foco = null; return; }   // el botón era de la ficha y la ficha ya se cerró
     const btn = f.acc && document.querySelector(`#sc-ficha [data-sc="${f.acc}"][data-k="${CSS.escape(f.k)}"]`);
     if (btn && btn.disabled) return;   // se está guardando: el botón se habilita al terminar y recién ahí recibe el foco
@@ -783,7 +836,7 @@
     const c = clienteDe(k); if (!c || !puedeEditar() || E.guardando.has(k) || (c.manual && c.manual.tipo === 'pausa')) return;
     E.foco = E.foco || { k, acc: 'sinseg' }; E.dlg = { k, paso: 'pausa' };
     abrirDlg(`<div class="sc-dlg-c"><h3 id="sc-dlg-t">¿Dejar a ${esc(c.nombre)} sin seguimiento?</h3>
-      <p class="sc-dlg-s">Sale del calendario y no se le marca día para escribirle hasta que lo retomes (en la bandeja «Sin seguimiento» o en su ficha). <b>Sus pedidos se siguen cargando y despachando con normalidad.</b></p>
+      <p class="sc-dlg-s">Sale del calendario y no se le marca día para escribirle hasta que lo retomes (en «Todos los clientes» o en su ficha). <b>Sus pedidos se siguen cargando y despachando con normalidad.</b></p>
       <div class="sc-dlg-pie"><button type="button" class="sc-btn" data-d="cerrar">Cancelar</button><button type="button" class="sc-accion" data-d="pausar-ok">${ico('pause', 'ico-sm')}Sin seguimiento</button></div></div>`, '[data-d="cerrar"]');
   }
   async function pausar(k) {
@@ -928,15 +981,15 @@
     else errorDlg(`No se pudo reactivar${r.error ? ': ' + r.error : ''}.`);
   }
 
-  // ── Arrastrar (PC): se agarra una tarjeta y se suelta en otro día (mover) o en la bandeja «Sin seguimiento» (pausar, con confirmación). Con teclado y en
+  // ── Arrastrar (PC): se agarra una tarjeta y se suelta en otro día (mover). Con teclado y en
   //    celular se usa «Mover a…» de la ficha. El estilo es el de Pedidos (copia flotante que sigue al cursor, hueco en el lugar de origen). ──
   function iniciarArrastre(ev, el) {
     if (!puedeEditar() || E.ocupado || ev.button !== 0 || ev.pointerType === 'touch' || !ancho() || E.guardando.has(el.dataset.k)) return;
     E.arr = { k: el.dataset.k, el, sx: ev.clientX, sy: ev.clientY, x: ev.clientX, y: ev.clientY, activo: false, id: ev.pointerId, zona: null, raf: 0 };
     try { el.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura: igual funciona dentro de la ventana */ }
   }
-  // ¿Se puede soltar acá? Un día de hoy en adelante (si hay agenda) o la bandeja (si hay decisiones).
-  const zonaValida = z => !!z && (z.dataset.zona === 'pausa' ? puedeEditar() : z.dataset.zona === 'dia' && puedeAgendar() && z.dataset.fecha >= hoy());
+  // ¿Se puede soltar acá? Un día de hoy en adelante (si hay agenda).
+  const zonaValida = z => !!z && z.dataset.zona === 'dia' && puedeAgendar() && z.dataset.fecha >= hoy();
   function empezarArrastre(a) {
     a.activo = true; cerrarToast();
     document.body.classList.add('sc-arrastrando'); $('sc-raiz').classList.add('sc--arr');
@@ -945,11 +998,6 @@
     const pos = document.createElement('div'); pos.className = 'sc-ghost-pos';
     const clon = a.el.cloneNode(true); clon.classList.remove('sc-card--arr'); clon.classList.add('sc-ghost-card'); clon.removeAttribute('data-sc'); clon.removeAttribute('aria-current'); clon.style.width = r.width + 'px';
     pos.appendChild(clon); document.body.appendChild(pos); a.ghost = pos;
-    // la bandeja del pie puede quedar lejos: mientras se arrastra hay también una zona flotante
-    if (datosOk() && puedeEditar()) {
-      const t = document.createElement('div'); t.className = 'sc-solta-pausa'; t.setAttribute('data-zona', 'pausa'); t.setAttribute('aria-hidden', 'true');
-      t.innerHTML = `${ico('pause')}<span>Soltá acá para dejarlo sin seguimiento</span><small>Esc para cancelar</small>`; document.body.appendChild(t); a.tray = t;
-    }
     const vuelta = () => {
       if (E.arr !== a) return;
       const zona = 90, dy = a.y < zona ? -Math.ceil((zona - a.y) / 5) : (a.y > window.innerHeight - zona ? Math.ceil((a.y - (window.innerHeight - zona)) / 5) : 0); if (dy) window.scrollBy(0, dy);
@@ -974,7 +1022,7 @@
   function limpiarArrastre() {
     const a = E.arr; if (!a) return;
     cancelAnimationFrame(a.raf);
-    if (a.ghost) a.ghost.remove(); if (a.tray) a.tray.remove();
+    if (a.ghost) a.ghost.remove();
     document.body.classList.remove('sc-arrastrando'); const r = $('sc-raiz'); if (r) r.classList.remove('sc--arr');
     document.querySelectorAll('.sc-zona--sobre').forEach(x => x.classList.remove('sc-zona--sobre'));
     a.el.classList.remove('sc-card--arr');
@@ -989,7 +1037,6 @@
     if (!fue) return;   // fue un clic: lo resuelve el evento click (abre la ficha)
     E.sinClick = true; setTimeout(() => { E.sinClick = false; }, 60);
     if (zona === 'dia') moverA(k, fecha);
-    else if (zona === 'pausa') { E.foco = { k }; confirmarPausa(k); }
   }
   const cancelarArrastre = () => { if (E.arr) limpiarArrastre(); };
 
@@ -1015,17 +1062,20 @@
     }
     const t = ev.target.closest && ev.target.closest('#sc-toast [data-sc]');
     if (t) { if (t.dataset.sc === 'deshacer') deshacer(); else cerrarToast(); return; }
-    const b = ev.target.closest && ev.target.closest('#sc-raiz [data-sc], #sc-ficha [data-sc]');
+    const b = ev.target.closest && ev.target.closest('#sc-raiz [data-sc], #sc-ficha [data-sc], #sc-todos [data-sc]');
     if (!b) return;
     const a = b.dataset.sc, k = b.dataset.k;
     if (a === 'fila') { if (!E.sinClick) seleccionar(k, b); }
     else if (a === 'cerrar-ficha') cerrarFicha();
+    else if (a === 'abrir-todos') abrirTodos();
+    else if (a === 'cerrar-todos') cerrarTodos();
+    else if (a === 'sacar') { E.foco = { k, tl: 1 }; confirmarPausa(k); }
+    else if (a === 'volver-seg') { E.foco = { k, tl: 1 }; cerrarDecision(k, 'retomado'); }
     else if (a === 'filtro') { if (FILTROS.includes(b.dataset.f) && E.filtro !== b.dataset.f) { E.filtro = b.dataset.f; guardarFiltro(E.filtro); render(); const x = document.querySelector(`#sc-raiz .sc-fil-b[data-f="${b.dataset.f}"]`); if (x) x.focus({ preventScroll: true }); } }
     else if (a === 'copiar') copiar();
     else if (a === 'reintentar') pedirHistorial();
     else if (a === 'reintentar-datos') cargarDatos();
     else if (a === 'cerrar-aviso') { E.aviso = null; render(); }
-    else if (a === 'pau-toggle') { E.pausaAbierta = !E.pausaAbierta; const c = $('sc-pau-c'); if (c) c.hidden = !E.pausaAbierta; b.setAttribute('aria-expanded', String(E.pausaAbierta)); }
     else if (a === 'escribi') marcarEscribi(k);
     else if (a === 'mover') { E.foco = { k, acc: 'mover' }; abrirMover(k); }
     else if (a === 'sinseg') { E.foco = { k, acc: 'sinseg' }; confirmarPausa(k); }
@@ -1046,10 +1096,12 @@
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && E.arr) { ev.preventDefault(); cancelarArrastre(); return; }
     const dlgAbierto = !!($('sc-dlg') && $('sc-dlg').open);
-    if (E.fichaAbierta && !dlgAbierto) {
-      if (ev.key === 'Escape') { ev.preventDefault(); cerrarFicha(); return; }
+    // ventanas encima del calendario: la última que se abrió (la ficha, si está) recibe Escape y el Tab queda adentro; la confirmación (diálogo) va primero y se ocupa de su Escape
+    const ventana = E.fichaAbierta ? $('sc-ficha') : E.todosAbierto ? $('sc-todos') : null;
+    if (ventana && !dlgAbierto) {
+      if (ev.key === 'Escape') { ev.preventDefault(); if (E.fichaAbierta) cerrarFicha(); else cerrarTodos(); return; }
       if (ev.key === 'Tab') {   // el foco no se escapa de la ventana
-        const f = $('sc-ficha'), l = f ? [...f.querySelectorAll('button:not([disabled]), summary, a[href], input:not([disabled])')].filter(x => x.offsetParent !== null) : [];
+        const l = [...ventana.querySelectorAll('button:not([disabled]), summary, a[href], input:not([disabled])')].filter(x => x.offsetParent !== null);
         if (l.length) { const i = l.indexOf(document.activeElement); if (ev.shiftKey && i <= 0) { ev.preventDefault(); l[l.length - 1].focus(); } else if (!ev.shiftKey && i === l.length - 1) { ev.preventDefault(); l[0].focus(); } else if (i === -1) { ev.preventDefault(); l[0].focus(); } }
         return;
       }
@@ -1074,12 +1126,13 @@
     else if (d.matches('#sc-ficha details.sc-hist')) { if (d.open) E.ritmo.add(d.dataset.k); else E.ritmo.delete(d.dataset.k); }
     else if (d.matches('#sc-ficha details.sc-cambios')) E.cambiosAbierto = d.open;
   }, true);
+  document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sc-tq') { E.tq = ev.target.value; pintarTodos(E.calc); } });
   document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sc-q') { E.q = ev.target.value; renderBusqueda(); } });
 
   window.SegUI = {
-    abrir, render, aplicarAcceso, puedeVer, puedeCelular, cerrarFicha, pedirHistorial, cargarDatos, contexto, verCliente, asegurar,
+    abrir, render, aplicarAcceso, puedeVer, puedeCelular, cerrarFicha, cerrarVentanas, pedirHistorial, cargarDatos, contexto, verCliente, asegurar,
     alRefrescar() {
-      if (pestana() !== 'clientes') { if (E.fichaAbierta) cerrarFicha(); return; }
+      if (pestana() !== 'clientes') { cerrarVentanas(); return; }
       render();
       if (Date.now() - E.datos.ts > DATOS_VIEJOS_MS && !E.datos.cargando && E.datos.estado !== 'pendiente' && !E.dlg && !E.arr && !E.guardando.size) cargarDatos(true);
     },

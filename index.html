@@ -1849,6 +1849,11 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
   </nav>
 </div>
 
+<!-- ── MODAL: «Todos los clientes» (seguimiento): lista simple de la cartera; el contenido lo arma seguimiento-clientes-ui.js (pintarTodos) ── -->
+<div class="overlay" id="scTodos">
+  <div class="modal" id="sc-todos" role="dialog" aria-modal="true" aria-labelledby="sc-todos-t"></div>
+</div>
+
 <!-- ── MODAL: ficha del cliente de Clientes (seguimiento). El contenido lo arma seguimiento-clientes-ui.js (pintarFicha) ── -->
 <div class="overlay" id="scModal">
   <div class="modal" id="sc-ficha" role="dialog" aria-modal="true" aria-labelledby="sc-f-nom"></div>
@@ -3111,7 +3116,7 @@ function setTab(tab) {
   // Clientes y WhatsApp son para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
   // Excepción (19/11/2026): Clientes también en el celular, solo para Oscar y Joaquin (SegClientes.CONFIG.celular).
   if (bloqueadaEnCelular(tab)) tab = 'pedidos';
-  if (tab !== 'clientes' && window.SegUI && SegUI.cerrarFicha) SegUI.cerrarFicha();   // la ficha de Clientes es una ventana: no queda abierta sobre otra pestaña
+  if (tab !== 'clientes' && window.SegUI && SegUI.cerrarVentanas) SegUI.cerrarVentanas();   // la ficha de Clientes es una ventana: no queda abierta sobre otra pestaña
   // Stock: solo Oscar y Joaquín (lo confirma la base con stock_es_admin; ver stock.js).
   if (tab === 'stock' && !document.body.classList.contains('stock-visible')) tab = 'pedidos';
   activeTab = tab;

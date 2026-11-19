@@ -311,28 +311,6 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 @keyframes sc-vibra { 0%, 100% { transform: scale(1.02) rotate(0deg); } 25% { transform: scale(1.02) rotate(.5deg); } 75% { transform: scale(1.02) rotate(-.5deg); } }
 @media (prefers-reduced-motion: reduce) { .sc-ghost-card { animation: none; transform: scale(1.02); } }
 body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
-.sc-solta-pausa { position: fixed; left: 50%; bottom: 20px; z-index: 419; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: min(560px, calc(100vw - 32px)); min-height: 64px; padding: 10px 18px; border: 2px dashed var(--m-tinta-3); border-radius: var(--m-r-lg); background: var(--m-superficie); color: var(--m-tinta); font: 800 var(--m-t-lg) var(--m-fuente); box-shadow: var(--m-sombra-3); }
-.sc-solta-pausa small { margin-left: auto; font-size: var(--m-t-sm); font-weight: 600; color: var(--m-tinta-2); }
-.sc-solta-pausa.sc-zona--sobre { border-style: solid; outline: none !important; box-shadow: 0 0 0 3px var(--m-azul-500), var(--m-sombra-3); }
-
-/* Bandeja «Sin seguimiento» */
-.sc-pau { margin: 0 0 20px; background: var(--m-superficie); border: 1px solid var(--m-linea); border-radius: var(--m-r-lg); }
-.sc-pau-h { margin: 0; }
-.sc-pau-t { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 14px; cursor: pointer; font-size: var(--m-t-lg); font-weight: 800; color: var(--m-tinta); border-radius: var(--m-r-lg); }
-.sc-pau-t .sc-chev { margin-left: auto; }
-.sc-pau-t[aria-expanded="true"] .sc-chev { transform: rotate(180deg); }
-.sc-pau-t:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: -2px; }
-.sc-pau.sc-zona--sobre { outline: 3px solid var(--m-azul-500) !important; outline-offset: -3px !important; background: var(--m-azul-100) !important; }
-.sc--arr .sc-pau[data-zona] { border-style: dashed; border-color: var(--m-azul-300); }
-.sc-pau-c { padding: 0 14px 12px; }
-.sc-pau-c[hidden] { display: none; }
-.sc-pau-l { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; }
-.sc-pau-l li { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; padding: 4px 0; border-top: 1px solid var(--m-linea); }
-.sc-pau-l li:first-child { border-top: 0; }
-.sc-pau-n { all: unset; cursor: pointer; font-size: var(--m-t-lg); font-weight: 700; color: var(--m-tinta); min-height: 32px; display: inline-flex; align-items: center; }
-.sc-pau-n:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; border-radius: 4px; }
-.sc-pau-l .sc-link { margin-left: auto; }
-.sc-pau-n2 { margin: 0; font-size: var(--m-t-md); color: var(--m-tinta-2); }
 
 /* Celular: una lista por día (Atrasados, hoy abierto, los demás plegados) */
 .sc-cel { display: grid; gap: 10px; margin-bottom: 16px; }
@@ -380,7 +358,6 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 }
 @media (max-width: 767.98px) {
   .sc-toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
-  .sc-solta-pausa { bottom: calc(88px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 640px) {
   .sc-dlg { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 16px 16px 0 0; max-height: 92vh; }
@@ -425,3 +402,35 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 .sc-dejo-h { font-weight: 500; }
 .sc-btn--chico { min-height: 40px; padding: 0 12px; font-size: var(--m-t-md); }
 @media (max-width: 480px) { .sc-dejo-f .sc-btn--chico { width: 100%; justify-content: center; } }
+
+/* ═══ Estados de las tarjetas: pendientes con presencia, esperando atenuadas ═══ */
+.sc-card.sc-card--hab { border-left: 5px solid var(--m-azul-500); background: #EAF1FA; }                 /* Hablarles: franja azul y fondo azul muy claro */
+.sc-card.sc-card--seg-unica { background: #F2F0FC; }                                                    /* seguimiento: fondo tintado acorde a su franja */
+.sc-card.sc-card--seg-recupero { background: #FFF3E6; }
+.sc-card.sc-card--hab .sc-nom, .sc-card.sc-card--seg .sc-nom { color: var(--m-tinta); }
+.sc-card.sc-card--espera { gap: 1px; padding: 4px 9px; background: transparent; border: 1px dashed var(--m-linea-2); box-shadow: none; }
+.sc-card.sc-card--espera .sc-nom { font-size: var(--m-t-md); font-weight: 600; color: var(--m-tinta-2); line-height: 1.25; }
+.sc-espera-t { display: inline-flex; align-items: center; gap: 4px; font-size: var(--m-t-xs); font-weight: 600; color: var(--m-azul-500); }
+.sc-espera-t .ico { width: 12px; height: 12px; }
+
+/* ═══ «Todos los clientes»: ventana con la lista simple de la cartera ═══ */
+.sc-todos-b { margin-left: auto; min-height: 44px; }
+#scTodos .modal { max-width: 560px; font-family: var(--m-fuente); font-size: var(--m-t-lg); color: var(--m-tinta); }
+#scTodos button, #scTodos input { font-family: inherit; }
+#scTodos .modal-header .sc-todos-t { margin: 0; font-size: var(--m-t-xl); }
+#scTodos .close-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; margin-left: 12px; cursor: pointer; }
+#scTodos .close-btn:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
+.sc-todos-c { padding: 12px 16px 18px; }
+.sc-todos-c .sc-buscar { margin-bottom: 8px; }
+/* Los campos de los modales de la app traen borde propio: dentro del buscador no va (quedaba un borde doble). */
+.modal .sc-buscar input, .modal .sc-buscar input:focus { border: 0; box-shadow: none; outline: 0; background: transparent; border-radius: 0; padding: 13px 0; margin: 0; width: auto; }
+.sc-tl { list-style: none; margin: 0; padding: 0; }
+.sc-tl-f { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; border-top: 1px solid var(--m-linea); }
+.sc-tl-f:first-child { border-top: 0; }
+.sc-tl-n { all: unset; box-sizing: border-box; flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: var(--m-t-lg); font-weight: 700; color: var(--m-tinta); overflow-wrap: anywhere; }
+.sc-tl-n:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; border-radius: 4px; }
+.sc-tl-n[aria-current="true"] { color: var(--m-azul-500); }
+.sc-tl-f .sc-btn--chico { flex: none; }
+.sc-tl-h { margin: 16px 0 4px; padding-top: 12px; border-top: 2px solid var(--m-linea-2); font-size: var(--m-t-lg); font-weight: 800; color: var(--m-tinta-2); }
+.sc-tl-f--fuera .sc-tl-n { color: var(--m-tinta-2); font-weight: 600; }
+@media (max-width: 480px) { .sc-tl-f { flex-wrap: wrap; } .sc-tl-f .sc-btn--chico { width: 100%; justify-content: center; margin-bottom: 8px; } }
