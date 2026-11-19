@@ -12,6 +12,8 @@
    · La semana va de lunes a domingo.
    · Bloques (cada cliente en uno solo, en este orden): Recuperación → Compra única → Prioridad alta → Les tocaba esta semana → No tocar
      (en pantalla "No tocar" ya no es un bloque de Para hoy: en Clientes se ve como "Dentro de su ciclo", "Pidió esta semana" o "Inactivo").
+   Calendario de 2 semanas (18/11/2026): `agenda()` ubica a cada cliente en el día en que hay que escribirle (ver más abajo); lo que la persona mueve o marca
+   se guarda aparte (seg_agenda) y se le pasa por opciones. No cambia ningún cálculo anterior.
    Forma de cada pedido (la de mapPedido_ en index.html):
      { id, fecha (carga), fechaDespacho, cliente, estado, notas, items: [{ prod, qty }], eliminado_en? }
    Cambios del 13/10/2026 (pedido del usuario): no hay pedidos fijos; "dejó de llevar" = compró el producto 2 o más veces y después hizo
@@ -29,6 +31,9 @@
     // usuario, 13/10). Charly pasa a llamarse Juan Marcos: están los dos para que el cambio de nombre no le saque el acceso. Es solo de interfaz:
     // no protege los datos (la base deja leer los pedidos a cualquier sesión con PIN válido).
     usuarios: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
+    // Quién ve Clientes también en el celular (pantalla táctil angosta): solo Oscar y Joaquin (decisión del usuario, 19/11/2026). Los demás siguen igual que antes:
+    // en el celular la pestaña no se muestra y redirige a Pedidos. En PC no cambia nada.
+    celular: ['Oscar', 'Joaquin'],
     // Quién puede mover, pausar y resolver avisos (por ahora los mismos que ven la pestaña; propuesta a validar con el usuario). Solo de interfaz:
     // el permiso real lo da la base (tabla seg_editores, ver supabase/14-seguimiento-decisiones.sql).
     editores: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
@@ -339,6 +344,62 @@
     return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar, pausa, cierresPendientes, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
   }
 
+  // ── Calendario de 2 semanas (pedido del usuario, 18/11/2026) ──
+  // Día en que hay que escribirle a un cliente: su último pedido + su frecuencia (redondeada); si tiene días habituales de pedir, el primero de ellos
+  // desde ese vencimiento (hasta 7 días); si no, el mismo día salvo que caiga domingo (pasa al lunes). No es una decisión: es un cálculo sobre el motor.
+  const diaCalculado = c => {
+    const vence = sumarDias(c.ultimo, Math.max(1, Math.round(c.intervalo)));
+    if (c.diasHab && c.diasHab.length) { for (let i = 0; i < 7; i++) { const d = sumarDias(vence, i); if (c.diasHab.includes(diaSemana(d))) return d; } }
+    return diaSemana(vence) === 0 ? sumarDias(vence, 1) : vence;
+  };
+  // agenda(calc, { hoy?, agenda: Map(clave del cliente → { fecha, ciclo, escrito }), pedidos })
+  //   `agenda` guarda solo lo que la persona hizo: a qué día lo movió (`fecha`, válida solo si `ciclo` es la fecha de su último pedido actual) y el día en
+  //   que escribió (`escrito`). `pedidos` sirve para ver quién ya pidió esta semana («Pidió»). Devuelve:
+  //   { hoy, lunes, hasta, dias: [14 × { fecha, dow, semana, hoy, pasado, tarjetas }], masAdelante, pausados: [cliente],
+  //     porCliente: Map(clave → su tarjeta del ciclo actual, incluso la que cae fuera de la ventana), pidieron: Map(clave → día en que cargó su pedido de esta semana) }
+  //   Tarjeta: { clave, nombre, c, estado: 'pendiente' | 'escribi' | 'pidio', dia, calculado, movido, escrito, atraso (días de atraso), atrasado (pasaron 2 días o más de su día, o es recuperación: va a hoy, primero), recuperacion, fuera }.
+  //   La clave del cliente es la del motor (nombre normalizado), no el id de la base: seguimiento-datos.js traduce.
+  function agenda(calc, opciones) {
+    const o = opciones || {}, hoy = o.hoy || calc.hoy, lunes = lunesDe(hoy), hasta = sumarDias(lunes, 13);
+    const ag = o.agenda instanceof Map ? o.agenda : new Map(Object.entries(o.agenda || {}));
+    const dia10 = v => (v ? String(v).slice(0, 10) : '');
+    const porId = new Map(); calc.clientes.forEach(c => c.pedidoIds.forEach(id => porId.set(id, c)));
+    // «Pidió»: el pedido válido más reciente cargado entre el lunes de esta semana y hoy
+    const pidio = new Map();
+    (o.pedidos || []).forEach(p => {
+      if (!cuenta(p)) return;
+      const c = porId.get(String(p.id)), d = diaCarga(p); if (!c || d < lunes || d > hoy) return;
+      if (!pidio.has(c.clave) || d > pidio.get(c.clave)) pidio.set(c.clave, d);
+    });
+    const tarjetas = [], pausados = [], porCliente = new Map();
+    let masAdelante = 0;
+    calc.clientes.forEach(c => {
+      const pausa = !!(c.manual && c.manual.tipo === 'pausa');
+      if (pausa) { pausados.push(c); return; }
+      const rec = c.bloque === 'recuperacion';
+      if (pidio.has(c.clave)) tarjetas.push({ clave: c.clave, nombre: c.nombre, c, estado: 'pidio', dia: pidio.get(c.clave), calculado: '', movido: false, escrito: '', atraso: 0, atrasado: false, recuperacion: rec, fuera: false });
+      if (c.bloque === 'notocar' && c.motivo === 'inactivo') return;   // más de 150 días sin pedir: no se ofrece (se sigue encontrando en el buscador)
+      const fila = ag.get(c.clave) || null, calculado = diaCalculado(c);
+      const movido = !!(fila && dia10(fila.fecha) && dia10(fila.ciclo) === c.ultimo), base = movido ? dia10(fila.fecha) : calculado;
+      const escribi = !!(fila && dia10(fila.escrito) && dia10(fila.escrito) >= c.ultimo);
+      const atraso = base < hoy ? diffDias(hoy, base) : 0;
+      let dia = base, atrasado = false;
+      if (escribi && base >= lunes) dia = base;                                   // ya le escribió: la tarjeta tildada se queda donde estaba
+      else if (base < hoy) { dia = hoy; atrasado = !movido && (atraso >= 2 || rec); }   // vencido: se corre a hoy; «atrasado» si pasó mucho (2 días o más) o es recuperación
+      const t = { clave: c.clave, nombre: c.nombre, c, estado: escribi ? 'escribi' : 'pendiente', dia, calculado, movido, escrito: escribi ? dia10(fila.escrito) : '', atraso, atrasado, recuperacion: rec, fuera: dia > hasta };
+      porCliente.set(c.clave, t);
+      if (t.fuera) masAdelante++; else tarjetas.push(t);
+    });
+    const hecho = t => (t.estado === 'pendiente' ? 0 : 1);
+    const orden = (a, b) => hecho(a) - hecho(b) || (b.atrasado ? 1 : 0) - (a.atrasado ? 1 : 0) || b.atraso - a.atraso || a.nombre.localeCompare(b.nombre, 'es');
+    const dias = [];
+    for (let i = 0; i < 14; i++) {
+      const fecha = sumarDias(lunes, i);
+      dias.push({ fecha, dow: diaSemana(fecha), semana: i < 7 ? 0 : 1, hoy: fecha === hoy, pasado: fecha < hoy, tarjetas: tarjetas.filter(t => t.dia === fecha).sort(orden) });
+    }
+    return { hoy, lunes, hasta, dias, masAdelante, pausados, porCliente, pidieron: pidio };
+  }
+
   // Textos para la lista ("hace 12 días · suele cada 7")
   const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
   const diasTxt = n => (n === 0 ? 'hoy' : `hace ${plural(n, 'día', 'días')}`);
@@ -356,7 +417,7 @@
   // Clientes que hoy tienen el aviso «dejó de llevar» de un producto (para mostrar el alcance ANTES de confirmar una regla global).
   const alcanceAviso = (calc, claveProducto) => calc.clientes.filter(c => c.dejoDeTodos.some(q => q.clave === claveProducto)).map(c => ({ clave: c.clave, nombre: c.nombre }));
 
-  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto,
+  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto, agenda, diaCalculado,
     fechas: { ymd, aFecha, sumarDias, diffDias, lunesDe, diaSemana, fmtCorta, fechaLarga } };
   raiz.SegClientes = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

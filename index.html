@@ -3093,8 +3093,9 @@ function setTab(tab) {
   if (state.who === 'Mateo' && !['reparto','pedidos'].includes(tab)) tab = 'reparto';
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
-  // Por ahora Clientes y WhatsApp son solo para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
-  if ((tab === 'clientes' || tab === 'whatsapp') && esCelular()) tab = 'pedidos';
+  // Clientes y WhatsApp son para PC (decisión del usuario, 15/10/2026): en el celular no se muestran ni se puede entrar.
+  // Excepción (19/11/2026): Clientes también en el celular, solo para Oscar y Joaquin (SegClientes.CONFIG.celular).
+  if (bloqueadaEnCelular(tab)) tab = 'pedidos';
   // Stock: solo Oscar y Joaquín (lo confirma la base con stock_es_admin; ver stock.js).
   if (tab === 'stock' && !document.body.classList.contains('stock-visible')) tab = 'pedidos';
   activeTab = tab;
@@ -3145,7 +3146,12 @@ function goTab(tab) { setTab(tab); }
 // Si la ventana se achica a tamaño celular estando en Clientes o WhatsApp, se pasa a Pedidos (ver setTab).
 // Celular = pantalla angosta y táctil. Una PC con mucho zoom también queda angosta, pero usa mouse: ahí Clientes y WhatsApp siguen.
 function esCelular() { return !!(window.matchMedia && window.matchMedia('(max-width: 767.98px) and (pointer: coarse)').matches); }
-window.addEventListener('resize', () => { if ((activeTab === 'clientes' || activeTab === 'whatsapp') && esCelular()) setTab('pedidos'); });
+function bloqueadaEnCelular(tab) {
+  if (!esCelular()) return false;
+  if (tab === 'whatsapp') return true;
+  return tab === 'clientes' && !(window.SegUI && SegUI.puedeCelular && SegUI.puedeCelular(state && state.who));
+}
+window.addEventListener('resize', () => { if (bloqueadaEnCelular(activeTab)) setTab('pedidos'); });
 
 // Los campos de fecha/hora no se tipean: al tocarlos se abre el widget
 // del navegador (en el celular ya es el comportamiento nativo).

@@ -11,6 +11,10 @@
      cerrarDecision(p)   → { ok:true } | { ok:false, conflicto:true, actual } | { ok:false, error }      p = { clave, nombre, espera, cierre }
      crearRegla(p)       → { ok:true, id } | { ok:false, error }   p = { tipo, producto, productoNombre, sustituto?, sustitutoNombre?, clave?, nombre?, motivo?, nota?, revision?, desde? }
      cerrarRegla(id)     → { ok:true }
+   Agenda del calendario (supabase/21-seguimiento-agenda.sql): `cargar()` trae también `agenda: [{ clave, fecha, ciclo, escrito }]` y `agendaOk` (false si la tabla
+   todavía no existe o no se pudo leer: el calendario funciona igual con los días calculados, sin poder mover ni marcar).
+     agendar(p)          → { ok:true } | { ok:false, error }   p = { clave, fecha ('YYYY-MM-DD' o null = volver a su día), ciclo (fecha de su último pedido) }   (idempotente)
+     escribi(p)          → { ok:true } | { ok:false, error }   p = { clave, fecha (día en que le escribió, o null para desmarcar) }                         (idempotente)
    El autor lo pone el almacén (en la base lo decide el servidor por el mail de la sesión; acá nunca se confía en lo que diga la pantalla). */
 (function (raiz) {
   'use strict';
@@ -18,13 +22,15 @@
   const norm = S.norm, MOTIVOS = S.MOTIVOS, TIPOS = S.TIPOS_DECISION, TIPOS_REGLA = S.TIPOS_REGLA;
   const vacio = v => v === undefined || v === null || v === '';
   const o = v => (vacio(v) ? null : String(v));
+  const fechaOk = v => vacio(v) || /^\d{4}-\d{2}-\d{2}$/.test(String(v));
   const idNuevo = () => (raiz.crypto && raiz.crypto.randomUUID ? raiz.crypto.randomUUID() : 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 
   // ── Almacén local (modo prueba y pruebas automáticas) ──
-  // opts: { storage (como localStorage), clave (nombre del almacén), quien: () => 'Oscar', hoy: () => 'YYYY-MM-DD', ahora?: () => iso }
+  // opts: { storage (como localStorage), clave (nombre del almacén), quien: () => 'Oscar', hoy: () => 'YYYY-MM-DD', ahora?: () => iso,
+  //         semilla?: () => ({ clave: { fecha, ciclo, escrito } }) (agenda de ejemplo del modo prueba: solo se usa mientras no se haya guardado nada) }
   function almacenLocal(opts) {
     const quien = () => (opts.quien && opts.quien()) || 'Prueba', hoy = () => opts.hoy(), ahora = () => (opts.ahora ? opts.ahora() : new Date().toISOString());
-    const leer = () => { try { const d = JSON.parse(opts.storage.getItem(opts.clave)); if (d && Array.isArray(d.decisiones) && Array.isArray(d.reglas)) return d; } catch (e) { /* vacío o dañado: se empieza de cero */ } return { decisiones: [], reglas: [] }; };
+    const leer = () => { try { const d = JSON.parse(opts.storage.getItem(opts.clave)); if (d && Array.isArray(d.decisiones) && Array.isArray(d.reglas)) { if (!d.agenda || typeof d.agenda !== 'object') d.agenda = {}; return d; } } catch (e) { /* vacío o dañado: se empieza de cero */ } return { decisiones: [], reglas: [], agenda: opts.semilla && !opts.storage.getItem(opts.clave) ? (opts.semilla() || {}) : {} }; };
     const guardar = d => { opts.storage.setItem(opts.clave, JSON.stringify(d)); };
     const cerrar = (x, cierre) => { x.vigente = false; x.cerradaEn = ahora(); x.cerradaPor = quien(); x.cierre = cierre; };
     const actual = x => (x ? { id: x.id, tipo: x.tipo, autor: x.autor, creado: x.creado } : null);
@@ -32,7 +38,23 @@
       modo: 'prueba',
       async cargar() {
         const d = leer();
-        return { estado: 'ok', decisiones: d.decisiones.filter(x => x.vigente), reglas: d.reglas.filter(x => x.vigente) };
+        return { estado: 'ok', decisiones: d.decisiones.filter(x => x.vigente), reglas: d.reglas.filter(x => x.vigente), agendaOk: true,
+          agenda: Object.entries(d.agenda).map(([clave, f]) => ({ clave, fecha: f.fecha || null, ciclo: f.ciclo || null, escrito: f.escrito || null })) };
+      },
+      // Imitan a seg_agendar y seg_escribi: un renglón por cliente; repetir la misma llamada deja lo mismo.
+      async agendar(p) {
+        if (!p.clave) return { ok: false, error: 'Falta el cliente' };
+        if (!fechaOk(p.fecha) || !fechaOk(p.ciclo)) return { ok: false, error: 'Fecha inválida' };
+        const d = leer(), f = d.agenda[p.clave] || {};
+        d.agenda[p.clave] = Object.assign(f, { fecha: o(p.fecha), ciclo: o(p.ciclo), autor: quien(), en: ahora() }); guardar(d);
+        return { ok: true };
+      },
+      async escribi(p) {
+        if (!p.clave) return { ok: false, error: 'Falta el cliente' };
+        if (!fechaOk(p.fecha)) return { ok: false, error: 'Fecha inválida' };
+        const d = leer(), f = d.agenda[p.clave] || { fecha: null, ciclo: null };
+        d.agenda[p.clave] = Object.assign(f, { escrito: o(p.fecha), autor: quien(), en: ahora() }); guardar(d);
+        return { ok: true };
       },
       async decidir(p) {
         if (!TIPOS.includes(p.tipo)) return { ok: false, error: 'Destino desconocido' };
@@ -130,7 +152,14 @@
             desde: x.desde, pedidosConocidos: x.pedidos_conocidos || [], autor: x.autor, creado: x.creado_en, version: x.version, vigente: true }));
           const reglas = (rr.data || []).map(x => ({ id: x.id, tipo: x.tipo, producto: x.producto_clave, productoNombre: x.producto_nombre, sustituto: x.sustituto_clave || '', sustitutoNombre: x.sustituto_nombre || '',
             clave: x.cliente_id ? (claveDe(x.cliente_id) || norm(x.cliente_nombre)) : '', nombre: x.cliente_nombre || '', motivo: x.motivo || '', nota: x.nota || '', revision: x.revision_en || '', desde: x.desde, autor: x.autor, creado: x.creado_en, vigente: true }));
-          return { estado: 'ok', decisiones, reglas };
+          // La agenda del calendario va aparte: si su tabla todavía no existe (o falla), lo demás sigue andando y el calendario solo muestra los días calculados.
+          let agenda = [], agendaOk = true, agendaMensaje = '';
+          try {
+            const ar = await sb.from('seg_agenda').select('cliente_id,fecha,ciclo,escrito_en');
+            if (ar.error) { agendaOk = false; agendaMensaje = noInstalada(ar.error) ? '' : err(ar.error); }
+            else agenda = (ar.data || []).map(x => ({ clave: claveDe(x.cliente_id), fecha: x.fecha || null, ciclo: x.ciclo || null, escrito: x.escrito_en || null })).filter(x => x.clave);
+          } catch (e) { agendaOk = false; agendaMensaje = noInstalada(e) ? '' : err(e); }
+          return { estado: 'ok', decisiones, reglas, agenda, agendaOk, agendaMensaje };
         } catch (e) { return noInstalada(e) ? { estado: 'noInstalado', decisiones: [], reglas: [] } : { estado: 'error', decisiones: [], reglas: [], mensaje: err(e) }; }
       },
       async decidir(p) {
@@ -142,6 +171,16 @@
         if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
         const id = idDe(p.clave); if (!id) return sinCliente;
         return rpc('seg_cerrar_decision', { p_cliente_id: id, p_espera: o(p.espera), p_cierre: p.cierre || 'automatico' });
+      },
+      async agendar(p) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(p.clave); if (!id) return sinCliente;
+        return rpc('seg_agendar', { p_cliente_id: id, p_fecha: o(p.fecha), p_ciclo: o(p.ciclo) });
+      },
+      async escribi(p) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(p.clave); if (!id) return sinCliente;
+        return rpc('seg_escribi', { p_cliente_id: id, p_fecha: o(p.fecha) });
       },
       async crearRegla(p) {
         let cid = null;
