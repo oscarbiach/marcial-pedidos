@@ -347,24 +347,33 @@
   // ── Calendario de 2 semanas (pedido del usuario, 18/11/2026) ──
   // Día en que hay que escribirle a un cliente: su último pedido + su frecuencia (redondeada); si tiene días habituales de pedir, el primero de ellos
   // desde ese vencimiento (hasta 7 días); si no, el mismo día salvo que caiga domingo (pasa al lunes). No es una decisión: es un cálculo sobre el motor.
+  // Los domingos no se mandan mensajes: todo lo que caería en domingo pasa al lunes siguiente.
+  const sinDomingo = d => (diaSemana(d) === 0 ? sumarDias(d, 1) : d);
   const diaCalculado = c => {
     const vence = sumarDias(c.ultimo, Math.max(1, Math.round(c.intervalo)));
-    if (c.diasHab && c.diasHab.length) { for (let i = 0; i < 7; i++) { const d = sumarDias(vence, i); if (c.diasHab.includes(diaSemana(d))) return d; } }
-    return diaSemana(vence) === 0 ? sumarDias(vence, 1) : vence;
+    if (c.diasHab && c.diasHab.length) { for (let i = 0; i < 7; i++) { const d = sumarDias(vence, i); if (c.diasHab.includes(diaSemana(d))) return sinDomingo(d); } }
+    return sinDomingo(vence);
   };
+  // Tipo de cliente (para saber si se le habla o se le hace seguimiento):
+  //   'recupero'  → dejó de comprar: bloque «Recuperación» del motor (cálculo o decisión manual) o pasó 2 veces su frecuencia sin pedir. Gana sobre «unica».
+  //   'unica'     → una sola compra: hay que hacerle seguimiento para que vuelva.
+  //   'habitual'  → compra siempre (2 o más pedidos): es a quien se le escribe porque le toca.
+  const tipoDe = c => ((c.bloque === 'recuperacion' || (c.manual && c.manual.tipo === 'recuperacion') || c.atraso >= 2) ? 'recupero' : (c.n === 1 || c.bloque === 'unica') ? 'unica' : 'habitual');
+
   // agenda(calc, { hoy?, agenda: Map(clave del cliente → { fecha, ciclo, escrito }), pedidos })
   //   `agenda` guarda solo lo que la persona hizo: a qué día lo movió (`fecha`, válida solo si `ciclo` es la fecha de su último pedido actual) y el día en
   //   que escribió (`escrito`). `pedidos` sirve para ver quién ya pidió esta semana («Pidió»). Devuelve:
-  //   { hoy, lunes, hasta, dias: [14 × { fecha, dow, semana, hoy, pasado, tarjetas }], masAdelante, pausados: [cliente],
+  //   { hoy, lunes, hasta, dias: [12 × { fecha, dow, semana, hoy, pasado, tarjetas }] (de lunes a sábado, dos semanas: no hay domingos), masAdelante, pausados: [cliente],
   //     porCliente: Map(clave → su tarjeta del ciclo actual, incluso la que cae fuera de la ventana), pidieron: Map(clave → día en que cargó su pedido de esta semana) }
   //   Tarjeta: { clave, nombre, c, estado: 'pendiente' | 'escribi' | 'pidio', dia, calculado, movido, escrito, atraso (días de atraso), atrasado (pasaron 2 días o más de su día, o es recuperación: va a hoy, primero), recuperacion, fuera }.
   //   La clave del cliente es la del motor (nombre normalizado), no el id de la base: seguimiento-datos.js traduce.
   function agenda(calc, opciones) {
-    const o = opciones || {}, hoy = o.hoy || calc.hoy, lunes = lunesDe(hoy), hasta = sumarDias(lunes, 13);
+    const o = opciones || {}, hoy = o.hoy || calc.hoy, lunes = lunesDe(hoy), ultimoDia = sumarDias(lunes, 12);   // la ventana termina el sábado de la semana que viene
+    const hoyEf = sinDomingo(hoy);   // un domingo «hoy» no tiene columna: lo de hoy se ve el lunes
     const ag = o.agenda instanceof Map ? o.agenda : new Map(Object.entries(o.agenda || {}));
     const dia10 = v => (v ? String(v).slice(0, 10) : '');
     const porId = new Map(); calc.clientes.forEach(c => c.pedidoIds.forEach(id => porId.set(id, c)));
-    // «Pidió»: el pedido válido más reciente cargado entre el lunes de esta semana y hoy
+    // «Pidió»: el pedido válido más reciente cargado entre el lunes de esta semana y hoy (uno cargado un domingo se ve el sábado: no hay columna de domingo)
     const pidio = new Map();
     (o.pedidos || []).forEach(p => {
       if (!cuenta(p)) return;
@@ -376,28 +385,30 @@
     calc.clientes.forEach(c => {
       const pausa = !!(c.manual && c.manual.tipo === 'pausa');
       if (pausa) { pausados.push(c); return; }
-      const rec = c.bloque === 'recuperacion';
-      if (pidio.has(c.clave)) tarjetas.push({ clave: c.clave, nombre: c.nombre, c, estado: 'pidio', dia: pidio.get(c.clave), calculado: '', movido: false, escrito: '', atraso: 0, atrasado: false, recuperacion: rec, fuera: false });
+      const tipo = tipoDe(c);
+      if (pidio.has(c.clave)) { const d = pidio.get(c.clave); tarjetas.push({ clave: c.clave, nombre: c.nombre, c, estado: 'pidio', tipo, dia: diaSemana(d) === 0 ? sumarDias(d, -1) : d, calculado: '', movido: false, escrito: '', atraso: 0, atrasado: false, recuperacion: tipo === 'recupero', fuera: false }); }
       if (c.bloque === 'notocar' && c.motivo === 'inactivo') return;   // más de 150 días sin pedir: no se ofrece (se sigue encontrando en el buscador)
       const fila = ag.get(c.clave) || null, calculado = diaCalculado(c);
-      const movido = !!(fila && dia10(fila.fecha) && dia10(fila.ciclo) === c.ultimo), base = movido ? dia10(fila.fecha) : calculado;
+      const movido = !!(fila && dia10(fila.fecha) && dia10(fila.ciclo) === c.ultimo), base = movido ? sinDomingo(dia10(fila.fecha)) : calculado;   // un movimiento viejo guardado en domingo vale lunes
       const escribi = !!(fila && dia10(fila.escrito) && dia10(fila.escrito) >= c.ultimo);
       const atraso = base < hoy ? diffDias(hoy, base) : 0;
       let dia = base, atrasado = false;
       if (escribi && base >= lunes) dia = base;                                   // ya le escribió: la tarjeta tildada se queda donde estaba
-      else if (base < hoy) { dia = hoy; atrasado = !movido && (atraso >= 2 || rec); }   // vencido: se corre a hoy; «atrasado» si pasó mucho (2 días o más) o es recuperación
-      const t = { clave: c.clave, nombre: c.nombre, c, estado: escribi ? 'escribi' : 'pendiente', dia, calculado, movido, escrito: escribi ? dia10(fila.escrito) : '', atraso, atrasado, recuperacion: rec, fuera: dia > hasta };
+      else if (base < hoyEf) { dia = hoyEf; atrasado = !movido && atraso >= 2 && tipo === 'habitual'; }   // vencido: se corre a hoy; «atrasado» solo un habitual con 2 días o más pasados de su día
+      const t = { clave: c.clave, nombre: c.nombre, c, estado: escribi ? 'escribi' : 'pendiente', tipo, dia, calculado, movido, escrito: escribi ? dia10(fila.escrito) : '', atraso, atrasado, recuperacion: tipo === 'recupero', fuera: dia > ultimoDia };
       porCliente.set(c.clave, t);
       if (t.fuera) masAdelante++; else tarjetas.push(t);
     });
-    const hecho = t => (t.estado === 'pendiente' ? 0 : 1);
-    const orden = (a, b) => hecho(a) - hecho(b) || (b.atrasado ? 1 : 0) - (a.atrasado ? 1 : 0) || b.atraso - a.atraso || a.nombre.localeCompare(b.nombre, 'es');
+    const hecho = t => (t.estado === 'pendiente' ? 0 : 1), grupo = t => (t.tipo === 'habitual' ? 0 : 1);
+    // dentro de un día: primero los pendientes (los habituales y después los de seguimiento; los atrasados primero en su grupo) y al final los hechos
+    const orden = (a, b) => hecho(a) - hecho(b) || grupo(a) - grupo(b) || (b.atrasado ? 1 : 0) - (a.atrasado ? 1 : 0) || b.atraso - a.atraso || a.nombre.localeCompare(b.nombre, 'es');
     const dias = [];
     for (let i = 0; i < 14; i++) {
-      const fecha = sumarDias(lunes, i);
-      dias.push({ fecha, dow: diaSemana(fecha), semana: i < 7 ? 0 : 1, hoy: fecha === hoy, pasado: fecha < hoy, tarjetas: tarjetas.filter(t => t.dia === fecha).sort(orden) });
+      const fecha = sumarDias(lunes, i); if (diaSemana(fecha) === 0) continue;   // sin domingos
+      dias.push({ fecha, dow: diaSemana(fecha), semana: i < 7 ? 0 : 1, hoy: fecha === hoyEf, pasado: fecha < hoyEf, tarjetas: tarjetas.filter(t => t.dia === fecha).sort(orden) });
     }
-    return { hoy, lunes, hasta, dias, masAdelante, pausados, porCliente, pidieron: pidio };
+    const conteo = { todos: tarjetas.length, habitual: tarjetas.filter(t => t.tipo === 'habitual').length, seguimiento: tarjetas.filter(t => t.tipo !== 'habitual').length };
+    return { hoy, lunes, hasta: ultimoDia, dias, masAdelante, pausados, porCliente, pidieron: pidio, conteo };
   }
 
   // Textos para la lista ("hace 12 días · suele cada 7")
@@ -417,7 +428,7 @@
   // Clientes que hoy tienen el aviso «dejó de llevar» de un producto (para mostrar el alcance ANTES de confirmar una regla global).
   const alcanceAviso = (calc, claveProducto) => calc.clientes.filter(c => c.dejoDeTodos.some(q => q.clave === claveProducto)).map(c => ({ clave: c.clave, nombre: c.nombre }));
 
-  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto, agenda, diaCalculado,
+  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto, agenda, diaCalculado, tipoDe,
     fechas: { ymd, aFecha, sumarDias, diffDias, lunesDe, diaSemana, fmtCorta, fechaLarga } };
   raiz.SegClientes = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

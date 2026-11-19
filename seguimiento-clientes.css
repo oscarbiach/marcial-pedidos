@@ -250,12 +250,11 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 .sc-warn { color: var(--m-aviso-tinta); }
 .sc-warn b { font-weight: 800; }
 
-/* Semanas: siete columnas de lunes a domingo (el domingo queda angosto si está vacío) */
+/* Semanas: seis columnas de lunes a sábado (los domingos no se mandan mensajes) */
 .sc-sem { margin: 0 0 18px; }
 .sc-sem-t { margin: 0 2px 8px; font-size: var(--m-t-xl); font-weight: 800; }
 .sc-sem-t .sc-muted { font-size: var(--m-t-md); font-weight: 600; margin-left: 6px; }
-.sc-sem-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.sc-sem-g--dom { grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(58px, .38fr); }
+.sc-sem-g { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .sc-dia { display: flex; flex-direction: column; min-width: 0; min-height: 96px; padding: 8px; background: var(--m-superficie-2); border: 1px solid var(--m-linea); border-radius: var(--m-r-md); }
 .sc-dia--hoy { background: var(--m-azul-50); border-color: var(--m-azul-500); box-shadow: inset 0 3px 0 var(--m-azul-500); }
 .sc-dia--pasado { background: var(--m-superficie); border-style: dashed; }
@@ -284,10 +283,6 @@ body.seg-celular #bottomNav [data-tab="clientes"] { display: flex !important; }
 .sc-hecha-ic--escribi { color: var(--m-azul-500); }
 .sc-dia-nadie { margin: 10px 0 0; text-align: center; color: var(--m-tinta-3); }
 .sc-dia .sc-link { margin-top: 6px; min-height: 32px; font-size: var(--m-t-sm); }
-.sc-dia--vacio { min-height: 0; padding: 8px 6px; }
-.sc-dia--vacio .sc-dia-h { flex-direction: column; align-items: flex-start; gap: 2px; margin: 0; }
-.sc-dia--vacio .sc-dia-h .sc-cant { margin-left: 0; }
-.sc-dia--vacio .sc-dia-nadie { display: none; }
 /* Mientras se arrastra: los días donde se puede soltar se resaltan y el de abajo del puntero se marca fuerte */
 .sc--arr .sc-dia[data-zona="dia"] { outline: 2px dashed var(--m-azul-300); outline-offset: -2px; background: var(--m-azul-50); }
 .sc--arr .sc-dia--pasado { opacity: .6; }
@@ -363,7 +358,7 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 
 /* «Mover a…»: los días de la ventana */
 .sc-dop-h { margin: 4px 0 6px; font-size: var(--m-t-md); font-weight: 800; color: var(--m-tinta-2); }
-.sc-dops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.sc-dops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 .sc-dop { all: unset; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; width: 100%; min-height: 64px; padding: 4px 2px; cursor: pointer; text-align: center; border: 1px solid var(--m-linea-2); border-radius: var(--m-r-md); background: var(--m-superficie); }
 .sc-dop b { font-size: var(--m-t-xl); line-height: 1.1; font-variant-numeric: tabular-nums; }
 .sc-dop-d { font-size: var(--m-t-sm); font-weight: 700; color: var(--m-tinta-2); text-transform: capitalize; }
@@ -372,7 +367,7 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 .sc-dop:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
 .sc-dop:disabled { background: var(--m-azul-100); border-color: var(--m-azul-400); cursor: default; }
 @media (hover: hover) and (pointer: fine) { .sc-dop:hover:not(:disabled) { background: var(--m-superficie-2); border-color: var(--m-azul-400); } }
-@media (max-width: 480px) { .sc-dops { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .sc-dops { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 @media (max-width: 1023.98px) { .sc-bus { width: 100%; } }
 /* En celular la barra de abajo es fija: hay que dejar lugar para que el final de la lista y de la ficha no quede tapado */
@@ -400,3 +395,20 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 #scModal .close-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; margin-left: 12px; cursor: pointer; }
 #scModal .close-btn:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
 #scModal .sc-f { padding-top: 14px; }
+
+/* ═══ Tipos de cliente: Hablarles (habitual) y Seguimiento (única compra / dejó de comprar) ═══ */
+.sc-t-unica { --tf: #ECE9FA; --tt: #3F3399; --ta: #5B4BC4; --tx: #3F3399; }   /* violeta: una sola compra */
+.sc-t-dejo { --tf: #FDE8D3; --tt: #8A3B05; --ta: #D9730D; --tx: #8A3B05; }    /* naranja oscuro: dejó de comprar (no es el rojo de «Atrasado») */
+.sc-card.sc-card--seg-unica { border-left: 5px solid #5B4BC4; }
+.sc-card.sc-card--seg-recupero { border-left: 5px solid #D9730D; }
+.sc-sep--g { margin-top: 6px; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; }
+.sc-sep--g:first-child { margin-top: 0; }
+.sc-fil { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 2px 14px; }
+.sc-fil-b { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; cursor: pointer; border: 1px solid var(--m-linea-2); border-radius: var(--m-r-pill); background: var(--m-superficie); color: var(--m-tinta); font-size: var(--m-t-md); font-weight: 700; transition: background-color var(--m-dur-1) var(--m-ease); }
+.sc-fil-b[aria-pressed="true"] { background: var(--m-marino-800); border-color: var(--m-marino-800); color: #fff; }
+.sc-fil-n { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sc-fil-b:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .sc-fil-b:hover:not([aria-pressed="true"]) { background: var(--m-superficie-2); border-color: var(--m-azul-400); } }
+@media (prefers-reduced-motion: reduce) { .sc-fil-b { transition: none; } }
+.sc-acc-tipo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: var(--m-t-md); font-weight: 600; color: var(--m-tinta); }
+.sc-ley b { color: var(--m-tinta); }
