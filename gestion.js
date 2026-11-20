@@ -12,7 +12,7 @@
   document.body.classList.toggle('gestion-admin',admin());document.body.classList.toggle('gestion-oficina',oficina());
   if(S.who===state.who)return;
   S.who=state.who;S.epoch++;S.cat=null;S.notes=[];S.aliases={};S.catError=S.nError='';S.busy=false;S.catLoading=S.nLoading=false;
-  $('gestion-modal')?.remove();if(S.channel)sb.removeChannel(S.channel);S.channel=null;
+  $('gestion-modal')?.remove();window.AdminUI?.reiniciar();if(S.channel)sb.removeChannel(S.channel);S.channel=null;
   badge();aliases();
   if(oficina()){loadNotes();S.channel=sb.channel('notas-oficina').on('postgres_changes',{event:'*',schema:'public',table:'app_notas'},()=>loadNotes()).subscribe();}
  }
@@ -96,7 +96,7 @@
   if(a==='nota-modo'&&oficina()){S.noteMode=b.dataset.mode;renderNotes();}
   if(['editar-nota','estado-nota'].includes(a)&&oficina()){const n=S.notes.find(n=>n.id===b.dataset.id);if(!n)return;if(a==='editar-nota')noteForm(n);else quick(async()=>{await rpc('notas_guardar',{p_id:n.id,p_version:n.version,p_cliente:n.cliente,p_texto:n.texto,p_fecha:n.fecha,p_estado:b.dataset.state});await loadNotes();});}
  });
- setInterval(()=>{if(!document.hidden&&state.pin){aliases();if(oficina())loadNotes();if(activeTab==='productos')loadCat();}},45000);
+ setInterval(()=>{if(!document.hidden&&state.pin){aliases();if(oficina())loadNotes();if(window.AdminUI?.abierto('productos'))loadCat();}},45000);
  window.addEventListener('online',()=>{if(oficina())loadNotes();});
  window.GestionUI={iniciar,admin,oficina,key,alias:name=>S.aliases[key(name)]||name,abrir:tab=>{if(tab==='productos'){renderCat();loadCat();}if(tab==='notas'){renderNotes();loadNotes();}}};
 })();

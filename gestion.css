@@ -1,5 +1,5 @@
-[data-tab="productos"],[data-tab="notas"],#notas-bell{display:none!important}
-body.gestion-admin [data-tab="productos"],body.gestion-oficina [data-tab="notas"],body.gestion-oficina #notas-bell{display:inline-flex!important}
+[data-tab="notas"],#notas-bell{display:none!important}
+body.gestion-oficina [data-tab="notas"],body.gestion-oficina #notas-bell{display:inline-flex!important}
 #notas-bell{position:relative;align-items:center;justify-content:center;border:1px solid #cbd8e8;border-radius:50%;width:38px;height:38px;background:white;color:#193959;flex:none}
 #notas-bell b{position:absolute;right:-6px;top:-6px;border-radius:12px;background:#8056a6;color:white;font-size:11px;padding:2px 5px}#notas-bell b:empty{display:none}
 .gestion{max-width:1100px;margin:0 auto;color:#193959}.g-head,.g-tools,.g-tabs,.g-actions,.g-note-top,.g-note-bottom{display:flex;align-items:center;gap:10px}.g-head{justify-content:space-between;margin-bottom:18px}.g-head h2{font-size:23px;margin:0}.g-tools{margin-bottom:16px}.g-tools input{flex:1;min-width:0}.g-tabs{flex-wrap:wrap;margin-bottom:16px}

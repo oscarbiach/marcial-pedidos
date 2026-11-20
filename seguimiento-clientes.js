@@ -97,7 +97,8 @@
   const termina = (clave, sufijos) => (sufijos || []).some(x => { const k = norm(x); return clave === k || clave.endsWith(' ' + k); });
   const coincide = (clave, patrones) => (patrones || []).some(p => { const k = norm(p); return clave === k || clave.startsWith(k + ' '); });
   const cuenta = p => p && !p.eliminado_en && p.estado !== 'Cancelado' && p.cliente && String(p.cliente).trim() && p.fecha;
-  const diaCarga = p => String(p.fecha).slice(0, 10);
+  // La fecha real en que el cliente hizo el pedido (fechaPedido, corregida desde Administración) manda sobre el día de carga.
+  const diaCarga = p => String(p.fechaPedido || p.fecha).slice(0, 10);
   const diaRef = (p, hoy) => { const d = p.fechaDespacho ? String(p.fechaDespacho).slice(0, 10) : ''; return d && d <= hoy ? d : diaCarga(p); };
 
   // ── Reglas de producto (IDEA-12) ──

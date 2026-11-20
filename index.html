@@ -1604,7 +1604,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="reparto-vivo.css?v=117">
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
-<link rel="stylesheet" href="gestion.css?v=117">
+<link rel="stylesheet" href="gestion.css?v=129">
+<link rel="stylesheet" href="admin.css?v=129">
 <link rel="stylesheet" href="reparto-control.css?v=117">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
@@ -1672,7 +1673,6 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
       <button data-tab="whatsapp" onclick="goTab('whatsapp')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg>WhatsApp</button>
       <button data-tab="stock" onclick="goTab('stock')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg>Stock</button>
-      <button data-tab="productos" onclick="goTab('productos')">Productos</button>
       <button data-tab="notas" onclick="goTab('notas')">Notas</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
@@ -1684,6 +1684,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       -->
     </nav>
     <button id="notas-bell" data-g="bell" aria-label="Notas pendientes"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b></b></button>
+    <button id="adminBtn" type="button" data-adm="abrir" aria-label="Administración" aria-haspopup="dialog" title="Administración"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-settings"/></svg></button>
     <button id="whoBtn" onclick="openWhoModal()" aria-label="Cambiar usuario"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
   </header>
 
@@ -1825,7 +1826,6 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- STOCK: recuento, stock actual y movimientos. Solo Oscar y Joaquín (stock.js) -->
     <div id="tab-stock" class="tab-panel"><div id="st-raiz"></div></div>
-    <div id="tab-productos" class="tab-panel"><div id="gestion-productos" class="gestion"></div></div>
     <div id="tab-notas" class="tab-panel"><div id="gestion-notas" class="gestion"></div></div>
 
   </main>
@@ -1838,7 +1838,6 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
     <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg></span>WhatsApp</button>
     <button data-tab="stock" class="bn-item" onclick="goTab('stock')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></span>Stock</button>
-    <button data-tab="productos" class="bn-item" onclick="goTab('productos')"><span>▦</span>Productos</button>
     <button data-tab="notas" class="bn-item" onclick="goTab('notas')"><span>☷</span>Notas</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
@@ -1847,6 +1846,27 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="visitar" class="bn-item" onclick="goTab('visitar')"><span>📍</span>Visitar</button>
     -->
   </nav>
+</div>
+
+<!-- ── PANEL DE ADMINISTRACIÓN (solo Oscar y Joaquín; la base valida con stock_es_admin): Productos, Clientes e Historial de pedidos. Lo arma admin.js ── -->
+<div class="overlay" id="adminPanel">
+  <div class="modal" id="admin-modal" role="dialog" aria-modal="true" aria-labelledby="adm-t" tabindex="-1">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 id="adm-t">Administración</h2>
+      <button type="button" class="close-btn" data-adm="cerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="adm-tabs" role="tablist" aria-label="Secciones de administración">
+      <button type="button" role="tab" id="adm-tab-productos" data-adm="pestana" data-s="productos" aria-controls="adm-productos">Productos</button>
+      <button type="button" role="tab" id="adm-tab-clientes" data-adm="pestana" data-s="clientes" aria-controls="adm-clientes">Clientes</button>
+      <button type="button" role="tab" id="adm-tab-historial" data-adm="pestana" data-s="historial" aria-controls="adm-historial">Historial de pedidos</button>
+    </div>
+    <div class="adm-cuerpo">
+      <section id="adm-productos" role="tabpanel" aria-labelledby="adm-tab-productos"><div id="gestion-productos" class="gestion"></div></section>
+      <section id="adm-clientes" role="tabpanel" aria-labelledby="adm-tab-clientes" hidden></section>
+      <section id="adm-historial" role="tabpanel" aria-labelledby="adm-tab-historial" hidden></section>
+    </div>
+  </div>
 </div>
 
 <!-- ── MODAL: «Todos los clientes» (seguimiento): lista simple de la cartera; el contenido lo arma seguimiento-clientes-ui.js (pintarTodos) ── -->
@@ -2173,7 +2193,7 @@ function mapPedido_(row) {
       return o;
     });
   return {
-    id: row.id, fecha: row.fecha, quien: row.quien || '', cliente: row.cliente,
+    id: row.id, fecha: row.fecha, fechaPedido: row.fecha_pedido || '', quien: row.quien || '', cliente: row.cliente,
     fechaEntrega: row.fecha_entrega || '', direccion: row.direccion || '',
     items: items, notas: row.notas || '',
     estado: row.estado || 'Pendiente', fechaDespacho: row.fecha_despacho || '',
@@ -2251,11 +2271,12 @@ async function sbGetAppData() {
     // Las medidas nuevas (alterna_unidad, caja_en) se piden aparte de las de siempre: si la base todavía
     // no las tiene (18-productos-medidas.sql sin aplicar), la app abre igual, sin esas opciones.
     leerProductos_(),
-    sb.from('clientes').select('nombre,direccion'),
-    sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+    leerClientes_(),
+    // fecha_pedido (la fecha real corregida desde Administración) puede no existir todavía en la base: selPedidos_ reintenta sin ella.
+    selPedidos_(cols => sb.from('pedidos')
+      .select(cols)
       .or(`eliminado_en.not.is.null,estado.eq.Pendiente,fecha_despacho.gte.${corte}`)
-      .order('fecha', { ascending: false }),
+      .order('fecha', { ascending: false })),
     // Las últimas hojas de reparto. Va en el MISMO viaje que todo lo
     // demás (Promise.all), así que no agrega espera.
     sb.from('hojas_reparto')
@@ -2288,8 +2309,10 @@ async function sbGetAppData() {
   const products = (prod.data || []).map(productoDeFila_)
     .sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
 
-  const clientes = (cli.data || []).map(c => ({ n: c.nombre, d: c.direccion || '' }))
+  // Los clientes dados de baja no se ofrecen al cargar (ni en el seguimiento, salvo que pidan de nuevo): van aparte.
+  const clientes = (cli.data || []).filter(c => !c.eliminado_en).map(c => ({ n: c.nombre, d: c.direccion || '' }))
     .sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
+  const clientesBaja = (cli.data || []).filter(c => c.eliminado_en).map(c => ({ n: c.nombre, baja: String(c.eliminado_en).slice(0, 10) }));
 
   const pedidos = [], papelera = [];
   (ped.data || []).forEach(row => {
@@ -2332,7 +2355,19 @@ async function sbGetAppData() {
   }
   products.forEach(pr => { pr.pop = pop[pr.n.toLowerCase()] || 0; });
 
-  return { products, clientes, pedidos, papelera, hojas, today: hoy };
+  return { products, clientes, clientesBaja, pedidos, papelera, hojas, today: hoy };
+}
+
+// Columnas de pedidos que usa la app. fecha_pedido = fecha real corregida desde Administración (puede faltar en la base).
+const PED_COLS_ = 'id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)';
+async function selPedidos_(armar) {
+  const r = await armar(PED_COLS_.replace('fecha,quien', 'fecha,fecha_pedido,quien'));
+  return r.error ? armar(PED_COLS_) : r;
+}
+// Clientes con su baja (eliminado_en); si la columna todavía no existe, la lectura de siempre.
+async function leerClientes_() {
+  const r = await sb.from('clientes').select('nombre,direccion,eliminado_en');
+  return r.error ? sb.from('clientes').select('nombre,direccion') : r;
 }
 
 // El resto del historial de Despachados/Cancelados que la carga de
@@ -2354,14 +2389,14 @@ async function sbGetHistorialAntiguo() {
   let desde = 0;
   let todos = [];
   while (true) {
-    const { data, error } = await sb.from('pedidos')
-      .select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)')
+    const { data, error } = await selPedidos_(cols => sb.from('pedidos')
+      .select(cols)
       .in('estado', ['Despachado', 'Cancelado'])
       .is('eliminado_en', null)
       .or(`fecha_despacho.lt.${corte},fecha_despacho.is.null`)
       .order('fecha', { ascending: false })
       .order('id', { ascending: true })
-      .range(desde, desde + PAGINA - 1);
+      .range(desde, desde + PAGINA - 1));
     if (error) throw sbError_(error);
     todos = todos.concat(data || []);
     if (!data || data.length < PAGINA) break;
@@ -3134,10 +3169,12 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', productos:'Productos', notas:'Notas' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', notas:'Notas' };
 
 function setTab(tab) {
-  if(tab==='productos'&&!window.GestionUI?.admin()||tab==='notas'&&!window.GestionUI?.oficina())tab='pedidos';
+  // Productos ya no es una pestaña: vive en el panel de Administración (admin.js).
+  if (tab === 'productos') { if (window.AdminUI && window.GestionUI && GestionUI.admin()) { AdminUI.abrir('productos'); return; } tab = 'pedidos'; }
+  if(tab==='notas'&&!window.GestionUI?.oficina())tab='pedidos';
   if (state.who === 'Mateo' && !['reparto','pedidos'].includes(tab)) tab = 'reparto';
   // Clientes (seguimiento) solo lo ve quien figura en SegClientes.CONFIG.usuarios: para el resto se queda en Pedidos.
   if ((tab === 'clientes' || tab === 'whatsapp') && !(window.SegUI && SegUI.aplicarAcceso())) tab = 'pedidos';
@@ -3182,7 +3219,7 @@ function setTab(tab) {
   if (window.PedidosACargar) { if (tab === 'cargar') PedidosACargar.alMostrar(); else PedidosACargar.alSalir(); }
   if (window.PedidosFijos && tab === 'pedidos') PedidosFijos.refrescar();
   if (tab === 'stock' && window.StockUI) StockUI.abrir();
-  if(window.GestionUI&&['productos','notas'].includes(tab))GestionUI.abrir(tab);
+  if(window.GestionUI&&tab==='notas')GestionUI.abrir(tab);
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
@@ -6569,7 +6606,8 @@ function abrirInstalar() {
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="gestion.js?v=128"></script>
+<script src="gestion.js?v=129"></script>
+<script src="admin.js?v=129"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>
 <script src="reparto-control.js?v=117"></script>

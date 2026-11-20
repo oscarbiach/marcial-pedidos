@@ -71,7 +71,15 @@
   function mezclar() {
     const vistos = new Set(), todos = [];
     ((estadoApp() && estadoApp().pedidos) || []).concat(E.historial || []).forEach(p => { if (p && !vistos.has(p.id)) { vistos.add(p.id); todos.push(p); } });
-    return todos;
+    return sinBajas(todos);
+  }
+  // Clientes dados de baja (Administración): no figuran en el calendario ni en «Todos los clientes», salvo que tengan un pedido posterior a la baja.
+  function sinBajas(lista) {
+    const bajas = (estadoApp() && estadoApp().clientesBaja) || [];
+    if (!bajas.length) return lista;
+    const baja = new Map(bajas.map(b => [S.norm(b.n), b.baja])), vuelven = new Set();
+    lista.forEach(p => { const k = S.norm(p.cliente), b = baja.get(k); if (b && String(p.fechaPedido || p.fecha).slice(0, 10) > b) vuelven.add(k); });
+    return lista.filter(p => { const k = S.norm(p.cliente); return !baja.has(k) || vuelven.has(k); });
   }
   // Decisiones que se ven: las guardadas, más lo que se acaba de pausar o retomar y todavía no confirmó la base.
   function decisionesVista() {
@@ -81,7 +89,7 @@
   }
   function recalcular() {
     const todos = mezclar();
-    const huella = todos.length + '|' + hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + todos.reduce((h, p) => h + String(p.id).length + String(p.estado).length + String(p.fechaDespacho || '').length + String(p.notas || '').length, 0);
+    const huella = todos.length + '|' + hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + todos.reduce((h, p) => h + String(p.id).length + String(p.estado).length + String(p.fechaDespacho || '').length + String(p.notas || '').length + (p.fechaPedido ? Number(String(p.fechaPedido).replace(/\D/g, '')) % 100000 : 0), 0) + '|' + ((estadoApp() && estadoApp().clientesBaja) || []).length;
     if (E.calc && E.huella === huella) return E.calc;
     E.huella = huella; E.calc = S.calcular(todos, hoy(), datosOk() ? { decisiones: decisionesVista(), reglas: E.datos.reglas } : undefined);
     return E.calc;
@@ -1132,6 +1140,8 @@
 
   window.SegUI = {
     abrir, render, aplicarAcceso, puedeVer, puedeCelular, cerrarFicha, cerrarVentanas, pedirHistorial, cargarDatos, contexto, verCliente, asegurar,
+    // Administración cambió pedidos o clientes: se descarta el cálculo guardado para rehacerlo con los datos nuevos.
+    invalidar() { E.huella = ''; E.calc = null; },
     alRefrescar() {
       if (pestana() !== 'clientes') { cerrarVentanas(); return; }
       render();
