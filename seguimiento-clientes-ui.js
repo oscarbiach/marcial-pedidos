@@ -5,7 +5,7 @@
      Los que ya pidieron o a los que ya se les escribió quedan al final de cada día, discretos, bajo «Hechos». Celular: una lista por día.
    · La ficha del cliente es una ventana emergente (#scModal, el mismo sistema .overlay/.modal que los demás modales de la app): se cierra con la X, Escape o
      tocando el fondo, y el foco vuelve a la tarjeta. El calendario no cambia de forma al abrirla. «Mover a…» y la confirmación van encima de la ficha.
-   · El día lo calcula el motor (último pedido + su frecuencia, ajustado a su día habitual). Lo que la persona hace se guarda aparte (seguimiento-datos.js,
+   · El día lo calcula el motor (último pedido + su frecuencia). Lo que la persona hace se guarda aparte (seguimiento-datos.js,
      tabla seg_agenda): moverlo de día («Mover a…», o arrastrando) y «Le escribí». «Sin seguimiento» es la decisión 'pausa' de siempre (con confirmación) y
      «Retomar» la cierra. Nada de eso cambia pedidos, fechas ni cálculos. Las acciones se ven de inmediato, avisan y tienen «Deshacer»; si el guardado falla
      vuelven atrás con un mensaje. Mientras una tarjeta se guarda no se la puede volver a mover.
@@ -533,7 +533,8 @@
       ${accionesFicha(c)}
       ${dejoSec(c)}
       <p class="sc-f-dir">${ico('map-pin', 'ico-sm')}<span>${dir ? esc(dir) : 'Dirección sin completar'}</span></p>
-      <p class="sc-f-ult">${ico('calendar', 'ico-sm')}<span>Último pedido: <b>${esc(F.fechaLarga(c.ultimo))}</b> <span class="sc-muted">(${c.ultimoDespacho ? 'fecha de despacho' : 'fecha de carga: todavía no se despachó'})</span></span></p>
+      <p class="sc-f-ult">${ico('calendar', 'ico-sm')}<span>Último pedido: <b>${esc(F.fechaLarga(c.ultimaCarga || c.ultimo))}</b></span></p>
+      <p class="sc-f-ult">${ico('truck', 'ico-sm')}<span>Última entrega: <b>${c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada'}</b>${c.ultimaEntrega ? ' <span class="sc-muted">(despacho)</span>' : ''}</span></p>
       ${panelSeguimiento(c)}
       <button type="button" class="sc-wa-link" data-wa-client="${esc(c.nombre)}">WhatsApp e historial de contacto</button>
       <section class="sc-f-sec sc-f-sec--1"><h4>¿Cuánto pasó respecto de su ritmo?</h4>${comparacion(c)}</section>

@@ -19,3 +19,13 @@ assert.equal(S.diaCalculado(cliente('Domingo','2026-11-15',7)),'2026-11-23');
 a=S.agenda(calc,{agenda:new Map([['Baharat',{escrito:hoy}]])});
 assert.equal(a.porCliente.get('Baharat').estado,'escribi');
 console.log('OK: vence por frecuencia, atrasados hoy, movimiento manual, ciclo nuevo, futuro, domingo y espera.');
+
+const pedidosEntrega=[
+ {id:'e1',cliente:'Cliente prueba',fecha:'2026-11-10',fechaDespacho:'2026-11-12',estado:'Despachado',items:[]},
+ {id:'e2',cliente:'Cliente prueba',fecha:'2026-11-19',fechaDespacho:'',estado:'Pendiente',items:[]},
+ {id:'e3',cliente:'Cliente prueba',fecha:'2026-11-18',fechaDespacho:'2026-11-20',estado:'Cancelado',items:[]}
+];
+let ficha=S.calcular(pedidosEntrega,hoy).clientes[0];
+assert.equal(ficha.ultimaCarga,'2026-11-19');assert.equal(ficha.ultimaEntrega,'2026-11-12');
+ficha=S.calcular([pedidosEntrega[1]],hoy).clientes[0];assert.equal(ficha.ultimaEntrega,'');
+console.log('OK: pedido reciente separado de última entrega, sin usar cancelados ni inventar fechas.');

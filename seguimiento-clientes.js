@@ -315,6 +315,10 @@
       const unSoloDia = x.fechas.length === 1;
       const refTipo = intervaloPropio ? (poco ? 'poca' : 'propio') : n === 1 ? 'unico' : unSoloDia ? 'mismoDia' : 'sinRecientes';
       const despachoDe = new Set(x.pedidos.filter(p => p.fechaDespacho && String(p.fechaDespacho).slice(0, 10) === p._ref).map(p => p._ref));
+      const ultimaCarga = x.pedidos.map(diaCarga).sort().at(-1) || '';
+      // La app registra despacho, no una confirmación independiente de recepción.
+      const ultimaEntrega = x.pedidos.filter(p => p.estado === 'Despachado' && p.fechaDespacho)
+        .map(p => String(p.fechaDespacho).slice(0, 10)).filter(d => d <= hoy).sort().at(-1) || '';
       const fechasRecientes = x.fechas.slice(-U.fechasFicha).map(d => ({ fecha: d, despacho: despachoDe.has(d) }));
 
       return {
@@ -324,7 +328,7 @@
         diaUltimo: fechaLarga(ultimo), primer: x.fechas[0],
         // Solo para mostrar (no cambian ningún bloque): razón del bloque, confianza del ritmo y datos de la ficha
         razon, refTipo, ultimoDespacho: despachoDe.has(ultimo), fechasRecientes, nFechas: x.fechas.length, nIntervalos: x.gaps.length,
-        pedidosVentana: enVentana.length, porDia, plazo,
+        pedidosVentana: enVentana.length, porDia, plazo, ultimaCarga, ultimaEntrega,
       };
     });
 
