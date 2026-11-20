@@ -2120,12 +2120,31 @@ const sb = window.supabase.createClient(SB_URL, SB_ANON, {
   }
 });
 
-// today lo daba el servidor con la hora de Argentina. Acá se calcula en
-// el aparato, pero clavado a esa zona: si alguien tiene el teléfono en
-// otra hora, la fecha del pedido igual es la de acá.
+// Hora del servidor: HEAD evita el caché del service worker y no envía datos.
+let relojServidor = null, relojPendiente = null, relojIntento = -Infinity;
+async function sincronizarReloj(forzar = false) {
+  if (relojPendiente) return relojPendiente;
+  if (!forzar && performance.now() - relojIntento < 60000) return;
+  relojIntento = performance.now();
+  relojPendiente = (async () => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const url = new URL('manifest.webmanifest', location.href);
+      url.searchParams.set('hora', Math.random().toString(36).slice(2));
+      const r = await fetch(url, {method:'HEAD', cache:'no-store', signal:ctrl.signal});
+      const fecha = Date.parse(r.headers.get('Date'));
+      const edad = Number(r.headers.get('Age') || 0);
+      if (r.ok && Number.isFinite(fecha) && Number.isFinite(edad) && edad >= 0) {
+        relojServidor = { fecha:fecha + edad * 1000, inicio:performance.now() };
+      }
+    } catch (_) { /* Sin conexión: conservar la referencia conocida o usar la PC. */ }
+    finally { clearTimeout(timer); }
+  })();
+  try { await relojPendiente; } finally { relojPendiente = null; }
+}
 function hoyArg() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    .format(new Date());   // en-CA da 'YYYY-MM-DD'
+  const fecha = relojServidor ? relojServidor.fecha + performance.now() - relojServidor.inicio : Date.now();
+  return new Intl.DateTimeFormat('en-CA', { timeZone:'America/Argentina/Buenos_Aires' }).format(new Date(fecha));
 }
 
 // Un pedido de la base → la forma que ya usa toda la app.
@@ -2212,6 +2231,7 @@ async function fetchPedidoItemsPop_() {
 
 // ── Las seis funciones ────────────────────────────────────────────
 async function sbGetAppData() {
+  await sincronizarReloj();
   // La carga de siempre trae TODOS los Pendientes (siguen siendo tarea
   // pendiente sin importar la antigüedad) más solo los Despachados/
   // Cancelados de los últimos 7 días — el resto del historial se trae
@@ -2757,6 +2777,7 @@ function marcarRefrescando(on) {
 }
 
 window.addEventListener('load', async () => {
+  await sincronizarReloj();
   // La prueba de variantes de carga terminó: quedó el selector a pantalla
   // completa en celular. Se limpia lo que hubiera quedado guardado.
   localStorage.removeItem('dm_modo');
@@ -2781,7 +2802,7 @@ window.addEventListener('load', async () => {
     // actualiza de fondo. Si no (primera vez), espera al servidor.
     const cache = leerCache();
     if (cache) {
-      state = { ...state, ...cache };
+      state = { ...state, ...cache, today:hoyArg() };
       restaurarCola();
       mostrarApp();
       resetCargarForm();
@@ -2875,7 +2896,7 @@ function openWhoModal() {
 function loadData(silencioso) {
   if (silencioso) marcarRefrescando(true);
   refrescando = true;
-  refrescoDesde = Date.now();
+  refrescoDesde = performance.now();
   google.script.run
     .withSuccessHandler(data => {
       guardarCache(data);
@@ -2936,7 +2957,7 @@ let refrescoDesde = 0;
 let fallosSeguidos = 0;
 
 function candadoTrabado() {
-  return refrescando && (Date.now() - refrescoDesde) < 45000;
+  return refrescando && (performance.now() - refrescoDesde) < 45000;
 }
 
 // manual = lo pidió el usuario con el botón Actualizar. En ese caso el
@@ -2947,7 +2968,7 @@ function reload(manual) {
   // curso: pasados 45 segundos se da por perdido y se deja pasar otro.
   if (candadoTrabado()) return;
   refrescando = true;
-  refrescoDesde = Date.now();
+  refrescoDesde = performance.now();
   const btn = document.getElementById('refreshBtn');
   if (manual && btn) {
     btn.disabled = true;
@@ -3071,7 +3092,8 @@ setInterval(pintarFrescura, 20000);
 
 // ¿Conviene pedir datos ahora? Solo con la app a la vista: refrescar una
 // pestaña que nadie mira es gastar cuota de todos al pedo.
-function refrescarSiCorresponde(minEdadMs) {
+async function refrescarSiCorresponde(minEdadMs) {
+  await sincronizarReloj();
   if (!state.pin) return;
   if (document.hidden) return;
   // Armando la hoja de reparto la lista NO se toca: redibujarla en medio
@@ -3083,7 +3105,8 @@ function refrescarSiCorresponde(minEdadMs) {
   if (despActivo) return;
   // Lo mismo con un pedido agarrado (ver hayArrastreActivo).
   if (hayArrastreActivo()) return;
-  if (Date.now() - ultimoRefresh < (minEdadMs || REFRESCO_MS)) return;
+  const edad = Date.now() - ultimoRefresh;
+  if (state.today === hoyArg() && edad >= 0 && edad < (minEdadMs || REFRESCO_MS)) return;
   reload();
 }
 
