@@ -101,6 +101,7 @@ async function setup(browser){
   await page.exposeFunction('__db',request);
   await page.route('**/vendor/supabase-2.45.4.min.js',r=>r.fulfill({body:mockClient,contentType:'text/javascript'}));
   await page.route('https://**/*',r=>r.abort());
+  await page.route('**/manifest.webmanifest?hora=*',r=>r.fulfill({status:200,headers:{Date:'Mon, 16 Nov 2026 15:00:00 GMT'},body:''}));
   await page.goto('http://127.0.0.1:4173');
   await page.evaluate(({w,products})=>{
     state.who=w;state.pin='ok';state.today='2026-11-16';state.products=products.map(productoDeFila_);ultimoRefresh=Date.now();
@@ -214,7 +215,7 @@ test('fechas plegadas, actualización y cambio de día sin ocultar la cola de Ma
  await expect(page.locator('[data-day="2026-11-23"]')).toHaveAttribute('aria-expanded','true');
  await page.locator('[data-id="p8"][data-to="por_preparar"]').click();
  await expect(mateo.locator('.rv-card[data-id="p8"]')).toBeVisible();
- await page.clock.setSystemTime(new Date('2026-11-17T15:00:00Z'));await s.emit('pedidos');
+ await page.clock.setSystemTime(new Date('2026-11-17T15:00:00Z'));await page.route('**/manifest.webmanifest?hora=*',r=>r.fulfill({status:200,headers:{Date:'Tue, 17 Nov 2026 15:00:00 GMT'},body:''}));await page.evaluate(()=>sincronizarReloj(true));await s.emit('pedidos');
  await expect(page.locator('[data-day="2026-11-17"]')).toHaveText(/Hoy/);
  await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','true');
  await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
@@ -907,4 +908,14 @@ test('eliminar producto conserva pedidos, permite reintentar y restaurar',async(
  await row.getByRole('button',{name:'Eliminar',exact:true}).click();s.failItem(true);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal .g-error')).toContainText('Sin conexión');await expect(p.locator('#gestion-modal [type="submit"]')).toHaveText('Eliminar producto');
  s.failItem(false);await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(row).toHaveCount(0);expect(s.db.productos[0].activo).toBe(false);expect(JSON.stringify(s.db.pedidos)).toBe(antes);
  await p.locator('[data-g="cat-modo"][data-mode="eliminados"]').click();await expect(row).toBeVisible();await row.getByRole('button',{name:'Restaurar',exact:true}).click();await expect(row).toHaveCount(0);await p.locator('[data-g="cat-modo"][data-mode="catalogo"]').click();await expect(row).toBeVisible();expect(s.db.productos[0].activo).toBe(true);expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('fecha del servidor corrige PC y caché atrasadas y no depende de cambios del reloj local',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.route('**/manifest.webmanifest?hora=*',r=>r.fulfill({status:200,headers:{Date:'Fri, 20 Nov 2026 02:59:00 GMT',Age:'120'},body:''}));
+ await p.evaluate(async()=>{await sincronizarReloj(true);reload();});
+ await expect.poll(()=>p.evaluate(()=>state.today)).toBe('2026-11-20');expect(await p.evaluate(()=>hoyArg())).toBe('2026-11-20');
+ await p.clock.setSystemTime(new Date('2026-11-10T15:00:00Z'));expect(await p.evaluate(()=>hoyArg())).toBe('2026-11-20');
+ await p.route('**/manifest.webmanifest?hora=*',r=>r.abort());await p.evaluate(()=>sincronizarReloj(true));expect(await p.evaluate(()=>hoyArg())).toBe('2026-11-20');expect(s.errors).toEqual([]);await s.close();
 });
