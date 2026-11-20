@@ -103,6 +103,8 @@ async function setup(browser){
   await page.route('https://**/*',r=>r.abort());
   await page.route('**/manifest.webmanifest?hora=*',r=>r.fulfill({status:200,headers:{Date:'Mon, 16 Nov 2026 15:00:00 GMT'},body:''}));
   await page.goto('http://127.0.0.1:4173');
+  // Esperar el inicio asincrónico (reloj y sesión) antes de simular el perfil.
+  await expect(page.locator('#whoModal')).toHaveClass(/open/);
   await page.evaluate(({w,products})=>{
     state.who=w;state.pin='ok';state.today='2026-11-16';state.products=products.map(productoDeFila_);ultimoRefresh=Date.now();
     document.getElementById('whoModal').classList.remove('open');
