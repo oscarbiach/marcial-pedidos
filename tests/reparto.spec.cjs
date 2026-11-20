@@ -921,3 +921,22 @@ test('fecha del servidor corrige PC y caché atrasadas y no depende de cambios d
  await p.clock.setSystemTime(new Date('2026-11-10T15:00:00Z'));expect(await p.evaluate(()=>hoyArg())).toBe('2026-11-20');
  await p.route('**/manifest.webmanifest?hora=*',r=>r.abort());await p.evaluate(()=>sincronizarReloj(true));expect(await p.evaluate(()=>hoyArg())).toBe('2026-11-20');expect(s.errors).toEqual([]);await s.close();
 });
+
+
+test('PIN de otro usuario no instala sesión y Juan Marcos admite su identidad anterior',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{window.sesionesInstaladas=[];sb.auth.setSession=async x=>{sesionesInstaladas.push(x);return {data:{}};};});
+ await p.route('**/functions/v1/login',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({quien:'Mateo',access_token:'test-access',refresh_token:'test-refresh'})}));
+ let r=await p.evaluate(()=>entrarConPin('1234','Joaquin'));expect(r.ok).toBe(false);expect(r.error).toContain('PIN incorrecto');expect(await p.evaluate(()=>sesionesInstaladas.length)).toBe(0);
+ r=await p.evaluate(()=>entrarConPin('1234','Mateo'));expect(r.ok).toBe(true);expect(r.quien).toBe('Mateo');expect(await p.evaluate(()=>sesionesInstaladas.length)).toBe(1);
+ await p.route('**/functions/v1/login',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({quien:'Charly',access_token:'test-access',refresh_token:'test-refresh'})}));
+ r=await p.evaluate(()=>entrarConPin('1234','Juan Marcos'));expect(r.ok).toBe(true);expect(r.quien).toBe('Juan Marcos');expect(await p.evaluate(()=>sesionesInstaladas.length)).toBe(2);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Juan Marcos tiene seguimiento móvil, Notas y campana sin Productos',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Juan Marcos',{width:390,height:844},{hasTouch:true});
+ await expect(p.locator('#notas-bell')).toBeVisible();await expect(p.locator('#bottomNav [data-tab="notas"]')).toBeVisible();await expect(p.locator('#bottomNav [data-tab="productos"]')).toBeHidden();
+ expect(await p.evaluate(()=>SegClientes.CONFIG.celular.includes('Juan Marcos'))).toBe(true);
+ await p.evaluate(()=>goTab('notas'));await expect(p.locator('#tab-notas')).toHaveClass(/active/);expect(await p.evaluate(()=>GestionUI.admin())).toBe(false);expect(s.errors).toEqual([]);await s.close();
+});

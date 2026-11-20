@@ -31,9 +31,9 @@
     // usuario, 13/10). Charly pasa a llamarse Juan Marcos: están los dos para que el cambio de nombre no le saque el acceso. Es solo de interfaz:
     // no protege los datos (la base deja leer los pedidos a cualquier sesión con PIN válido).
     usuarios: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
-    // Quién ve Clientes también en el celular (pantalla táctil angosta): solo Oscar y Joaquin (decisión del usuario, 19/11/2026). Los demás siguen igual que antes:
+    // Quién ve Clientes también en el celular (pantalla táctil angosta): Oscar, Joaquin y Juan Marcos. Los demás siguen igual que antes:
     // en el celular la pestaña no se muestra y redirige a Pedidos. En PC no cambia nada.
-    celular: ['Oscar', 'Joaquin'],
+    celular: ['Oscar', 'Joaquin', 'Juan Marcos'],
     // «Le escribí»: pasados estos días hábiles (lunes a sábado; el domingo no cuenta) sin que el cliente pida, la tarjeta vuelve a pendiente con «Volver a escribir».
     reescribirDias: 2,
     // Quién puede mover, pausar y resolver avisos (por ahora los mismos que ven la pestaña; propuesta a validar con el usuario). Solo de interfaz:
