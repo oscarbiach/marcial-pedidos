@@ -1636,7 +1636,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button class="menu-btn" onclick="pickWho('Oscar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Oscar</button>
       <button class="menu-btn" onclick="pickWho('Thiago')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Thiago</button>
       <button class="menu-btn" onclick="pickWho('Mateo')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Mateo</button>
-      <button class="menu-btn" onclick="pickWho('Charly')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Charly</button>
+      <button class="menu-btn" onclick="pickWho('Juan Marcos')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg>Juan Marcos</button>
       <!-- Siempre disponible: sirve para instalársela a un compañero
            aunque el cartel de abajo ya no esté apareciendo. -->
       <button class="link-instalar" onclick="abrirInstalar()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-smartphone"/></svg>Cómo instalar la app</button>
@@ -2586,7 +2586,10 @@ function sbAccion(action, args) {
 }
 
 // ── Login: cambia el PIN por una sesión ───────────────────────────
-async function entrarConPin(pin) {
+function nombreUsuario_(nombre) { return nombre === 'Charly' ? 'Juan Marcos' : String(nombre || ''); }
+async function entrarConPin(pin, elegido) {
+  const esperado = nombreUsuario_(elegido);
+  if (!VENDEDORES.includes(esperado)) return { ok:false, error:'Elegí un usuario' };
   let resp;
   try {
     resp = await fetch(LOGIN_URL, {
@@ -2596,7 +2599,7 @@ async function entrarConPin(pin) {
         'apikey': SB_ANON,
         'Authorization': 'Bearer ' + SB_ANON
       },
-      body: JSON.stringify({ pin: pin })
+      body: JSON.stringify({ pin: pin, quien: esperado })
     });
   } catch (e) {
     const err = new Error('No se pudo conectar'); err.transitorio = true; throw err;
@@ -2605,11 +2608,14 @@ async function entrarConPin(pin) {
   try { cuerpo = await resp.json(); } catch (e) { /* respuesta rara */ }
 
   if (resp.status === 200 && cuerpo.access_token) {
+    const recibido = nombreUsuario_(cuerpo.quien);
+    if (recibido !== esperado) return { ok:false, error:'PIN incorrecto para ' + esperado };
+
     await sb.auth.setSession({
       access_token: cuerpo.access_token,
       refresh_token: cuerpo.refresh_token
     });
-    return { ok: true, quien: cuerpo.quien };
+    return { ok: true, quien: recibido };
   }
   if (resp.status === 429) return { ok: false, error: cuerpo.error || 'Demasiados intentos. Esperá unos minutos.' };
   if (resp.status === 401) return { ok: false, error: 'PIN incorrecto' };
@@ -2689,7 +2695,7 @@ let searchTipo = '';
 // arriba, y cargarle el PIN en la propiedad PINS del script (Apps Script →
 // Configuración del proyecto → Propiedades). Sin el PIN, el nombre
 // aparece pero no lo deja entrar.
-const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago', 'Mateo', 'Charly'];
+const VENDEDORES = ['Joaquin', 'Oscar', 'Thiago', 'Mateo', 'Juan Marcos'];
 
 // Nombre elegido en el primer paso, todavía sin PIN confirmado.
 let pendingWho = '';
@@ -2788,7 +2794,8 @@ window.addEventListener('load', async () => {
   // válida (la guarda supabase-js y se renueva sola), se entra derecho.
   let sesion = null;
   try { const r = await sb.auth.getSession(); sesion = r.data.session; } catch (e) { /* sin sesión */ }
-  const savedWho = localStorage.getItem('dm_ped_who');
+  const savedWho = nombreUsuario_(localStorage.getItem('dm_ped_who'));
+  if (savedWho) localStorage.setItem('dm_ped_who', savedWho);
 
   if (sesion && savedWho && VENDEDORES.includes(savedWho)) {
     state.who = savedWho;
@@ -2861,11 +2868,9 @@ async function submitPin() {
   btn.disabled = true; btn.textContent = 'Verificando…';
   document.getElementById('pinError').textContent = '';
 
-  // El PIN se cambia por una sesión en el servidor. Quién es lo dice la
-  // respuesta (por el PIN), no el nombre que se tocó: si Thiago elige
-  // "Oscar" y pone SU PIN, entra como Thiago y el pedido queda a su nombre.
+  // El PIN debe corresponder al usuario elegido antes de instalar la sesión.
   let r;
-  try { r = await entrarConPin(pin); }
+  try { r = await entrarConPin(pin, pendingWho); }
   catch (e) { r = { ok: false, error: 'No se pudo conectar. Probá de nuevo.' }; }
 
   if (!r.ok) {
@@ -6564,7 +6569,7 @@ function abrirInstalar() {
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="gestion.js?v=117"></script>
+<script src="gestion.js?v=128"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>
 <script src="reparto-control.js?v=117"></script>
