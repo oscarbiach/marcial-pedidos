@@ -531,8 +531,9 @@
       <ul class="sc-manual-l">${lineas.map(l => `<li>${l}</li>`).join('')}</ul>${aviso}${acciones}</section>`;
   }
 
+  const observacionDe = c => { const cli = ((estadoApp() && estadoApp().clientes) || []).find(x => String(x.n).toLowerCase() === c.nombre.toLowerCase()); return cli && cli.obs ? cli.obs : ''; };
   function ficha(c) {
-    const dir = direccionDe(c);
+    const dir = direccionDe(c), obs = observacionDe(c);
     return `<div class="modal-handle"></div>
       <div class="modal-header"><h3 class="sc-f-nom" id="sc-f-nom">${esc(c.nombre)}</h3><button type="button" class="close-btn" data-sc="cerrar-ficha" aria-label="Cerrar">${ico('x')}</button></div>
       <div class="sc-f sc-t-${tono(c)}">
@@ -541,6 +542,7 @@
       ${accionesFicha(c)}
       ${dejoSec(c)}
       <p class="sc-f-dir">${ico('map-pin', 'ico-sm')}<span>${dir ? esc(dir) : 'Dirección sin completar'}</span></p>
+      ${obs ? `<p class="sc-f-obs sc-muted">${ico('info', 'ico-sm')}<span>${esc(obs)}</span></p>` : ''}
       <p class="sc-f-ult">${ico('calendar', 'ico-sm')}<span>Último pedido: <b>${esc(F.fechaLarga(c.ultimaCarga || c.ultimo))}</b></span></p>
       <p class="sc-f-ult">${ico('truck', 'ico-sm')}<span>Última entrega: <b>${c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada'}</b>${c.ultimaEntrega ? ' <span class="sc-muted">(despacho)</span>' : ''}</span></p>
       ${panelSeguimiento(c)}

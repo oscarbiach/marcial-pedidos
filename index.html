@@ -1605,7 +1605,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
 <link rel="stylesheet" href="gestion.css?v=129">
-<link rel="stylesheet" href="admin.css?v=129">
+<link rel="stylesheet" href="admin.css?v=130">
 <link rel="stylesheet" href="reparto-control.css?v=117">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
@@ -2310,7 +2310,7 @@ async function sbGetAppData() {
     .sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
 
   // Los clientes dados de baja no se ofrecen al cargar (ni en el seguimiento, salvo que pidan de nuevo): van aparte.
-  const clientes = (cli.data || []).filter(c => !c.eliminado_en).map(c => ({ n: c.nombre, d: c.direccion || '' }))
+  const clientes = (cli.data || []).filter(c => !c.eliminado_en).map(c => ({ n: c.nombre, d: c.direccion || '', obs: c.observaciones || '' }))
     .sort((a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' }));
   const clientesBaja = (cli.data || []).filter(c => c.eliminado_en).map(c => ({ n: c.nombre, baja: String(c.eliminado_en).slice(0, 10) }));
 
@@ -2366,7 +2366,8 @@ async function selPedidos_(armar) {
 }
 // Clientes con su baja (eliminado_en); si la columna todavía no existe, la lectura de siempre.
 async function leerClientes_() {
-  const r = await sb.from('clientes').select('nombre,direccion,eliminado_en');
+  let r = await sb.from('clientes').select('nombre,direccion,eliminado_en,observaciones');
+  if (r.error) r = await sb.from('clientes').select('nombre,direccion,eliminado_en');
   return r.error ? sb.from('clientes').select('nombre,direccion') : r;
 }
 
@@ -6607,7 +6608,7 @@ function abrirInstalar() {
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
 <script src="gestion.js?v=129"></script>
-<script src="admin.js?v=129"></script>
+<script src="admin.js?v=130"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>
 <script src="reparto-control.js?v=117"></script>

@@ -16,7 +16,7 @@
   const key = v => String(v || '').trim().toLowerCase();
 
   const E = {
-    abierto: false, sec: 'productos', origen: null, confirmar: null,
+    abierto: false, sec: 'productos', origen: null, confirmar: null, fu: null,
     cli: { q: '', bajas: false, lista: [], cargando: false, error: '', tok: 0, F: null, timer: null, montado: false, cargada: false },
     his: { q: '', desde: '', hasta: '', estado: 'todos', filas: [], siguiente: null, hayMas: false, cargando: false, error: '', tok: 0, F: null, timer: null, montado: false, cargada: false }
   };
@@ -48,7 +48,7 @@
   // Cualquier cierre (X, Escape, fondo —lo hace el código general de los .overlay—, cambio de usuario) pasa por acá.
   function alCerrar() {
     if (!E.abierto) return;
-    E.abierto = false; limpiarBorr(); cancelarConfirmacion();
+    E.abierto = false; limpiarBorr(); cancelarConfirmacion(); if (E.fu) cerrarFusion();
     ['cli', 'his'].forEach(k => { E[k].F = null; E[k].tok++; E[k].cargada = false; E[k].cargando = false; clearTimeout(E[k].timer); const s = $(k === 'cli' ? 'adm-clientes' : 'adm-historial'); if (s) { s.innerHTML = ''; } E[k].montado = false; });
     const o = E.origen; E.origen = null;
     const el = o && o.isConnected && o !== document.body ? o : $('adminBtn');
@@ -114,42 +114,47 @@
     i.classList.toggle('error', !!C.error);
     i.innerHTML = C.error ? `${esc(C.error)} <button type="button" class="adm-btn chico" data-adm="cli-recargar">Reintentar</button>` : C.cargando ? 'Buscando…' : `${C.lista.length} ${C.lista.length === 1 ? 'cliente' : 'clientes'}`;
     l.innerHTML = C.lista.map(c => `<button type="button" class="adm-fila" data-adm="cli-abrir" data-id="${esc(c.id)}" ${C.F && C.F.id === c.id ? 'aria-current="true"' : ''}>
-      <b>${esc(c.nombre)} ${c.eliminado_en ? '<span class="adm-chip baja">De baja</span>' : ''}</b>
+      <b>${esc(c.nombre)} ${c.fusionado_en ? `<span class="adm-chip baja">Fusionado con ${esc(c.fusionado_con || 'otro')}</span>` : c.eliminado_en ? '<span class="adm-chip baja">De baja</span>' : ''}</b>
       <span>${esc(c.direccion || 'Sin dirección')}</span>
       <span>${c.pedidos} ${c.pedidos === 1 ? 'pedido' : 'pedidos'}${c.ultimo_pedido ? ' · Último ' + esc(fmt(c.ultimo_pedido)) : ''}</span></button>`).join('')
       || (C.cargando ? '' : '<p class="adm-vacio">No hay clientes con ese criterio.</p>');
   }
   function abrirCliente(id) {
     const row = E.cli.lista.find(c => c.id === id); if (!row) return;
-    const F = { id, nuevo: false, orig: { ...row }, borr: { nombre: row.nombre, direccion: row.direccion || '' }, op: null, opBaja: null, guardando: false, error: '', conflicto: false, cambios: null, recuperado: false };
+    const F = { id, nuevo: false, orig: { ...row }, borr: { nombre: row.nombre, direccion: row.direccion || '', observaciones: row.observaciones || '' }, op: null, opBaja: null, guardando: false, error: '', conflicto: false, cambios: null, recuperado: false };
     aplicarBorrador('clientes', F); E.cli.F = F; pintarListaClientes(); pintarFichaCliente(true);
     cargarCambios('clientes', id).then(c => { if (E.cli.F === F) { F.cambios = c; pintarHistorialCliente(); } }).catch(() => { if (E.cli.F === F) { F.cambios = []; pintarHistorialCliente(); } });
   }
   function nuevoCliente() {
-    const F = { id: nuevoId(), nuevo: true, orig: { nombre: '', direccion: '' }, borr: { nombre: '', direccion: '' }, op: null, guardando: false, error: '', conflicto: false, cambios: [] };
+    const F = { id: nuevoId(), nuevo: true, orig: { nombre: '', direccion: '', observaciones: '' }, borr: { nombre: '', direccion: '', observaciones: '' }, op: null, guardando: false, error: '', conflicto: false, cambios: [] };
     E.cli.F = F; pintarListaClientes(); pintarFichaCliente(true);
   }
   function aplicarBorrador(t, F) {
     const b = leerBorr(t, F.id); if (!b) return;
-    const orig = t === 'clientes' ? { nombre: F.orig.nombre, direccion: F.orig.direccion || '' } : F.borr;
+    const orig = t === 'clientes' ? { nombre: F.orig.nombre, direccion: F.orig.direccion || '', observaciones: F.orig.observaciones || '' } : F.borr;
     if (JSON.stringify(b) !== JSON.stringify(orig)) { F.borr = { ...F.borr, ...b }; F.recuperado = true; }
   }
-  const cambiosCli = F => { const d = {}; const n = F.borr.nombre.trim(), dir = F.borr.direccion.trim(); if (F.nuevo) { d.nombre = n; d.direccion = dir; return d; } if (n !== F.orig.nombre) d.nombre = n; if (dir !== (F.orig.direccion || '')) d.direccion = dir; return d; };
+  const cambiosCli = F => {
+    const d = {}, n = F.borr.nombre.trim(), dir = F.borr.direccion.trim(), obs = (F.borr.observaciones || '').trim();
+    if (F.nuevo) { d.nombre = n; d.direccion = dir; if (obs) d.observaciones = obs; return d; }
+    if (n !== F.orig.nombre) d.nombre = n; if (dir !== (F.orig.direccion || '')) d.direccion = dir; if (obs !== (F.orig.observaciones || '')) d.observaciones = obs; return d;
+  };
 
   function pintarFichaCliente(foco) {
     const C = E.cli, cont = $('adm-cli-ficha'), dos = $('adm-cli-dos'); if (!cont) return;
     const F = C.F;
     dos.classList.toggle('ver-ficha', !!F);
     if (!F) { cont.innerHTML = '<p class="adm-vacio">Elegí un cliente de la lista o creá uno nuevo.</p>'; return; }
-    const o = F.orig, dis = F.guardando ? 'disabled' : '';
+    const o = F.orig, fus = !!o.fusionado_en, dis = F.guardando || fus ? 'disabled' : '';
     cont.innerHTML = `<form class="adm-ficha" id="adm-cli-form" novalidate>
       <button type="button" class="adm-btn chico adm-volver" data-adm="cli-volver">← Volver a la lista</button>
       <h3 id="adm-ficha-h" tabindex="-1">${F.nuevo ? 'Nuevo cliente' : esc(o.nombre)}</h3>
-      <div class="adm-sub">${F.nuevo ? '' : `${o.eliminado_en ? '<span class="adm-chip baja">De baja</span>' : ''}<span>${o.pedidos ?? 0} pedidos${o.ultimo_pedido ? ' · último ' + esc(fmt(o.ultimo_pedido)) : ''}</span>`}</div>
+      <div class="adm-sub">${F.nuevo ? '' : `${o.fusionado_en ? `<span class="adm-chip baja">Fusionado con ${esc(o.fusionado_con || 'otro cliente')}</span>` : o.eliminado_en ? '<span class="adm-chip baja">De baja</span>' : ''}<span>${o.pedidos ?? 0} pedidos${o.ultimo_pedido ? ' · último ' + esc(fmt(o.ultimo_pedido)) : ''}</span>`}</div>
       ${F.recuperado ? '<p class="adm-nota">Recuperamos los cambios que no se habían guardado.</p>' : ''}
       <div class="adm-grid">
         <label class="adm-campo ancho">Nombre<input name="nombre" data-f="nombre" maxlength="200" autocomplete="off" value="${esc(F.borr.nombre)}" ${dis} required></label>
         <label class="adm-campo ancho">Dirección<input name="direccion" data-f="direccion" maxlength="300" autocomplete="off" value="${esc(F.borr.direccion)}" ${dis}></label>
+        <label class="adm-campo ancho">Observación (opcional)<textarea name="observaciones" data-f="observaciones" rows="2" maxlength="1000" ${dis}>${esc(F.borr.observaciones || '')}</textarea><small>Se ve también en la ficha del seguimiento comercial.</small></label>
         ${F.nuevo ? '' : `<div class="adm-campo ancho">Teléfono de WhatsApp vinculado<div class="adm-valor">${(o.telefonos || []).length ? esc(o.telefonos.join(' · ')) : 'Sin teléfono vinculado'}</div><small>Solo lectura: se vincula desde WhatsApp.</small></div>`}
       </div>
       <div class="adm-aviso" id="adm-cli-aviso" hidden></div>
@@ -157,9 +162,10 @@
       <div class="adm-acciones">
         <button type="submit" class="adm-btn primario" id="adm-cli-guardar" ${dis}>${F.guardando ? 'Guardando…' : F.error && !F.conflicto ? 'Reintentar' : F.nuevo ? 'Crear cliente' : 'Guardar cambios'}</button>
         ${F.conflicto ? '<button type="button" class="adm-btn" data-adm="cli-recargar-ficha">Recargar cliente</button>' : ''}
-        ${F.nuevo ? '<button type="button" class="adm-btn" data-adm="cli-volver">Cancelar</button>' : o.eliminado_en
+        ${F.nuevo ? '<button type="button" class="adm-btn" data-adm="cli-volver">Cancelar</button>' : fus ? '<span class="adm-nota">Cliente fusionado: ya no se puede editar ni restaurar.</span>' : o.eliminado_en
           ? `<button type="button" class="adm-btn" data-adm="cli-restaurar" ${dis}>Restaurar cliente</button>`
           : `<button type="button" class="adm-btn peligro" data-adm="cli-baja" ${dis}>Dar de baja</button>`}
+        ${F.nuevo || fus ? '' : `<button type="button" class="adm-btn" data-adm="cli-fusionar" ${dis}>Fusionar con otro cliente…</button>`}
       </div>
       ${F.nuevo ? '' : '<div class="adm-bloque"><h4>Historial de cambios</h4><ul class="adm-hist" id="adm-cli-hist"></ul></div>'}</form>`;
     pintarHistorialCliente(); avisoCliente();
@@ -219,8 +225,8 @@
   }
   function aplicarResultadoCliente(F, r, antesNombre) {
     const prev = E.cli.lista.find(c => c.id === F.id) || {};
-    const fila = { ...prev, ...F.orig, id: r.id, nombre: r.nombre, direccion: r.direccion, eliminado_en: r.eliminado_en, version: r.version };
-    F.nuevo = false; F.orig = fila; F.borr = { nombre: r.nombre, direccion: r.direccion || '' };
+    const fila = { ...prev, ...F.orig, id: r.id, nombre: r.nombre, direccion: r.direccion, observaciones: r.observaciones, eliminado_en: r.eliminado_en, fusionado_en: r.fusionado_en, version: r.version };
+    F.nuevo = false; F.orig = fila; F.borr = { nombre: r.nombre, direccion: r.direccion || '', observaciones: r.observaciones || '' };
     if (prev.id) E.cli.lista = E.cli.lista.map(c => c.id === r.id ? fila : c); else if (!E.cli.q || key(r.nombre).includes(key(E.cli.q))) { fila.pedidos = 0; fila.telefonos = []; E.cli.lista = [fila].concat(E.cli.lista); F.orig = fila; }
     if (E.cli.lista.length) E.cli.lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
     pintarListaClientes();
@@ -244,12 +250,12 @@
     } catch (e) { F.guardando = false; F.error = msg(e); if (E.cli.F === F) pintarFichaCliente(); }
   }
   // Las demás pantallas se ponen al día sin F5: autocompletado de Cargar, copias de pedidos y seguimiento.
-  function clienteEnApp(antes, r) {
+  function clienteEnApp(antes, r, quieto) {
     try {
       const ord = (a, b) => a.n.localeCompare(b.n, 'es', { sensitivity: 'base' });
       const sinEste = l => (l || []).filter(c => key(c.n) !== key(antes) && key(c.n) !== key(r.nombre));
       state.clientes = sinEste(state.clientes); state.clientesBaja = sinEste(state.clientesBaja);
-      if (r.eliminado_en) state.clientesBaja.push({ n: r.nombre, baja: dia(r.eliminado_en) }); else state.clientes.push({ n: r.nombre, d: r.direccion || '' });
+      if (r.eliminado_en) state.clientesBaja.push({ n: r.nombre, baja: dia(r.eliminado_en) }); else state.clientes.push({ n: r.nombre, d: r.direccion || '', obs: r.observaciones || '' });
       state.clientes.sort(ord);
       if (key(antes) !== key(r.nombre) || antes !== r.nombre) {
         const lotes = [state.pedidos, state.papelera, window.SegUI && SegUI._estado && SegUI._estado.historial];
@@ -258,9 +264,99 @@
       if (window.SegUI && SegUI.invalidar) SegUI.invalidar();
       if (typeof renderPedidos === 'function') renderPedidos();
     } catch (_) { /* la recarga de abajo los trae igual */ }
-    refrescarApp();
+    if (!quieto) refrescarApp();
   }
   function refrescarApp() { try { if (typeof loadData === 'function' && state.pin) loadData(true); } catch (_) { /* siguiente refresco automático */ } }
+
+
+  // ── Fusión de clientes duplicados: el destino conserva su nombre; el otro queda de baja «Fusionado con …». Sin deshacer desde la app. ──
+  const NOM_FUSION = { pedidos: ['pedido', 'pedidos'], pedidos_fijos: ['pedido fijo', 'pedidos fijos'], app_notas: ['nota', 'notas'], pedidos_a_cargar: ['pedido por cargar', 'pedidos por cargar'], whatsapp_contacts: ['contacto de WhatsApp', 'contactos de WhatsApp'], whatsapp_client_review: ['revisión de vínculo de WhatsApp', 'revisiones de vínculo de WhatsApp'] };
+  const TIPOS_DEC = { atender: 'Atender', recuperacion: 'Recuperación', pausa: 'Sin seguimiento' };
+  function abrirFusion() {
+    const F = E.cli.F; if (!F || F.nuevo || F.guardando) return;
+    if (Object.keys(cambiosCli(F)).length) { F.error = 'Guardá o descartá los cambios de la ficha antes de fusionar.'; msgCli(F.error); return; }
+    E.fu = { F, q: '', lista: [], otro: null, quien: 'actual', impacto: null, cargando: false, error: '', guardando: false, op: null, entiendo: false, tok: 0, tokI: 0, timer: null, origen: document.activeElement };
+    let d = $('adm-fusion');
+    if (!d) { d = document.createElement('div'); d.id = 'adm-fusion'; d.className = 'adm-confirm'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'adm-fu-t'); $('admin-modal').appendChild(d); }
+    pintarFusion(); d.hidden = false; buscarOtro();
+    const i = $('adm-fu-q'); if (i) i.focus();
+  }
+  function cerrarFusion() {
+    const f = E.fu; if (!f) return; clearTimeout(f.timer); f.tok++; f.tokI++; E.fu = null;
+    const d = $('adm-fusion'); if (d) { d.hidden = true; d.innerHTML = ''; }
+    const o = f.origen; if (o && o.isConnected) o.focus({ preventScroll: true });
+  }
+  async function buscarOtro() {
+    const f = E.fu; if (!f) return; const tok = ++f.tok;
+    try {
+      const r = await rpc('admin_clientes_listar', { p_q: f.q, p_bajas: false });
+      if (!E.fu || tok !== f.tok) return;
+      f.lista = (Array.isArray(r) ? r : []).filter(c => c.id !== f.F.id && !c.eliminado_en && !c.fusionado_en).slice(0, 30); f.error = '';
+    } catch (e) { if (E.fu === f && tok === f.tok) f.error = msg(e); }
+    if (E.fu === f && tok === f.tok) pintarListaFusion();
+  }
+  const sentido = f => { const a = f.F.orig, b = f.otro; return f.quien === 'actual' ? { origen: b, destino: a } : { origen: a, destino: b }; };
+  function elegirOtro(id) { const f = E.fu; if (!f || f.guardando) return; f.otro = f.lista.find(c => c.id === id) || null; f.entiendo = false; f.op = null; pintarFusion(); cargarImpacto(); }
+  async function cargarImpacto() {
+    const f = E.fu; if (!f || !f.otro) return; const tok = ++f.tokI, { origen, destino } = sentido(f);
+    f.impacto = null; f.error = ''; f.entiendo = false; pintarFusion();
+    try { const r = await rpc('admin_cliente_fusion_impacto', { p_origen: origen.id, p_destino: destino.id }); if (E.fu === f && tok === f.tokI) { f.impacto = r; } }
+    catch (e) { if (E.fu === f && tok === f.tokI) f.error = msg(e); }
+    if (E.fu === f && tok === f.tokI) pintarFusion();
+  }
+  function textoImpacto(im, origen, destino) {
+    const l = Object.keys(NOM_FUSION).filter(k => im[k] > 0).map(k => `<li>${im[k]} ${NOM_FUSION[k][im[k] === 1 ? 0 : 1]}</li>`);
+    if (im.agenda === 'pasa_al_destino') l.push('<li>Su día del calendario de seguimiento pasa al cliente que queda</li>');
+    if (im.agenda === 'se_descarta_la_del_origen') l.push('<li>Se descarta su día del calendario (queda el del otro)</li>');
+    if (im.decisiones > 0) l.push(`<li>${im.decisiones} ${im.decisiones === 1 ? 'decisión' : 'decisiones'} de seguimiento (historial)</li>`);
+    if (im.excepciones > 0) l.push(`<li>${im.excepciones} ${im.excepciones === 1 ? 'excepción' : 'excepciones'} de producto${im.excepciones_reemplazadas ? ` (${im.excepciones_reemplazadas} repetida${im.excepciones_reemplazadas === 1 ? '' : 's'}: queda la del cliente que se conserva)` : ''}</li>`);
+    const dec = im.decision_reemplazada ? `<p class="adm-aviso">Los dos tienen una decisión de seguimiento vigente: se conserva la de «${esc(destino.nombre)}» (${esc(TIPOS_DEC[im.decision_destino] || im.decision_destino)}) y se cierra la de «${esc(origen.nombre)}» (${esc(TIPOS_DEC[im.decision_origen] || im.decision_origen)}).</p>` : '';
+    return `<p>Se pasan a «${esc(destino.nombre)}»:</p><ul>${l.join('') || '<li>Ningún registro asociado</li>'}</ul>${dec}`;
+  }
+  function pintarFusion() {
+    const f = E.fu, d = $('adm-fusion'); if (!f || !d) return;
+    const act = f.F.orig, otro = f.otro, par = otro ? sentido(f) : null;
+    const prev = $('adm-fu-q'), q = prev ? prev.value : f.q, fid = document.activeElement && d.contains(document.activeElement) ? document.activeElement.id : '';
+    d.innerHTML = `<div style="width:min(580px,100%);max-height:100%;overflow:auto"><h3 id="adm-fu-t">Fusionar con otro cliente</h3>
+      <p>Para juntar duplicados: sus pedidos y datos pasan a un solo cliente. El otro queda de baja como «Fusionado» y no se borra nada.</p>
+      <label class="adm-campo">Buscar el otro cliente<input id="adm-fu-q" type="search" autocomplete="off" value="${esc(q)}" placeholder="Nombre o dirección" ${f.guardando ? 'disabled' : ''}></label>
+      <div class="adm-lista" id="adm-fu-lista" style="max-height:170px;margin:6px 0"></div>
+      ${otro ? `<fieldset style="border:0;padding:0;margin:8px 0"><legend class="adm-nota" style="font-weight:700">¿Con qué nombre queda?</legend>
+        <label class="adm-campo check"><input type="radio" id="adm-fu-r-actual" name="fu-quien" value="actual" ${f.quien === 'actual' ? 'checked' : ''} ${f.guardando ? 'disabled' : ''}> ${esc(act.nombre)}</label>
+        <label class="adm-campo check"><input type="radio" id="adm-fu-r-otro" name="fu-quien" value="otro" ${f.quien === 'otro' ? 'checked' : ''} ${f.guardando ? 'disabled' : ''}> ${esc(otro.nombre)}</label></fieldset>
+        <div id="adm-fu-impacto">${f.impacto ? textoImpacto(f.impacto, par.origen, par.destino) : f.error ? '' : '<p class="adm-nota">Calculando…</p>'}</div>
+        <label class="adm-campo check"><input type="checkbox" id="adm-fu-entiendo" ${f.entiendo ? 'checked' : ''} ${f.guardando || !f.impacto ? 'disabled' : ''}> Entiendo que no se puede deshacer desde la app</label>` : ''}
+      <div class="adm-msg" id="adm-fu-msg" role="alert">${esc(f.error)}</div>
+      <div class="adm-acciones"><button type="button" class="adm-btn" data-adm="fu-cerrar" ${f.guardando ? 'disabled' : ''}>Cancelar</button>
+        <button type="button" class="adm-btn peligro" data-adm="fu-ok" id="adm-fu-ok" ${!f.impacto || !f.entiendo || f.guardando ? 'disabled' : ''}>${f.guardando ? 'Fusionando…' : f.error && f.impacto && f.entiendo ? 'Reintentar' : 'Fusionar'}</button></div></div>`;
+    pintarListaFusion();
+    const n = fid && $(fid); if (n && !n.disabled) n.focus();
+  }
+  function pintarListaFusion() {
+    const f = E.fu, l = $('adm-fu-lista'); if (!f || !l) return;
+    l.innerHTML = f.lista.map(c => `<button type="button" class="adm-fila" data-adm="fu-elegir" data-id="${esc(c.id)}" ${f.otro && f.otro.id === c.id ? 'aria-current="true"' : ''} ${f.guardando ? 'disabled' : ''}><b>${esc(c.nombre)}</b><span>${esc(c.direccion || 'Sin dirección')} · ${c.pedidos} ${c.pedidos === 1 ? 'pedido' : 'pedidos'}</span></button>`).join('') || '<p class="adm-vacio">No hay clientes con ese criterio.</p>';
+  }
+  async function ejecutarFusion() {
+    const f = E.fu; if (!f || f.guardando || !f.otro || !f.impacto || !f.entiendo) return;
+    const { origen, destino } = sentido(f), h = JSON.stringify([origen.id, destino.id, origen.version, destino.version]);
+    if (!f.op || f.op.h !== h) f.op = { id: nuevoId(), h };       // un op por intento: el reintento reutiliza el mismo
+    f.guardando = true; f.error = ''; pintarFusion();
+    try {
+      const r = await rpc('admin_cliente_fusionar', { p_op: f.op.id, p_origen: origen.id, p_destino: destino.id, p_version_origen: origen.version, p_version_destino: destino.version });
+      f.guardando = false; f.op = null;
+      terminarFusion(r, origen);
+    } catch (e) { f.guardando = false; f.error = msg(e); if (E.fu === f) pintarFusion(); }
+  }
+  function terminarFusion(r, origen) {
+    cerrarFusion(); borrarBorr('clientes', origen.id);
+    try {
+      [state.pedidos, state.papelera, window.SegUI && SegUI._estado && SegUI._estado.historial].forEach(l => (l || []).forEach(p => { if (key(p.cliente) === key(origen.nombre)) p.cliente = r.destino.nombre; }));
+    } catch (_) { /* la recarga los trae igual */ }
+    clienteEnApp(origen.nombre, r.origen, true); clienteEnApp(r.destino.nombre, r.destino, true);
+    refrescarApp(); toast('Clientes fusionados');
+    E.cli.F = null;
+    cargarClientes().then(() => { if (E.abierto && E.cli.lista.some(c => c.id === r.destino.id)) { abrirCliente(r.destino.id); const m = $('adm-cli-msg'); if (m) { m.textContent = 'Fusión hecha: «' + origen.nombre + '» quedó dentro de este cliente.'; m.classList.add('ok'); } } });
+  }
 
   // ═══════════════ HISTORIAL DE PEDIDOS ═══════════════
   const ESTADOS = [['todos', 'Todos'], ['Pendiente', 'Pendiente'], ['Despachado', 'Despachado'], ['Cancelado', 'Cancelado'], ['Eliminado', 'Eliminado']];
@@ -435,7 +531,7 @@
   }
 
   // ── Historial de cambios (ficha) ──
-  const CAMPOS = { fecha_pedido: 'Fecha del pedido', cliente: 'Cliente', direccion: 'Dirección', notas: 'Observación', fecha_entrega: 'Entrega', retiro: 'Retiro', nombre: 'Nombre' };
+  const CAMPOS = { observaciones: 'Observación', fecha_pedido: 'Fecha del pedido', cliente: 'Cliente', direccion: 'Dirección', notas: 'Observación', fecha_entrega: 'Entrega', retiro: 'Retiro', nombre: 'Nombre' };
   const valor = (k, v) => v === null || v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : /^\d{4}-\d\d-\d\d/.test(String(v)) && /fecha/.test(k) ? fmt(dia(v)) : String(v);
   async function cargarCambios(tabla, id) { const r = await rpc('admin_cambios_leer', { p_tabla: tabla, p_registro: String(id) }); return Array.isArray(r) ? r : []; }
   function listaCambios(c) {
@@ -443,12 +539,13 @@
     if (!c.length) return '<li>Todavía sin cambios hechos desde Administración.</li>';
     return c.map(x => {
       let t;
-      if (x.accion === 'baja') t = 'Dado de baja'; else if (x.accion === 'restaurar') t = 'Restaurado'; else if (x.accion === 'crear') t = 'Creado';
+      if (x.accion === 'fusionar') { const a = x.despues || {}; t = a.destino ? `Fusionado con «${a.destino}»` : `Fusionó «${(x.antes || {}).origen}» en este cliente`; const n = a.actualizados && a.actualizados.pedidos; if (n !== undefined) t += ` · ${n} ${n === 1 ? 'pedido movido' : 'pedidos movidos'}`; }
+      else if (x.accion === 'baja') t = 'Dado de baja'; else if (x.accion === 'restaurar') t = 'Restaurado'; else if (x.accion === 'crear') t = 'Creado';
       else {
         t = Object.keys(x.despues || {}).filter(k => k !== 'actualizados').map(k => `${CAMPOS[k] || k}: ${esc(valor(k, (x.antes || {})[k]))} → ${esc(valor(k, x.despues[k]))}`).join(' · ');
         const a = x.despues && x.despues.actualizados; if (a) t += ' · Actualizó ' + Object.keys(a).filter(k => a[k] > 0).map(k => `${a[k]} ${NOMBRES_IMPACTO[k] ? NOMBRES_IMPACTO[k][a[k] === 1 ? 0 : 1] : k}`).join(', ');
       }
-      return `<li><b>${esc(fmtTs(x.en))} · ${esc(x.autor)}</b><br>${x.accion === 'baja' || x.accion === 'restaurar' || x.accion === 'crear' ? esc(t) : t}</li>`;
+      return `<li><b>${esc(fmtTs(x.en))} · ${esc(x.autor)}</b><br>${['baja', 'restaurar', 'crear', 'fusionar'].includes(x.accion) ? esc(t) : t}</li>`;
     }).join('');
   }
 
@@ -469,6 +566,10 @@
       else if (a === 'cli-recargar') cargarClientes();
       else if (a === 'cli-recargar-ficha') { const F = E.cli.F; if (F) { borrarBorr('clientes', F.id); const id = F.id; cargarClientes().then(() => { if (E.cli.lista.some(c => c.id === id)) abrirCliente(id); }); } }
       else if (a === 'cli-baja') bajaCliente(true);
+      else if (a === 'cli-fusionar') abrirFusion();
+      else if (a === 'fu-cerrar') cerrarFusion();
+      else if (a === 'fu-elegir') elegirOtro(b.dataset.id);
+      else if (a === 'fu-ok') ejecutarFusion();
       else if (a === 'cli-restaurar') bajaCliente(false);
       else if (a === 'his-abrir' || a === 'his-reabrir') abrirPedido(b.dataset.id);
       else if (a === 'his-volver') { const id = E.his.F && E.his.F.id; E.his.F = null; pintarListaHistorial(); pintarFichaPedido(); const s = (id && document.querySelector(`#adm-his-lista [data-id="${CSS.escape(id)}"]`)) || $('adm-his-q'); if (s) s.focus({ preventScroll: true }); }
@@ -485,6 +586,7 @@
     });
     panel.addEventListener('input', e => {
       const t = e.target;
+      if (t.id === 'adm-fu-q' && E.fu) { E.fu.q = t.value; clearTimeout(E.fu.timer); E.fu.timer = setTimeout(buscarOtro, 250); return; }
       if (t.id === 'adm-cli-q') { E.cli.q = t.value; clearTimeout(E.cli.timer); E.cli.timer = setTimeout(cargarClientes, 250); return; }
       if (t.id === 'adm-his-q') { E.his.q = t.value; clearTimeout(E.his.timer); E.his.timer = setTimeout(() => buscarHistorial(false), 300); return; }
       if (!t.dataset.f) return;
@@ -494,21 +596,24 @@
     });
     panel.addEventListener('change', e => {
       const t = e.target;
-      if (t.id === 'adm-cli-bajas') { E.cli.bajas = t.checked; cargarClientes(); }
+      if (t.id === 'adm-fu-quien') return;
+      if (t.name === 'fu-quien' && E.fu) { E.fu.quien = t.value; cargarImpacto(); }
+      else if (t.id === 'adm-fu-entiendo' && E.fu) { E.fu.entiendo = t.checked; pintarFusion(); }
+      else if (t.id === 'adm-cli-bajas') { E.cli.bajas = t.checked; cargarClientes(); }
       else if (t.id === 'adm-his-desde') { E.his.desde = t.value; buscarHistorial(false); }
       else if (t.id === 'adm-his-hasta') { E.his.hasta = t.value; buscarHistorial(false); }
       else if (t.id === 'adm-his-est') { E.his.estado = t.value; buscarHistorial(false); }
       else if (t.dataset.f && t.type === 'date' && t.closest('#adm-ped-form') && E.his.F) { E.his.F.borr[t.dataset.f] = t.value; guardarBorr('pedidos', E.his.F); avisoPedido(); }
     });
     panel.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.stopPropagation(); if (E.confirmar) cerrarConfirmacion(false); else cerrar(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (E.fu) cerrarFusion(); else if (E.confirmar) cerrarConfirmacion(false); else cerrar(); return; }
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const t = e.target.closest('[role="tab"]'); if (!t) return;
         const l = [...panel.querySelectorAll('.adm-tabs [role="tab"]')], i = l.indexOf(t), n = l[(i + (e.key === 'ArrowRight' ? 1 : l.length - 1)) % l.length];
         e.preventDefault(); irA(n.dataset.s, true); return;
       }
       if (e.key !== 'Tab') return;
-      const raiz = E.confirmar ? $('adm-confirm') : $('admin-modal');
+      const raiz = E.fu ? $('adm-fusion') : E.confirmar ? $('adm-confirm') : $('admin-modal');
       const els = [...raiz.querySelectorAll('button,input,select,textarea,[href],[tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null && !x.closest('[hidden]'));
       if (!els.length) return;
       const a = document.activeElement, i = els.indexOf(a);

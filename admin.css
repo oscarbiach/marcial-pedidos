@@ -108,3 +108,5 @@ body.gestion-admin #adminBtn { display: inline-flex; }
   .adm-ficha-col { padding: 12px 14px calc(18px + env(safe-area-inset-bottom)); }
   .adm-tabs button { padding: 0 12px; }
 }
+#adm-fusion .adm-fila[aria-current="true"] { background: var(--m-azul-100); }
+#adm-fusion fieldset legend { padding: 0; margin-bottom: 2px; }

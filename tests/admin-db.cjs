@@ -24,13 +24,25 @@ const U=n=>'00000000-0000-0000-0000-00000000000'+n;
  create table whatsapp_contacts(contact_key text primary key,phone_number text,display_name text,linked_client_name text);
  create table whatsapp_client_review(client_name text primary key,deferred boolean default true);
  create table whatsapp_link_log(id bigint generated always as identity primary key,client_name text);
- create table seg_decisiones(id bigint generated always as identity primary key,cliente_nombre text);
  create table hojas_reparto(id text primary key,clientes text);
+ create table seg_decisiones(id uuid primary key default gen_random_uuid(),cliente_id uuid not null references clientes(id),cliente_nombre text not null,tipo text not null check(tipo in ('atender','recuperacion','pausa')),motivo text not null default 'otro',nota text,revision_en date,pedidos_conocidos text[] not null default '{}',desde date not null default current_date,version integer not null default 1,autor text not null default 'x',creado_en timestamptz not null default now(),vigente boolean not null default true,cerrada_en timestamptz,cerrada_por text,cierre text check(cierre in ('reemplazada','automatico','retomado','deshecha','pedido_nuevo')),
+  constraint seg_dec_revision_solo_pausa check(tipo='pausa' or revision_en is null),constraint seg_dec_cierre_coherente check((vigente and cerrada_en is null and cierre is null) or (not vigente and cerrada_en is not null and cierre is not null)));
+ create unique index seg_decisiones_una_vigente on seg_decisiones(cliente_id) where vigente;
+ create table seg_reglas_producto(id uuid primary key default gen_random_uuid(),tipo text not null check(tipo in ('retirado','reemplazo','excepcion')),producto_clave text not null,producto_nombre text not null default 'p',sustituto_clave text,cliente_id uuid references clientes(id),cliente_nombre text,desde date not null default current_date,autor text not null default 'x',vigente boolean not null default true,cerrada_en timestamptz,cerrada_por text,cierre text check(cierre in ('reemplazada','deshecha')),
+  constraint seg_reg_cierre_coherente check((vigente and cerrada_en is null and cierre is null) or (not vigente and cerrada_en is not null and cierre is not null)));
+ create unique index seg_reglas_excepcion_vigente on seg_reglas_producto(cliente_id,producto_clave) where vigente and tipo='excepcion';
+ create table seg_agenda(cliente_id uuid primary key references clientes(id) on delete cascade,fecha date,ciclo date,escrito_en date,actualizado_por text not null default 'x',actualizado_en timestamptz not null default now());
+ create function guardar_pedido(p jsonb,its jsonb) returns jsonb language plpgsql security invoker as $$ begin
+  if exists(select 1 from pedidos where id=p->>'id') then return jsonb_build_object('ok',true,'id',p->>'id','yaEstaba',true); end if;
+  insert into pedidos(id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,retiro) values(p->>'id',(p->>'fecha')::date,nullif(p->>'quien',''),p->>'cliente',nullif(p->>'fecha_entrega','')::date,nullif(p->>'direccion',''),nullif(p->>'notas',''),'Pendiente',coalesce((p->>'retiro')::boolean,false));
+  insert into pedido_items(pedido_id,producto,cantidad,orden) select p->>'id',x->>'producto',(x->>'cantidad')::numeric,0 from jsonb_array_elements(coalesce(its,'[]'::jsonb)) x;
+  insert into clientes(nombre,direccion) values(p->>'cliente',nullif(p->>'direccion','')) on conflict(nombre_key) do update set direccion=coalesce(nullif(excluded.direccion,''),clientes.direccion);
+  return jsonb_build_object('ok',true,'id',p->>'id'); end $$;
  create publication supabase_realtime;
  `);
- for(const f of ['20261113_preparacion','20261116_reparto_en_vivo','20261116_reparto_carga','20261120_panel_admin'])await db.exec(fs.readFileSync(`supabase/migrations/${f}.sql`,'utf8'));
+ for(const f of ['20261113_preparacion','20261116_reparto_en_vivo','20261116_reparto_carga','20261120_panel_admin','20261120_panel_admin_fusion'])await db.exec(fs.readFileSync(`supabase/migrations/${f}.sql`,'utf8'));
  // Una segunda carga no debe fallar ni duplicar nada (idempotente).
- await db.exec(fs.readFileSync('supabase/migrations/20261120_panel_admin.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261120_panel_admin.sql','utf8'));await db.exec(fs.readFileSync('supabase/migrations/20261120_panel_admin_fusion.sql','utf8'));
  const as=async n=>db.query("select set_config('test.uid',$1,false)",[n?U(n):'']);
  const call=async(name,args=[])=>{const q=await db.query(`select ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) as r`,args);return q.rows[0].r;};
  const J=o=>JSON.stringify(o);
@@ -52,7 +64,7 @@ const U=n=>'00000000-0000-0000-0000-00000000000'+n;
   insert into pedidos_a_cargar values('c1','ALMACÉN SUR');
   insert into whatsapp_contacts values('k1','5491100','Alm','Almacén Sur'),('k2','5491101','Esq','La Esquina');
   insert into whatsapp_client_review values('Almacén Sur',true);
-  insert into whatsapp_link_log(client_name) values('Almacén Sur');insert into seg_decisiones(cliente_nombre) values('Almacén Sur');insert into hojas_reparto values('h1','Almacén Sur, La Esquina');
+  insert into whatsapp_link_log(client_name) values('Almacén Sur');insert into seg_decisiones(cliente_id,cliente_nombre,tipo) values('10000000-0000-0000-0000-000000000001','Almacén Sur','pausa');insert into hojas_reparto values('h1','Almacén Sur, La Esquina');
  `);
  const ver=async id=>(await one('select actualizado_en::text v from pedidos where id=$1',[id])).v;
 
@@ -181,5 +193,89 @@ const U=n=>'00000000-0000-0000-0000-00000000000'+n;
  c=await call('admin_cliente_baja',[uuid(),idAlm,false]);assert.equal(c.eliminado_en,null);assert.equal(c.eliminado_por,null);
  assert.deepEqual((await call('admin_cambios_leer',['clientes',idAlm])).map(x=>x.accion),['restaurar','baja','editar','renombrar']);
  assert.equal((await one("select has_function_privilege('authenticated','admin_pedido_json(text)','EXECUTE') as ok")).ok,false);
- console.log('OK: panel admin (permisos, fecha real, estados, trigger, idempotencia, versión, renombre, baja, búsqueda paginada y registro).');await db.close();
+
+ // ═══ Observaciones ═══
+ const cv=async id=>(await one('select actualizado_en::text v from clientes where id=$1',[id])).v;
+ const idLE='10000000-0000-0000-0000-000000000002';
+ c=await call('admin_cliente_guardar',[uuid(),idLE,await cv(idLE),J({observaciones:'  Cierra los lunes  '})]);assert.equal(c.observaciones,'Cierra los lunes');
+ assert.equal((await call('admin_clientes_listar',['esquina',false]))[0].observaciones,'Cierra los lunes');
+ cam=await call('admin_cambios_leer',['clientes',idLE]);assert.equal(cam[0].antes.observaciones,null);assert.equal(cam[0].despues.observaciones,'Cierra los lunes');
+ await assert.rejects(call('admin_cliente_guardar',[uuid(),idLE,c.version,J({observaciones:'x'.repeat(1001)})]),/demasiado larga/);
+ c=await call('admin_cliente_guardar',[uuid(),idLE,c.version,J({observaciones:'   '})]);assert.equal(c.observaciones,null);
+
+ // ═══ Fusión de clientes ═══
+ const A='20000000-0000-0000-0000-00000000000a',B='20000000-0000-0000-0000-00000000000b',C='20000000-0000-0000-0000-00000000000c';
+ await db.exec(`
+  insert into clientes(id,nombre,direccion,observaciones) values('${A}','Esteban Vergara',null,'Paga contado'),('${B}','Esteban Vergara Don Chegusan','Ruta 5 km 3','Llamar antes'),('${C}','Esteban',null,null);
+  insert into pedidos(id,fecha,cliente,estado,remito_hecho,fecha_despacho) values('fa1','2026-09-01','Esteban Vergara','Despachado',true,'2026-09-02'),('fa2','2026-09-08','esteban vergara ','Cancelado',false,null),('fa3','2026-11-18','Esteban Vergara','Pendiente',false,null),
+   ('fb1','2026-10-01','Esteban Vergara Don Chegusan','Despachado',true,'2026-10-02'),('fb2','2026-10-08','Esteban Vergara Don Chegusan','Despachado',true,'2026-10-09'),('fb3','2026-10-15','Esteban Vergara Don Chegusan','Despachado',false,'2026-10-16'),('fb4','2026-10-22','Esteban Vergara Don Chegusan','Despachado',false,'2026-10-23'),('fb5','2026-11-01','Esteban Vergara Don Chegusan','Despachado',false,'2026-11-02'),('fb6','2026-11-19','Esteban Vergara Don Chegusan','Pendiente',false,null),
+   ('fc1','2026-08-01','Esteban','Despachado',true,'2026-08-02'),('fc2','2026-08-02','Esteban','Despachado',false,'2026-08-03');
+  update pedidos set eliminado_en=now() where id='fa2';
+  update pedidos set remito_hecho=true where id in ('fa1','fb1','fb2','fc1');
+  insert into prep_pedidos(pedido_id,controlado,control_firma) values('fa1',true,'fa'),('fb6',true,'x');
+  insert into pedidos_fijos values('fx1','Esteban Vergara');insert into app_notas values('10000000-0000-0000-0000-0000000000b1','Esteban Vergara','n');insert into pedidos_a_cargar values('cx1','esteban vergara');
+  insert into whatsapp_contacts values('k3','5491122','Est','Esteban Vergara'),('k4','5491133','Est2','Esteban Vergara Don Chegusan');insert into whatsapp_client_review values('Esteban Vergara'),('Esteban Vergara Don Chegusan');
+  insert into seg_decisiones(cliente_id,cliente_nombre,tipo,autor) values('${A}','Esteban Vergara','atender','Oscar'),('${B}','Esteban Vergara Don Chegusan','pausa','Joaquin');
+  insert into seg_decisiones(cliente_id,cliente_nombre,tipo,autor,vigente,cerrada_en,cierre) values('${A}','Esteban Vergara','atender','Oscar',false,now(),'automatico');
+  insert into seg_reglas_producto(tipo,producto_clave,cliente_id,vigente) values('excepcion','queso','${A}',true),('excepcion','pan','${A}',true),('excepcion','queso','${B}',true);
+  insert into seg_agenda(cliente_id,fecha,ciclo) values('${A}','2026-11-25','2026-11-18'),('${B}','2026-11-26','2026-11-19');
+ `);
+ await db.exec("update pedidos set remito_hecho=true where id='fa1'");
+ const vA=await cv(A),vB=await cv(B),vC=await cv(C);
+ // Permisos y validaciones
+ await as(3);await assert.rejects(call('admin_cliente_fusionar',[uuid(),A,B,vA,vB]),/Sin acceso/);await assert.rejects(call('admin_cliente_fusion_impacto',[A,B]),/Sin acceso/);await as(1);
+ await assert.rejects(call('admin_cliente_fusionar',[uuid(),A,A,vA,vA]),/consigo mismo/);
+ await assert.rejects(call('admin_cliente_fusionar',[uuid(),A,B,vA,'2020-01-01T00:00:00Z']),/Otro cambio se guardó antes/);
+ await assert.rejects(call('admin_cliente_fusionar',[uuid(),A,uuid(),vA,vB]),/no existe/);
+ // Vista previa
+ const im=await call('admin_cliente_fusion_impacto',[A,B]);
+ assert.equal(im.pedidos,3);assert.equal(im.pedidos_fijos,1);assert.equal(im.app_notas,1);assert.equal(im.pedidos_a_cargar,1);assert.equal(im.whatsapp_contacts,1);assert.equal(im.decision_conserva,'destino');assert.equal(im.decision_reemplazada,true);assert.equal(im.decision_origen,'atender');assert.equal(im.decision_destino,'pausa');assert.equal(im.excepciones,2);assert.equal(im.excepciones_reemplazadas,1);assert.equal(im.agenda,'se_descarta_la_del_origen');
+ const snapAntes=(await one("select count(*)::int n from pedidos where cliente='Esteban Vergara Don Chegusan'")).n;assert.equal(snapAntes,6);
+ // Fusionar A (origen) en B (destino conserva su nombre)
+ const opF=uuid();
+ let fu=await call('admin_cliente_fusionar',[opF,A,B,vA,vB]);
+ assert.equal(fu.destino.nombre,'Esteban Vergara Don Chegusan');assert.equal(fu.origen.fusionado_en,B);assert.ok(fu.origen.eliminado_en);assert.deepEqual(fu.pedidos_movidos,['fa1','fa2','fa3']);assert.equal(fu.actualizados.pedidos,3);
+ assert.equal((await one("select count(*)::int n from pedidos where cliente='Esteban Vergara Don Chegusan'")).n,9);   // incluye el eliminado
+ assert.equal((await one("select count(*)::int n from pedidos where lower(trim(cliente))='esteban vergara'")).n,0);
+ for(const [t,col] of [['pedidos_fijos','cliente'],['app_notas','cliente'],['pedidos_a_cargar','cliente'],['whatsapp_contacts','linked_client_name']])assert.ok((await one(`select count(*)::int n from ${t} where ${col}='Esteban Vergara Don Chegusan' and ${t==='whatsapp_contacts'?"contact_key='k3'":'true'}`)).n>=1,t);
+ assert.equal((await one("select count(*)::int n from whatsapp_client_review where client_name like 'Esteban%'")).n,1);
+ // Remitos de despachados intactos; el pendiente (cambió el cliente) los pierde por el trigger
+ assert.equal((await one("select remito_hecho from pedidos where id='fa1'")).remito_hecho,true);assert.equal((await one("select control_firma from prep_pedidos where pedido_id='fa1'")).control_firma,'fa');
+ // Decisiones: queda la del destino vigente; la del origen cerrada 'reemplazada' y movida con el historial
+ let dec=(await db.query("select cliente_id,tipo,vigente,cierre,cerrada_por from seg_decisiones where cliente_nombre like 'Esteban%' order by creado_en,tipo")).rows;
+ assert.equal(dec.length,3);assert.ok(dec.every(x=>x.cliente_id===B));assert.deepEqual(dec.filter(x=>x.vigente).map(x=>x.tipo),['pausa']);assert.ok(dec.some(x=>x.cierre==='reemplazada'&&x.tipo==='atender'&&x.cerrada_por==='Oscar'));
+ // Excepciones y agenda
+ const ex=(await db.query("select cliente_id,producto_clave,vigente,cierre from seg_reglas_producto order by producto_clave,vigente")).rows;assert.ok(ex.every(x=>x.cliente_id===B));assert.equal(ex.filter(x=>x.vigente).length,2);assert.equal(ex.filter(x=>x.cierre==='reemplazada').length,1);
+ assert.deepEqual((await db.query('select cliente_id,fecha::text f from seg_agenda')).rows,[{cliente_id:B,f:'2026-11-26'}]);
+ // Dirección y observaciones
+ const cb=await one('select direccion,observaciones,eliminado_en,fusionado_en from clientes where id=$1',[B]);assert.equal(cb.direccion,'Ruta 5 km 3');assert.equal(cb.observaciones,'Llamar antes / Paga contado');assert.equal(cb.fusionado_en,null);
+ const ca=await one('select eliminado_por,fusionado_en from clientes where id=$1',[A]);assert.equal(ca.fusionado_en,B);assert.equal(ca.eliminado_por,'Oscar');
+ assert.equal((await one("select count(*)::int n from clientes where id=$1",[A])).n,1);   // no se borra
+ // Oculto salvo «Ver dados de baja», marcado con quién lo absorbió; no se restaura
+ assert.ok(!(await call('admin_clientes_listar',['esteban',false])).some(x=>x.id===A));
+ const fl=(await call('admin_clientes_listar',['esteban',true])).find(x=>x.id===A);assert.equal(fl.fusionado_con,'Esteban Vergara Don Chegusan');
+ await assert.rejects(call('admin_cliente_baja',[uuid(),A,false]),/fusionado/);
+ await assert.rejects(call('admin_cliente_guardar',[uuid(),A,fu.origen.version,J({direccion:'x'})]),/fusionado/);
+ // Registro con la lista de pedidos movidos, en destino y origen
+ cam=await call('admin_cambios_leer',['clientes',B]);assert.equal(cam[0].accion,'fusionar');assert.deepEqual(cam[0].despues.pedidos_movidos,['fa1','fa2','fa3']);assert.equal(cam[0].despues.actualizados.pedidos,3);assert.equal(cam[0].autor,'Oscar');
+ assert.equal((await call('admin_cambios_leer',['clientes',A]))[0].accion,'fusionar');
+ // Idempotencia: mismo op = mismo resultado, un solo registro; un fusionado no vuelve a fusionarse
+ assert.deepEqual(await call('admin_cliente_fusionar',[opF,A,B,vA,vB]),fu);assert.equal((await db.query("select count(*)::int n from admin_cambios where op_id=$1",[opF])).rows[0].n,1);
+ await assert.rejects(call('admin_cliente_fusionar',[uuid(),A,C,fu.origen.version,vC]),/ya fue fusionado/);
+ await assert.rejects(call('admin_cliente_fusionar',[uuid(),C,A,vC,fu.origen.version]),/ya fue fusionado/);
+ // Redirección: insert directo y guardar_pedido con el nombre del origen quedan en el destino y no reviven al origen
+ await db.exec("insert into pedidos(id,fecha,cliente) values('nuevo1','2026-11-20','  ESTEBAN vergara ')");assert.equal((await one("select cliente from pedidos where id='nuevo1'")).cliente,'Esteban Vergara Don Chegusan');
+ const nClientes=(await one('select count(*)::int n from clientes')).n;
+ await call('guardar_pedido',[J({id:'nuevo2',fecha:'2026-11-20',quien:'Oscar',cliente:'Esteban Vergara',direccion:'Calle nueva 1'}),J([{producto:'Queso',cantidad:1}])]);
+ assert.equal((await one("select cliente from pedidos where id='nuevo2'")).cliente,'Esteban Vergara Don Chegusan');assert.equal((await one('select count(*)::int n from clientes')).n,nClientes);
+ assert.ok((await one('select eliminado_en from clientes where id=$1',[A])).eliminado_en);   // el origen sigue de baja
+ assert.ok(!(await call('admin_clientes_listar',['',false])).some(x=>x.id===A));
+ // Fusión encadenada: B (destino) pasa a otro destino C; el nombre del origen original sigue redirigiendo al final de la cadena
+ const vB2=await cv(B),vC2=await cv(C);await call('admin_cliente_fusionar',[uuid(),B,C,vB2,vC2]);
+ await db.exec("insert into pedidos(id,fecha,cliente) values('nuevo3','2026-11-20','Esteban Vergara')");assert.equal((await one("select cliente from pedidos where id='nuevo3'")).cliente,'Esteban');
+ assert.equal((await one("select count(*)::int n from pedidos where cliente='Esteban'")).n,2+9+2+1);
+ assert.equal((await one("select count(*)::int n from seg_decisiones where cliente_id=$1 and vigente",[C])).n,1);
+ // Corregir el cliente de un pedido a un nombre fusionado lo apunta al final de la cadena
+ await as(2);r=await call('admin_pedido_guardar',[uuid(),'nuevo3',await ver('nuevo3'),J({cliente:'esteban vergara don chegusan'})]);assert.equal(r.pedido.cliente,'Esteban');await as(1);
+ console.log('OK: panel admin + observaciones y fusión (permisos, fecha real, estados, trigger, idempotencia, versión, renombre, baja, búsqueda paginada y registro).');await db.close();
 })().catch(e=>{console.error(e);process.exitCode=1;});

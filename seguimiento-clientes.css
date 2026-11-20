@@ -434,3 +434,5 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 .sc-tl-h { margin: 16px 0 4px; padding-top: 12px; border-top: 2px solid var(--m-linea-2); font-size: var(--m-t-lg); font-weight: 800; color: var(--m-tinta-2); }
 .sc-tl-f--fuera .sc-tl-n { color: var(--m-tinta-2); font-weight: 600; }
 @media (max-width: 480px) { .sc-tl-f { flex-wrap: wrap; } .sc-tl-f .sc-btn--chico { width: 100%; justify-content: center; margin-bottom: 8px; } }
+.sc-f-obs { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0 0; font-size: var(--m-t-md); line-height: 1.4; overflow-wrap: anywhere; }
+.sc-f-obs .ico { flex: none; margin-top: 2px; }

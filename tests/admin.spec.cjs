@@ -11,17 +11,18 @@ const mockClient=`window.supabase={createClient:()=>({
 })};`;
 const norm=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
 function pedidoDb(id,cliente,fecha,extra={}){return {id,cliente,fecha,fecha_pedido:null,quien:'Oscar',direccion:'San Martín 123',notas:'',estado:'Pendiente',fecha_entrega:null,fecha_despacho:null,retiro:false,eliminado_en:null,eliminado_por:null,remito_hecho:false,creado_en:fecha+'T12:00:00+00:00',actualizado_en:'2026-11-20T10:00:00.000001+00:00',pedido_items:[{id:Number(String(id).replace(/\D/g,''))||1,producto:'Mozzarella',cantidad:2,orden:0},{id:900+(Number(String(id).replace(/\D/g,''))||1),producto:'Aceite',cantidad:1,orden:1}],...extra};}
-function setup(){
+function setup(opts={}){
  const db={pedidos:[pedidoDb('p1','Almacén del Centro','2026-11-20',{remito_hecho:true,fecha_entrega:'2026-11-21'}),pedidoDb('p2','La Esquina','2026-11-18',{estado:'Despachado',fecha_despacho:'2026-11-19',pedido_items:[{id:2,producto:'Mozzarella',cantidad:2,orden:0},{id:902,producto:'Pan nuevo',cantidad:1,orden:1}]}),pedidoDb('pj','Almacén del Centro','2026-07-10',{estado:'Despachado',fecha_despacho:'2026-07-12'}),pedidoDb('pe','Eliminado SA','2026-11-10',{eliminado_en:'2026-11-11T00:00:00+00:00'})],
   clientes:[{id:'c1',nombre:'Almacén del Centro',direccion:'San Martín 123',eliminado_en:null,version:'2026-11-01T10:00:00.000001+00:00'},{id:'c2',nombre:'La Esquina',direccion:'Mitre 50',eliminado_en:null,version:'2026-11-01T10:00:00.000001+00:00'},{id:'c3',nombre:'Viejo Cliente',direccion:'',eliminado_en:'2026-10-01T10:00:00+00:00',version:'2026-11-01T10:00:00.000001+00:00'}],
   productos:[{nombre:'Mozzarella',unidad:'unidad',activo:true},{nombre:'Aceite',unidad:'caja',activo:true}],cambios:[],ops:new Map(),llamadas:[],telefonos:{'almacen del centro':['5491155550000']}};
+ if(opts.fusion){db.clientes.push({id:'c4',nombre:'Esteban Vergara',direccion:'',observaciones:null,eliminado_en:null,version:'2026-11-01T10:00:00.000001+00:00'},{id:'c5',nombre:'Esteban Vergara Don Chegusan',direccion:'Ruta 5',observaciones:'Llamar antes',eliminado_en:null,version:'2026-11-01T10:00:00.000001+00:00'});db.pedidos.push(pedidoDb('e1','Esteban Vergara','2026-11-05',{estado:'Despachado'}),pedidoDb('e2','Esteban Vergara Don Chegusan','2026-11-06',{estado:'Despachado'}));}
  for(let i=0;i<34;i++)db.pedidos.push(pedidoDb('r'+(100+i),'Relleno '+i,'2026-10-'+String(28-(i%27)).padStart(2,'0'),{estado:'Despachado',fecha_despacho:'2026-10-29'}));
  const ctl={fallar:false,perderRespuesta:false,colgar:false,tick:0};
  const ts=()=>'2026-11-20T15:00:'+String(10+(++ctl.tick)).padStart(2,'0')+'.000001+00:00';
  const efecha=p=>p.fecha_pedido||p.fecha;
  const fila=p=>({id:p.id,cliente:p.cliente,fecha:p.fecha,fecha_pedido:p.fecha_pedido,creado_en:p.creado_en,fecha_entrega:p.fecha_entrega,fecha_despacho:p.fecha_despacho,estado:p.estado,eliminado_en:p.eliminado_en,retiro:p.retiro,renglones:p.pedido_items.length,resumen:p.pedido_items.slice(0,3).map(i=>i.producto).join(', ')});
  const ficha=p=>({pedido:{id:p.id,cliente:p.cliente,direccion:p.direccion,notas:p.notas,quien:p.quien,fecha:p.fecha,fecha_pedido:p.fecha_pedido,creado_en:p.creado_en,fecha_entrega:p.fecha_entrega,fecha_despacho:p.fecha_despacho,estado:p.estado,retiro:p.retiro,eliminado_en:p.eliminado_en,version:p.actualizado_en},items:p.pedido_items.map(i=>({id:i.id,producto:i.producto,cantidad:i.cantidad,medida:null,fetear:false,sin_cuero:false})),armado:{remito_hecho:p.remito_hecho,controlado:false,cargado:false,etapa:null}});
- const cli=c=>({id:c.id,nombre:c.nombre,direccion:c.direccion,eliminado_en:c.eliminado_en,version:c.version,eliminado_por:null,creado_en:null});
+ const cli=c=>({id:c.id,nombre:c.nombre,direccion:c.direccion,observaciones:c.observaciones||null,eliminado_en:c.eliminado_en,fusionado_en:c.fusionado_en||null,version:c.version,eliminado_por:null,creado_en:null});
  const err=m=>({error:{message:m}});
  async function request(q){
   if(q.name==='catalogo_aliases')return {data:{}};
@@ -29,7 +30,7 @@ function setup(){
   if(q.name==='catalogo_leer'){const m=new Map();for(const p of db.pedidos.filter(p=>!p.eliminado_en))for(const i of p.pedido_items){const k=i.producto.toLowerCase();if(!db.productos.some(x=>x.nombre.toLowerCase()===k))m.set(k,{clave:k,texto:i.producto,cliente:p.cliente,usos:1});}return {data:{productos:db.productos,pendientes:[...m.values()],decisiones:[]}};}
   if(q.name==='admin_clientes_listar'){
    const a=q.args,n=k=>db.pedidos.filter(p=>!p.eliminado_en&&norm(p.cliente)===norm(k));
-   return {data:db.clientes.filter(c=>(a.p_bajas||!c.eliminado_en)&&(!a.p_q||norm(c.nombre).includes(norm(a.p_q)))).map(c=>({...cli(c),pedidos:n(c.nombre).length,ultimo_pedido:n(c.nombre).map(efecha).sort().at(-1)||null,telefonos:db.telefonos[norm(c.nombre)]||[]}))};
+   return {data:db.clientes.filter(c=>(a.p_bajas||!c.eliminado_en)&&(!a.p_q||norm(c.nombre).includes(norm(a.p_q)))).map(c=>({...cli(c),fusionado_con:db.clientes.find(x=>x.id===c.fusionado_en)?.nombre||null,pedidos:n(c.nombre).length,ultimo_pedido:n(c.nombre).map(efecha).sort().at(-1)||null,telefonos:db.telefonos[norm(c.nombre)]||[]}))};
   }
   if(q.name==='admin_cliente_impacto'){const c=db.clientes.find(c=>c.id===q.args.p_id);return {data:{pedidos:db.pedidos.filter(p=>norm(p.cliente)===norm(c.nombre)).length,pedidos_fijos:1,app_notas:2,pedidos_a_cargar:0,whatsapp_contacts:1,whatsapp_client_review:0}};}
   if(q.name==='admin_cliente_guardar'){
@@ -41,8 +42,25 @@ function setup(){
    if(a.p_datos.nombre&&db.clientes.some(x=>x.id!==a.p_id&&norm(x.nombre)===norm(a.p_datos.nombre)))return err('Ya existe un cliente con ese nombre');
    if(!c){c={id:a.p_id,nombre:'',direccion:'',eliminado_en:null};db.clientes.push(c);}
    if(a.p_datos.nombre&&antes&&antes.nombre!==a.p_datos.nombre)db.pedidos.forEach(p=>{if(norm(p.cliente)===norm(antes.nombre))p.cliente=a.p_datos.nombre;});
-   Object.assign(c,a.p_datos,{version:ts()});const r=cli(c);db.ops.set(a.p_op,r);db.cambios.push({tabla:'clientes',registro:c.id,accion:antes?'editar':'crear',antes:antes&&{nombre:antes.nombre,direccion:antes.direccion},despues:a.p_datos,autor:q.who,en:ts()});
+   Object.assign(c,a.p_datos,{version:ts()});if('observaciones' in a.p_datos)c.observaciones=a.p_datos.observaciones||null;const r=cli(c);db.ops.set(a.p_op,r);db.cambios.push({tabla:'clientes',registro:c.id,accion:antes?'editar':'crear',antes:antes&&{nombre:antes.nombre,direccion:antes.direccion},despues:a.p_datos,autor:q.who,en:ts()});
    if(ctl.fallar){ctl.fallar=false;return err('Sin conexión');}
+   return {data:r};
+  }
+  if(q.name==='admin_cliente_fusion_impacto'){
+   const o=db.clientes.find(c=>c.id===q.args.p_origen),d=db.clientes.find(c=>c.id===q.args.p_destino);
+   return {data:{origen:cli(o),destino:cli(d),pedidos:db.pedidos.filter(p=>norm(p.cliente)===norm(o.nombre)).length,pedidos_fijos:1,app_notas:0,pedidos_a_cargar:0,whatsapp_contacts:1,whatsapp_client_review:0,agenda:'pasa_al_destino',decisiones:2,decision_origen:'atender',decision_destino:'pausa',decision_conserva:'destino',decision_reemplazada:true,excepciones:1,excepciones_reemplazadas:0}};
+  }
+  if(q.name==='admin_cliente_fusionar'){
+   const a=q.args;db.llamadas.push({f:'fusion',op:a.p_op,origen:a.p_origen,destino:a.p_destino});
+   if(ctl.colgar)return new Promise(()=>{});
+   if(db.ops.has(a.p_op))return {data:db.ops.get(a.p_op)};
+   const o=db.clientes.find(c=>c.id===a.p_origen),d=db.clientes.find(c=>c.id===a.p_destino);
+   if(a.p_version_origen!==o.version||a.p_version_destino!==d.version)return err('Otro cambio se guardó antes: recargá');
+   const movidos=db.pedidos.filter(p=>norm(p.cliente)===norm(o.nombre));movidos.forEach(p=>{p.cliente=d.nombre;});
+   Object.assign(o,{eliminado_en:'2026-11-20T15:00:00+00:00',fusionado_en:d.id,version:ts()});d.version=ts();
+   const r={destino:cli(d),origen:cli(o),actualizados:{pedidos:movidos.length},pedidos_movidos:movidos.map(p=>p.id)};db.ops.set(a.p_op,r);
+   db.cambios.push({tabla:'clientes',registro:d.id,accion:'fusionar',antes:{origen:o.nombre},despues:{origen:o.nombre,actualizados:{pedidos:movidos.length}},autor:q.who,en:ts()});
+   if(ctl.perderRespuesta){ctl.perderRespuesta=false;return err('Failed to fetch');}
    return {data:r};
   }
   if(q.name==='admin_cliente_baja'){
@@ -74,7 +92,7 @@ function setup(){
   if(q.name==='admin_cambios_leer')return {data:db.cambios.filter(c=>c.tabla===q.args.p_tabla&&c.registro===q.args.p_registro).reverse()};
   if(q.name)return {data:[]};
   if(q.table==='pedidos')return {data:structuredClone(db.pedidos)};
-  if(q.table==='clientes')return {data:db.clientes.map(c=>({nombre:c.nombre,direccion:c.direccion,eliminado_en:c.eliminado_en}))};
+  if(q.table==='clientes')return {data:db.clientes.map(c=>({nombre:c.nombre,direccion:c.direccion,eliminado_en:c.eliminado_en,observaciones:c.observaciones||null}))};
   if(q.table==='productos')return {data:db.productos};
   return {data:[]};
  }
@@ -277,5 +295,59 @@ test('celular 390px: pantalla completa, lista y ficha de a una',async({browser})
  await page.locator('[data-adm="his-volver"]').click();await expect(page.locator('#adm-his-lista')).toBeVisible();
  await page.locator('#adm-tab-clientes').click();await page.locator('#adm-cli-lista .adm-fila').first().click();await expect(page.locator('#adm-cli-form')).toBeVisible();
  await page.locator('[data-adm="cerrar"]').click();await expect(panel(page)).toBeHidden();
+ expect(page.errors).toEqual([]);await page.close();
+});
+
+test('Clientes: observación visible en la ficha del seguimiento y fusión con vista previa, error y reintento',async({browser})=>{
+ const s=setup({fusion:true}),page=await abrir(browser,s,'Oscar');
+ await page.locator('#adminBtn').click();await page.locator('#adm-tab-clientes').click();
+ // Observación: se guarda, se ve en la ficha del seguimiento (solo lectura) y se puede borrar
+ await page.locator('#adm-cli-q').fill('almacén');await expect(page.locator('#adm-cli-lista .adm-fila')).toHaveCount(1);await page.locator('#adm-cli-lista .adm-fila').click();
+ await page.locator('#adm-cli-form [name="observaciones"]').fill('Cierra los lunes');await page.locator('#adm-cli-guardar').click();await expect(page.locator('#adm-cli-msg')).toHaveText('Guardado.');
+ expect(s.db.clientes.find(c=>c.id==='c1').observaciones).toBe('Cierra los lunes');
+ await expect(page.locator('#adm-cli-hist')).toContainText('Observación: — → Cierra los lunes');
+ expect(await page.evaluate(()=>state.clientes.find(c=>c.n==='Almacén del Centro').obs)).toBe('Cierra los lunes');
+ await page.locator('[data-adm="cerrar"]').click();
+ await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#tab-clientes')).toHaveClass(/active/);
+ await page.evaluate(()=>{SegUI.invalidar();SegUI.render();SegUI.verCliente('Almacén del Centro');});
+ await expect(page.locator('#sc-ficha .sc-f-obs')).toContainText('Cierra los lunes');
+ await shot(page,'fusion-ficha-observacion');
+ await page.evaluate(()=>SegUI.cerrarVentanas());
+ // Fusión
+ await page.locator('#adminBtn').click();await page.locator('#adm-tab-clientes').click();
+ await page.locator('#adm-cli-q').fill('esteban vergara');await expect(page.locator('#adm-cli-lista .adm-fila')).toHaveCount(2);
+ await page.locator('#adm-cli-lista .adm-fila',{hasText:'Don Chegusan'}).click();
+ await page.locator('#adm-cli-form [name="direccion"]').fill('Ruta 5 km 3');
+ await page.locator('[data-adm="cli-fusionar"]').click();await expect(page.locator('#adm-cli-msg')).toContainText('Guardá o descartá');
+ await page.locator('#adm-cli-form [name="direccion"]').fill('Ruta 5');
+ await page.locator('[data-adm="cli-fusionar"]').click();
+ await expect(page.locator('#adm-fusion')).toBeVisible();await expect(page.locator('#adm-fu-q')).toBeFocused();
+ await expect(page.locator('#adm-fu-lista .adm-fila')).toHaveCount(3);await page.locator('#adm-fu-q').fill('esteban');await expect(page.locator('#adm-fu-lista .adm-fila')).toHaveCount(1);   // excluye al mismo cliente
+ await expect(page.locator('#adm-fusion [data-adm="fu-ok"]')).toBeDisabled();
+ await page.locator('#adm-fu-lista .adm-fila').click();
+ await expect(page.locator('#adm-fu-impacto')).toContainText('1 pedido');await expect(page.locator('#adm-fu-impacto')).toContainText('1 contacto de WhatsApp');await expect(page.locator('#adm-fu-impacto')).toContainText('se conserva la de');
+ await expect(page.locator('#adm-fusion [data-adm="fu-ok"]')).toBeDisabled();   // falta la confirmación explícita
+ // El nombre que queda: invertir
+ await page.locator('#adm-fu-r-otro').check();await expect(page.locator('#adm-fu-impacto')).toContainText('«Esteban Vergara»');
+ await page.locator('#adm-fu-r-actual').check();await expect(page.locator('#adm-fu-impacto')).toContainText('«Esteban Vergara Don Chegusan»');
+ await page.locator('#adm-fu-entiendo').check();await expect(page.locator('#adm-fusion [data-adm="fu-ok"]')).toBeEnabled();
+ await shot(page,'fusion-ventana');
+ // Escape cierra solo la sub-ventana
+ await page.keyboard.press('Escape');await expect(page.locator('#adm-fusion')).toBeHidden();await expect(panel(page)).toBeVisible();
+ await page.locator('[data-adm="cli-fusionar"]').click();await page.locator('#adm-fu-q').fill('esteban');await expect(page.locator('#adm-fu-lista .adm-fila')).toHaveCount(1);await page.locator('#adm-fu-lista .adm-fila').click();await page.locator('#adm-fu-entiendo').check();
+ // Primer intento: la respuesta se pierde pero el servidor lo aplicó; el reintento usa el mismo op y no duplica
+ s.ctl.perderRespuesta=true;await page.locator('#adm-fu-ok').click();
+ await expect(page.locator('#adm-fu-msg')).toContainText('Sin conexión');await expect(page.locator('#adm-fu-ok')).toHaveText('Reintentar');
+ await page.locator('#adm-fu-ok').click();
+ await expect(page.locator('#adm-fusion')).toBeHidden();
+ const fl=s.db.llamadas.filter(l=>l.f==='fusion');expect(fl).toHaveLength(2);expect(fl[1].op).toBe(fl[0].op);expect(s.db.cambios.filter(c=>c.accion==='fusionar')).toHaveLength(1);
+ // Quedó la ficha del cliente que se conserva, con el historial; el otro, fuera de la lista y de la app
+ await expect(page.locator('#adm-ficha-h')).toHaveText('Esteban Vergara Don Chegusan');await expect(page.locator('#adm-cli-lista .adm-fila')).toHaveCount(1);
+ await expect(page.locator('#adm-cli-hist')).toContainText('Fusionó «Esteban Vergara» en este cliente');
+ expect(s.db.pedidos.filter(p=>p.cliente==='Esteban Vergara Don Chegusan')).toHaveLength(2);
+ const nom=await page.evaluate(()=>state.clientes.map(c=>c.n));expect(nom).not.toContain('Esteban Vergara');expect(nom).toContain('Esteban Vergara Don Chegusan');
+ expect(await page.evaluate(()=>state.pedidos.filter(p=>p.cliente==='Esteban Vergara Don Chegusan').length)).toBe(2);
+ await page.locator('#adm-cli-bajas').check();await expect(page.locator('#adm-cli-lista')).toContainText('Fusionado con Esteban Vergara Don Chegusan');
+ await page.locator('#adm-cli-lista .adm-fila',{hasText:'Fusionado con'}).click();await expect(page.locator('#adm-cli-form [name="nombre"]')).toBeDisabled();await expect(page.locator('[data-adm="cli-restaurar"]')).toHaveCount(0);
  expect(page.errors).toEqual([]);await page.close();
 });
