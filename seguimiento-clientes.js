@@ -347,15 +347,14 @@
   }
 
   // ── Calendario de 2 semanas (pedido del usuario, 18/11/2026) ──
-  // Día en que hay que escribirle a un cliente: su último pedido + su frecuencia (redondeada); si tiene días habituales de pedir, el primero de ellos
-  // desde ese vencimiento (hasta 7 días); si no, el mismo día salvo que caiga domingo (pasa al lunes). No es una decisión: es un cálculo sobre el motor.
+  // Día de contacto: último pedido + frecuencia redondeada. El día habitual es informativo; no posterga el vencimiento.
+  // Los movimientos manuales se respetan en agenda().
   // Los domingos no se mandan mensajes: todo lo que caería en domingo pasa al lunes siguiente.
   const sinDomingo = d => (diaSemana(d) === 0 ? sumarDias(d, 1) : d);
   // fecha + n días hábiles (de lunes a sábado: los domingos no cuentan)
   const habilMas = (f, n) => { let d = f; for (let i = 0; i < n;) { d = sumarDias(d, 1); if (diaSemana(d) !== 0) i++; } return d; };
   const diaCalculado = c => {
     const vence = sumarDias(c.ultimo, Math.max(1, Math.round(c.intervalo)));
-    if (c.diasHab && c.diasHab.length) { for (let i = 0; i < 7; i++) { const d = sumarDias(vence, i); if (c.diasHab.includes(diaSemana(d))) return sinDomingo(d); } }
     return sinDomingo(vence);
   };
   // Tipo de cliente (para saber si se le habla o se le hace seguimiento):
