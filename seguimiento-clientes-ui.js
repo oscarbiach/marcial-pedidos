@@ -23,7 +23,7 @@
   const DATOS_VIEJOS_MS = 60 * 1000; // las decisiones y la agenda se vuelven a leer si tienen más de 1 minuto (otra persona pudo cambiar algo)
   const PLAZO = { datos: 20000, escritura: 20000 };    // una lectura de decisiones que no responde en 20 s se da por fallida (igual que el historial)
   // Filtro de arriba del calendario: todos, solo habituales («Hablarles») o solo seguimiento (única compra y dejó de comprar). Se recuerda en este navegador.
-  const FILTROS = ['todos', 'habitual', 'seguimiento'], FILTRO_KEY = 'dm_seg_filtro';
+  const FILTROS = ['todos', 'habitual', 'seguimiento', 'atrasados'], FILTRO_KEY = 'dm_seg_filtro';
   const leerFiltro = () => { try { const v = window.localStorage.getItem(FILTRO_KEY); return FILTROS.includes(v) ? v : 'todos'; } catch (e) { return 'todos'; } };
   const guardarFiltro = v => { try { window.localStorage.setItem(FILTRO_KEY, v); } catch (e) { /* sin almacenamiento: vale solo por esta sesión */ } };
   const V2_VACIO = { instalado: false, yo: null, etiquetas: [], usuarios: [], clientes: [] };
@@ -31,7 +31,7 @@
     filtro: leerFiltro(),
     q: '', sel: null, fichaAbierta: false, origen: null, ritmo: new Set(), historial: null, cargando: false, error: false, ts: 0, calc: null, huella: '', ag: null,
     datos: { estado: 'pendiente', decisiones: [], reglas: [], agenda: [], agendaOk: false, agendaMensaje: '', v2: V2_VACIO, ts: 0, ultimoOk: 0, cargando: false, error: false, mensaje: '' },
-    vista: 'hoy', filtroEt: '', cq: '', cf: { tipo: '', etiqueta: '', estado: '', vendedor: '' }, cLimite: 100,   // Seguimiento v2: vista actual, filtro por etiqueta y filtros de la lista de clientes
+    vista: 'hoy', filtroEt: '', cq: '', cf: { tipo: '', senal: '', etiqueta: '', vendedor: '' }, cLimite: 100, semana: 0, pq: '',   // Seguimiento v2: vista actual, filtro por etiqueta y filtros de la lista de clientes
     alertasTodas: new Set(), contactos: new Map(), ops: new Map(), guardandoMeta: new Set(),
     agendaMapa: new Map(),   // clave del cliente → { fecha, ciclo, escrito } (lo guardado, más lo que se acaba de cambiar y se está guardando)
     sobre: { pausar: new Map(), cerrar: new Set(), meta: new Map() },   // `meta`: vendedor / etiquetas / último contacto recién cambiados (clave del cliente → parcial)   // decisiones que se ven aplicadas antes de que la base conteste (pausar / retomar)
@@ -135,7 +135,7 @@
   }
   function abrir() {
     if (!$('sc-raiz') || !aplicarAcceso()) return;
-    E.q = ''; E.sel = null; E.fichaAbierta = false; E.aviso = null; E.vista = 'hoy'; E.filtroEt = '';   // al entrar siempre se ve el panel de Hoy, no una búsqueda ni una ficha vieja
+    E.q = ''; E.sel = null; E.fichaAbierta = false; E.aviso = null; E.vista = 'hoy'; E.filtroEt = ''; E.semana = 0; E.pq = '';   // al entrar siempre se ve el panel de Hoy, no una búsqueda ni una ficha vieja
     // Salvo que se llegue desde WhatsApp con «Ver ficha completa»: entonces se abre la ficha de ese cliente.
     if (E.abrirCon) { E.sel = E.abrirCon; E.fichaAbierta = true; E.abrirCon = null; }
     if (!E.historial || Date.now() - E.ts > VIEJO_MS) pedirHistorial(); else render();
@@ -286,22 +286,7 @@
     return `<span class="sc-pill sc-t-info sc-pill--wa" title="Último WhatsApp que le mandamos, después de su último pedido">${ico('message-circle', 'ico-sm')}Le escribimos ${esc(cuando)}</span>`;
   }
 
-  // ── Tarjeta del calendario ──
-  // Simple: el nombre y las insignias (Pidió, Le escribí, tipo, Atrasado, Movido). «Dejó de llevar» no va acá: se ve en la ficha. El detalle (último pedido, frecuencia, día habitual)
-  // va en el tooltip y en el nombre accesible, y completo en la ficha.
-  function insignias(t) {
-    const c = t.c, b = [], p = (tono, icono, txt) => `<span class="sc-pill sc-t-${tono}">${icono ? ico(icono, 'ico-sm') : ''}${esc(txt)}</span>`;
-    if (t.estado === 'pidio') b.push(p('ok', 'circle-check', 'Pidió'));
-    // la etiqueta del tipo va primero: el color de la franja no es la única señal
-    if (t.tipo === 'unica') b.push(p('unica', 'user-plus', 'Única compra'));
-    else if (t.tipo === 'recupero') b.push(p('dejo', 'trending-down', 'Dejó de comprar'));
-    if (t.reescribir && t.estado === 'pendiente') b.push(p('marca', 'rotate-ccw', 'Volver a escribir'));
-    if (t.atrasado && t.estado === 'pendiente') b.push(p('error', 'clock', 'Atrasado'));
-    if (t.recurrente) b.push(p('neutro', 'refresh-cw', 'Cada semana'));
-    if (c.manual && c.manual.tipo === 'atender') b.push(p('marca', 'message-circle', 'Atender'));
-    if (t.estado !== 'pidio' && t.movido) b.push(p('neutro', 'calendar-days', 'Movido'));
-    return b.join('');
-  }
+  // ── Tarjeta ──
   // Qué es cada tipo de cliente, en una frase (ficha y detalle de la tarjeta)
   const TIPO_FRASE = { habitual: 'Compra siempre: le toca escribirle', unica: 'Una sola compra: seguimiento para que vuelva', recupero: 'Dejó de comprar: seguimiento para recuperarlo' };
   // El detalle que ya no se ve en la tarjeta, en una frase (tooltip y nombre accesible)
@@ -320,161 +305,46 @@
     if (c.diasHab.length) d.push('Día habitual: ' + c.diasHab.map(x => ABREV[x]).join(', '));
     return d.join('. ') + '.';
   }
-  function tarjeta(t) {
-    const c = t.c, ocup = E.guardando.has(t.clave), arr = puedeEditar() && !ocup && t.estado !== 'pidio' && !t.recurrente && ancho(), det = detalleTarjeta(t), hecha = t.estado === 'pidio', espera = t.estado === 'escribi', pend = t.estado === 'pendiente';
-    const clases = `sc-card sc-card--${t.estado}${hecha ? ' sc-card--hecha' : ''}${espera ? ' sc-card--espera' : ''}${pend && t.tipo === 'habitual' ? ' sc-card--hab' : ''}${t.atrasado && pend ? ' sc-card--atr' : ''}${pend && t.tipo !== 'habitual' ? ' sc-card--seg sc-card--seg-' + t.tipo : ''}${t.movido ? ' sc-card--mov' : ''}${ocup ? ' sc-card--guardando' : ''}`;
-    const attrs = `data-sc="fila" data-k="${at(t.clave)}" data-est="${t.estado}" data-tipo="${t.tipo}" title="${at(det)}" aria-label="${at(det)}"${t.recurrente ? ' data-rec="1"' : ''}${arr ? ' data-arr="1"' : ''}${E.sel === t.clave ? ' aria-current="true"' : ''}${ocup ? ' aria-busy="true"' : ''}`;
-    // Pidió («Hechos»): una sola línea, el nombre en gris y un tilde. El texto del estado queda en el tooltip y el nombre accesible.
-    if (hecha) return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}><span class="sc-hecha-ic sc-hecha-ic--${t.estado}" aria-hidden="true">${ico('circle-check', 'ico-sm')}</span><span class="sc-nom">${esc(c.nombre)}</span></button></li>`;
-    // Le escribí («Esperando»): compacta y atenuada, con cuándo se le escribió
-    if (espera) return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}><span class="sc-nom">${esc(c.nombre)}</span><span class="sc-espera-t" aria-hidden="true">${ico('message-circle', 'ico-sm')}Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + esc(diaCorto(t.escrito))}</span></button></li>`;
-    return `<li class="sc-it"><button type="button" class="${clases}" ${attrs}>
-      <span class="sc-nom">${esc(c.nombre)}</span>
-      <span class="sc-card-b" aria-hidden="true">${insignias(t)}</span>${chipsEt(c, 2)}</button></li>`;
-  }
   // Etiquetas de grupo: chips muy discretos (en la tarjeta del calendario, hasta `max` y un «+N»; en listas y ficha, todas). El nombre accesible ya las nombra (detalleTarjeta).
   function chipsEt(c, max) {
     const l = c.etiquetas || []; if (!l.length) return '';
     const ver = max ? l.slice(0, max) : l, mas = l.length - ver.length;
     return `<span class="sc-ets${max ? ' sc-ets--mini' : ''}"${max ? ' aria-hidden="true"' : ''}>${ver.map(e => `<span class="sc-et">${esc(e.nombre)}</span>`).join('')}${mas > 0 ? `<span class="sc-et">+${mas}</span>` : ''}</span>`;
   }
-  // Dentro de un día: primero los pendientes (los habituales, «Hablarles», y después los de seguimiento), después los que esperan (le escribiste: «Esperando pedido» los habituales
-  // y «Esperando respuesta» los de seguimiento) y al final «Hechos (N)» (pidió). Cada grupo con su separador fino.
-  const pasaTipo = t => E.filtro === 'todos' || (E.filtro === 'habitual') === (t.tipo === 'habitual');
+  const pasaTipo = t => E.filtro === 'todos' || (E.filtro === 'atrasados' ? !!(t.atrasado && t.estado === 'pendiente') : (E.filtro === 'habitual') === (t.tipo === 'habitual'));
   const pasaEt = c => !E.filtroEt || (c.etiquetas || []).some(e => e.id === E.filtroEt);
   const pasa = t => pasaTipo(t) && pasaEt(t.c);
   const filtrar = ts => ts.filter(pasa);
-  const lista = (ts, cls) => {
-    const pend = ts.filter(t => t.estado === 'pendiente'), esp = ts.filter(t => t.estado === 'escribi'), hechas = ts.filter(t => t.estado === 'pidio');
-    const hab = pend.filter(t => t.tipo === 'habitual'), seg = pend.filter(t => t.tipo !== 'habitual'), eHab = esp.filter(t => t.tipo === 'habitual'), eSeg = esp.filter(t => t.tipo !== 'habitual');
-    const sep = (txt, g) => `<li class="sc-sep${g ? ' sc-sep--g' : ''}"><span>${txt}</span></li>`, grupo = (txt, l, g) => (l.length ? sep(txt, g) + l.map(tarjeta).join('') : '');
-    return `<ul class="${cls}">${grupo('Hablarles', hab, 1)}${grupo('Seguimiento', seg, 1)}${grupo(`Esperando pedido (${eHab.length})`, eHab, 1)}${grupo(`Esperando respuesta (${eSeg.length})`, eSeg, 1)}${grupo(`Hechos (${hechas.length})`, hechas)}</ul>`;
-  };
-  // Cuando la lista de un día tiene más tarjetas de las que entran, se difumina el borde de abajo (hay más para ver al desplazar).
-  function marcarMas() {
-    document.querySelectorAll('#sc-raiz .sc-dia-l').forEach(l => l.classList.toggle('sc-dia-l--mas', l.scrollHeight - l.scrollTop - l.clientHeight > 4));
-  }
-  document.addEventListener('scroll', ev => { const l = ev.target; if (l && l.classList && l.classList.contains('sc-dia-l')) l.classList.toggle('sc-dia-l--mas', l.scrollHeight - l.scrollTop - l.clientHeight > 4); }, true);
-  window.addEventListener('resize', () => marcarMas());
-  const copiarBtn = (b, n) => (n ? `<button type="button" class="sc-link" data-sc="copiar" data-b="${b}">${ico('copy', 'ico-sm')}Copiar lista</button>` : '');
 
-  // ── Calendario en PC: Esta semana y La semana que viene ──
-  function columnaDia(d) {
-    const ts = filtrar(d.tarjetas), n = ts.length, f = F.aFecha(d.fecha);
-    const zona = !d.pasado && puedeAgendar() ? ` data-zona="dia" data-fecha="${d.fecha}"` : ` data-fecha="${d.fecha}"`;
-    const pend = d.tarjetas.filter(t => t.estado === 'pendiente').length;
-    return `<section class="sc-dia${d.hoy ? ' sc-dia--hoy' : ''}${d.pasado ? ' sc-dia--pasado' : ''}"${zona} data-dia="${d.dow}" aria-label="${at(`${mayus(S.DIAS[d.dow])} ${f.getDate()} de ${MESES_L[f.getMonth()]}${d.hoy ? ' (hoy)' : ''}: ${n === 1 ? '1 tarjeta' : n + ' tarjetas'}`)}">
-      <h4 class="sc-dia-h"><span class="sc-dia-n"><span class="sc-dia-d">${ABREV[d.dow]}</span> <b>${f.getDate()}</b></span>${d.hoy ? '<span class="sc-dia-hoy">Hoy</span>' : ''}<span class="sc-cant">${n}</span></h4>
-      ${n ? lista(ts, 'sc-dia-l') : '<p class="sc-dia-nadie" aria-hidden="true">—</p>'}${d.hoy ? copiarBtn('hoy', pend) : ''}</section>`;
-  }
-  function semanaPC(ag, i) {
-    const dias = ag.dias.filter(d => d.semana === i), ult = dias[dias.length - 1];
-    return `<section class="sc-sem" data-sem="${i}"><h3 class="sc-sem-t">${i ? 'La semana que viene' : 'Esta semana'} <span class="sc-muted">${esc(F.fmtCorta(dias[0].fecha))} al ${esc(F.fmtCorta(ult.fecha))}</span></h3>
-      <div class="sc-sem-g">${dias.map(columnaDia).join('')}</div></section>`;
-  }
-  // ── Calendario en celular: una lista por día (hoy abierto primero, luego el resto) ──
-  function calendarioCel(ag) {
-    const det = (clave, cab, n, cuerpo, porDefecto, cls) => `<details class="sc-dcel ${cls || ''}" data-dkey="${clave}"${(E.abiertos.has(clave) ? E.abiertos.get(clave) : porDefecto) ? ' open' : ''}><summary><span class="sc-dcel-t">${cab}</span><span class="sc-cant">${n}</span>${ico('chevron-down', 'ico-sm sc-chev')}</summary>${cuerpo}</details>`;
-    const cuerpoDe = (ts, extra) => (ts.length ? lista(ts, 'sc-dia-l') : '<p class="sc-nadie">Nadie.</p>') + (extra || '');
-    let h = '';
-    ag.dias.filter(d => !d.pasado || d.tarjetas.length).forEach(d => {
-      const f = F.aFecha(d.fecha), nombre = d.hoy ? `Hoy · ${ABREV[d.dow]} ${f.getDate()}` : `${mayus(S.DIAS[d.dow])} ${f.getDate()}`;
-      h += det(d.fecha, `${esc(nombre)}${d.pasado ? ' <span class="sc-muted">(ya pasó)</span>' : ''}`, filtrar(d.tarjetas).length, cuerpoDe(filtrar(d.tarjetas), d.hoy ? copiarBtn('hoy', d.tarjetas.filter(t => t.estado === 'pendiente').length) : ''), d.hoy, `sc-dcel--dia${d.hoy ? ' sc-dcel--hoy' : ''}`);
-    });
-    return `<div class="sc-cel">${h}</div>`;
-  }
-  // ═══ Seguimiento v2: tres vistas (Hoy, Agenda semanal, Clientes) ═══
-  const VISTAS = [['hoy', 'Hoy', 'layout-dashboard'], ['agenda', 'Agenda semanal', 'calendar-days'], ['clientes', 'Clientes', 'users']];
-  const selectorVistas = () => `<div class="sc-vistas" role="group" aria-label="Vista">${VISTAS.map(([v, t, i]) => `<button type="button" class="sc-vista" data-sc="vista" data-v="${v}" aria-pressed="${E.vista === v}">${ico(i, 'ico-sm')}<span>${t}</span></button>`).join('')}</div>`;
+  // ═══ Seguimiento v3: Panel principal / Agenda semanal / Clientes (estructura y proporciones de la referencia marcial_seguimiento) ═══
   const hoyEf = () => (F.diaSemana(hoy()) === 0 ? F.sumarDias(hoy(), 1) : hoy());   // un domingo no hay columna: lo de hoy se ve el lunes
+  const VISTAS = [['hoy', 'Panel principal', 'layout-dashboard'], ['agenda', 'Agenda semanal', 'calendar-days'], ['clientes', 'Clientes', 'users']];
   const RES = {
     tiene_stock: ['Tiene stock', 'package', 'Ya tiene: elegí cuándo volver a escribirle'],
     no_interesa: ['No le interesa por ahora', 'clock', 'Elegí cuándo volver a intentarlo'],
     no_contesto: ['No contestó', 'phone', 'Vuelve a pendiente enseguida'],
     otro: ['Otro', 'pencil', 'Anotá qué pasó y, si quedó una fecha, elegila'],
   };
-  const ALERTA_UI = { reescribir: ['rotate-ccw', 'marca'], esperando: ['clock', 'info'], dejo: ['trending-down', 'dejo'], unica: ['user-plus', 'unica'], productos: ['package', 'aviso'], menos: ['trending-down', 'aviso'] };
-  const pillT = (tn, icono, txt) => `<span class="sc-pill sc-t-${tn}">${icono ? ico(icono, 'ico-sm') : ''}${esc(txt)}</span>`;
   const quienSoy = () => { const st = estadoApp(); return (v2Activo() && v2().yo.nombre) || (st && st.who) || ''; };
-  // Último resultado de contacto del cliente (si es posterior a su último pedido)
-  function contactoTxt(c) {
-    const ct = c.contacto; if (!ct || !RES[ct.resultado]) return '';
-    const d = F.ymd(new Date(ct.creado_en)); if (d < c.ultimo) return '';
-    const dias = F.diffDias(hoy(), d);
-    return `Último resultado: ${RES[ct.resultado][0].toLowerCase()} (${dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : 'hace ' + diasN(dias)})${ct.volver_el ? ` · vuelve el ${diaCorto(ct.volver_el)}` : ''}`;
+  const sp = (cls, txt) => `<span class="sv-pill ${cls}">${esc(txt)}</span>`;
+  const TIPO_PILL = { habitual: ['green', 'Habitual'], unica: ['amber', 'Única compra'], recupero: ['red', 'Dejó de comprar'] };
+  const pillTipo = tipo => sp(TIPO_PILL[tipo][0], TIPO_PILL[tipo][1]);
+  // Acción sugerida, prioridad y «señal» de cada cliente (los textos de la referencia: «Consultar reposición», «Alta», «Sin compras»…)
+  const accionDe = t => (t.reescribir && t.estado === 'pendiente' ? 'Volver a escribir' : t.tipo === 'recupero' ? 'Recuperar' : t.tipo === 'unica' ? 'Segunda compra' : 'Le toca escribirle');
+  const prioDe = t => (t.atrasado || t.tipo === 'recupero' ? ['Alta', 'high', 'red'] : t.tipo === 'unica' ? ['Media', 'mid', 'amber'] : ['Normal', 'low', 'gray']);
+  const prioHtml = t => { const [txt, dot] = prioDe(t); return `<span class="sv-pr"><i class="sv-dot ${dot}"></i>${txt}</span>`; };
+  const desdeTxt = c => (c.dias === 0 ? 'pidió hoy' : `${c.dias} ${c.dias === 1 ? 'día' : 'días'} desde el último pedido`);
+  const SENALES = { reescribir: 'Volver a escribir', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Compra menos', ninguna: 'Sin alertas' };
+  function senal(c, t) {
+    if (t && t.reescribir && t.estado === 'pendiente') return ['amber', 'Volver a escribir', 'reescribir'];
+    if (c.n === 1) return ['amber', 'Una compra', 'unica'];
+    if (S.tipoDe(c) === 'recupero') return ['red', `Sin pedir ${c.dias} d`, 'dejo'];
+    if (c.dejoDeTodos.length) return ['amber', 'Dejó de llevar', 'productos'];
+    if (c.compraMenos) return ['amber', 'Compra menos', 'menos'];
+    return ['gray', 'Sin alertas', 'ninguna'];
   }
-  // Etiquetas que tienen al menos un cliente a la vista (para los filtros)
-  const etiquetasEnUso = calc => { const m = new Map(); calc.clientes.forEach(c => (c.etiquetas || []).forEach(e => m.set(e.id, e))); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
-  function selectorFiltro(k, calc) {
-    const b = (v, txt, n) => `<button type="button" class="sc-fil-b" data-sc="filtro" data-f="${v}" aria-pressed="${E.filtro === v}">${txt} <span class="sc-fil-n">${n}</span></button>`, ets = etiquetasEnUso(calc);
-    return `<div class="sc-fil" role="group" aria-label="Qué clientes mostrar">${b('todos', 'Todos', k.todos)}${b('habitual', 'Hablarles', k.habitual)}${b('seguimiento', 'Seguimiento', k.seguimiento)}${ets.length ? `<span class="sc-fil-sep" aria-hidden="true"></span>${ets.map(e => `<button type="button" class="sc-fil-b sc-fil-b--et" data-sc="filtro-et" data-e="${at(e.id)}" aria-pressed="${E.filtroEt === e.id}">${ico('tag', 'ico-sm')}${esc(e.nombre)}</button>`).join('')}` : ''}</div>`;
-  }
-  const estadoSinClientes = () => `<div class="sc-estado" role="status"><b>No tenés clientes asignados todavía.</b><p>Cuando te asignen clientes, vas a ver acá a quién escribirle cada día. Si esperabas verlos, avisale a quien administra la app.</p></div>`;
-
-  // ── Hoy ──
-  function filaHoy(t, modo) {
-    const c = t.c, k = at(c.clave), ocup = E.guardando.has(c.clave), dis = ocup ? ' disabled aria-busy="true"' : '', puede = puedeAgendar();
-    let meta = '', acc = '';
-    if (modo === 'esp') {
-      meta = pillT('info', 'message-circle', `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)}`) + `<span class="sc-fila-t">Esperando ${t.tipo === 'habitual' ? 'pedido' : 'respuesta'} · si no pide, vuelve el ${esc(diaCorto(t.vuelveEl))}</span>`;
-      if (puede) acc = `<button type="button" class="sc-btn sc-btn--chico" data-sc="resultado" data-k="${k}" aria-haspopup="dialog"${dis}>${ico('list', 'ico-sm')}Resultado</button><button type="button" class="sc-link" data-sc="escribi" data-k="${k}" aria-label="${at('Desmarcar «Le escribí»: ' + c.nombre)}"${dis}>Desmarcar</button>`;
-    } else if (modo === 'hecho') {
-      meta = pillT('ok', 'circle-check', 'Pidió') + (t.recurrente ? pillT('neutro', 'refresh-cw', 'Cada semana') : '');
-    } else {
-      meta = (t.tipo === 'habitual' ? pillT('neutro', 'calendar-days', 'Habitual') : '') + insignias(t);
-      if (puede) acc = `<button type="button" class="sc-btn sc-btn--prim" data-sc="escribi" data-k="${k}"${dis}>${ico('message-circle', 'ico-sm')}Le escribí</button>`;
-    }
-    const ult = c.dias === 0 ? 'Pidió hoy' : `Último pedido hace ${diasN(c.dias)} (${corta(c.ultimo)})`, ct = contactoTxt(c);
-    return `<li class="sc-fila sc-fila--${modo}${t.atrasado && modo === 'pend' ? ' sc-fila--atr' : ''}" data-k="${k}">
-      <div class="sc-fila-i"><button type="button" class="sc-fila-n" data-sc="fila" data-k="${k}"${E.sel === c.clave ? ' aria-current="true"' : ''}>${esc(c.nombre)}</button>
-        <div class="sc-fila-m">${meta}${chipsEt(c)}</div>
-        <p class="sc-fila-t">${esc(ult)}${veTodo() && c.vendedor ? ` · Vendedor: ${esc(c.vendedor)}` : ''}${ct ? ` · ${esc(ct)}` : ''}</p></div>
-      ${acc ? `<div class="sc-fila-a">${acc}</div>` : ''}</li>`;
-  }
-  function panelAlertas(calc, ag) {
-    const al = S.alertas(calc, ag, { hoy: hoy() });
-    if (!al.length) return `<section class="sc-panel sc-alertas" aria-labelledby="sc-al-t"><div class="sc-panel-h"><h3 id="sc-al-t">Alertas comerciales</h3></div><p class="sc-vacio-p">${ico('circle-check')}Sin alertas por ahora. Todo lo que se mide está en orden.</p></section>`;
-    const grupos = S.ALERTAS_ORDEN.map(tipo => [tipo, al.filter(a => a.tipo === tipo)]).filter(([, l]) => l.length);
-    const cuerpoG = ([tipo, l]) => {
-      const [i, tn] = ALERTA_UI[tipo], todas = E.alertasTodas.has(tipo), ver = todas ? l : l.slice(0, 4);
-      return `<div class="sc-al-g sc-t-${tn}"><h4 class="sc-al-h"><span class="sc-al-ic">${ico(i, 'ico-sm')}</span>${esc(S.ALERTAS[tipo])}<span class="sc-cant">${l.length}</span></h4>
-        <ul class="sc-al-l">${ver.map(a => `<li><button type="button" class="sc-al-it" data-sc="fila" data-k="${at(a.clave)}"><span class="sc-al-n">${esc(a.nombre)}</span><span class="sc-al-d">${esc(a.detalle)}</span></button></li>`).join('')}</ul>
-        ${l.length > 4 ? `<button type="button" class="sc-link" data-sc="alertas-mas" data-t="${tipo}" aria-expanded="${todas}">${todas ? 'Ver menos' : `Ver ${l.length - 4} más`}</button>` : ''}</div>`;
-    };
-    return `<section class="sc-panel sc-alertas" aria-labelledby="sc-al-t"><div class="sc-panel-h"><h3 id="sc-al-t">Alertas comerciales</h3><span class="sc-cant">${al.length}</span></div>${grupos.map(cuerpoG).join('')}</section>`;
-  }
-  function vistaHoy(calc, ag) {
-    const dia = ag.dias.find(d => d.fecha === hoyEf()) || { tarjetas: [] };
-    const pend = dia.tarjetas.filter(t => t.estado === 'pendiente'), hechos = dia.tarjetas.filter(t => t.estado === 'pidio');
-    const espM = new Map(); ag.dias.forEach(d => d.tarjetas.forEach(t => { if (t.estado === 'escribi' && !t.recurrente && !espM.has(t.clave)) espM.set(t.clave, t); }));
-    const esp = [...espM.values()].sort((a, b) => String(a.escrito).localeCompare(String(b.escrito)) || a.nombre.localeCompare(b.nombre, 'es'));
-    const kpi = (n, txt, icono, tn) => `<li class="sc-kpi sc-t-${tn}"><span class="sc-kpi-ic">${ico(icono)}</span><span class="sc-kpi-n">${n}</span><span class="sc-kpi-t">${txt}</span></li>`;
-    const atr = pend.filter(t => t.atrasado).length;
-    const k = { todos: pend.length, habitual: pend.filter(t => t.tipo === 'habitual').length, seguimiento: pend.filter(t => t.tipo !== 'habitual').length };
-    const pP = pend.filter(pasa), hab = pP.filter(t => t.tipo === 'habitual'), seg = pP.filter(t => t.tipo !== 'habitual'), pE = esp.filter(pasa), pH = hechos.filter(pasa);
-    const sub = (txt, l, modo) => (l.length ? `<h4 class="sc-sub">${txt} <span class="sc-cant">${l.length}</span></h4><ul class="sc-filas">${l.map(t => filaHoy(t, modo)).join('')}</ul>` : '');
-    const vacio = !pP.length ? (pend.length ? `<p class="sc-vacio-p">${ico('funnel')}Ningún pendiente coincide con el filtro.</p>` : `<div class="sc-vacio-g">${ico('circle-check')}<b>No hay nadie para escribirle hoy.</b><p>${esp.length ? 'Quedan clientes esperando respuesta; abajo los ves.' : 'Buen momento para repasar la agenda de la semana.'}</p><button type="button" class="sc-btn" data-sc="vista" data-v="agenda">${ico('calendar-days', 'ico-sm')}Ver la agenda semanal</button></div>`) : '';
-    return `<ul class="sc-kpis" aria-label="Resumen de hoy">${kpi(pend.length, 'Para hoy', 'message-circle', 'marca')}${kpi(atr, 'Atrasados', 'clock', atr ? 'error' : 'neutro')}${kpi(esp.length, 'Esperando respuesta o pedido', 'refresh-cw', 'info')}${kpi(hechos.length, 'Hechos hoy', 'circle-check', 'ok')}</ul>
-      ${selectorFiltro(k, calc)}
-      <div class="sc-hoy">
-        <div class="sc-hoy-p">
-          <section class="sc-panel" aria-labelledby="sc-hoy-t"><div class="sc-panel-h"><div><h3 id="sc-hoy-t">Agenda de hoy</h3><p class="sc-panel-s">${esc(fechaTitulo())}</p></div>${pend.length ? `<button type="button" class="sc-link" data-sc="copiar" data-b="hoy">${ico('copy', 'ico-sm')}Copiar lista</button>` : ''}</div>
-            ${vacio}${sub('Hablarles', hab, 'pend')}${sub('Seguimiento', seg, 'pend')}</section>
-          ${pE.length ? `<section class="sc-panel sc-panel--suave" aria-labelledby="sc-esp-t"><div class="sc-panel-h"><h3 id="sc-esp-t">Esperando <span class="sc-cant">${pE.length}</span></h3></div><ul class="sc-filas">${pE.map(t => filaHoy(t, 'esp')).join('')}</ul></section>` : ''}
-          ${pH.length ? `<section class="sc-panel sc-panel--suave" aria-labelledby="sc-hec-t"><div class="sc-panel-h"><h3 id="sc-hec-t">Hechos hoy <span class="sc-cant">${pH.length}</span></h3></div><ul class="sc-filas">${pH.map(t => filaHoy(t, 'hecho')).join('')}</ul></section>` : ''}
-        </div>
-        <aside class="sc-hoy-l" aria-label="Alertas">${panelAlertas(calc, ag)}</aside>
-      </div>`;
-  }
-
-  // ── Agenda semanal ──
-  function vistaAgenda(calc, ag) {
-    const mas = ag.masAdelante ? `<p class="sc-mas">Más adelante: <b>${ag.masAdelante}</b> ${ag.masAdelante === 1 ? 'cliente' : 'clientes'} con su día después del sábado de la semana que viene. Se los encuentra con el buscador o en la vista Clientes.</p>` : '';
-    return `${selectorFiltro(ag.conteo, calc)}${leyenda()}${ancho() ? semanaPC(ag, 0) + semanaPC(ag, 1) : calendarioCel(ag)}${mas}`;
-  }
-
-  // ── Clientes ──
-  const ESTADOS_CLI = { pendiente: 'Por escribir', atrasado: 'Atrasados', esperando: 'Esperando', pidio: 'Pidió esta semana', pausa: 'Sin seguimiento', inactivo: 'Inactivos' };
+  const ESTADOS = { pendiente: ['blue', 'Pendiente'], atrasado: ['red', 'Atrasado'], esperando: ['amber', 'Esperando'], pidio: ['green', 'Pidió'], pausa: ['gray', 'Sin seguimiento'], inactivo: ['gray', 'Inactivo'] };
+  const estadoPill = k => sp(ESTADOS[k][0], ESTADOS[k][1]);
   function estadoClave(c, ag) {
     if (c.manual && c.manual.tipo === 'pausa') return 'pausa';
     if (c.bloque === 'notocar' && c.motivo === 'inactivo') return 'inactivo';
@@ -487,67 +357,176 @@
     if (e === 'pausa') return 'Sin seguimiento';
     if (e === 'inactivo') return 'No figura (inactivo)';
     if (!t) return 'Pidió esta semana';
-    if (t.estado === 'escribi') return `Esperando · vuelve ${diaCorto(t.vuelveEl)}`;
-    if (t.atrasado) return 'Atrasado · hoy';
-    if (t.fuera) return `Más adelante · ${diaTxt(t.dia)}`;
+    if (t.estado === 'escribi') return `Vuelve ${diaCorto(t.vuelveEl)}`;
+    if (t.fuera) return diaTxt(t.dia);
     return t.dia === hoyEf() ? 'Hoy' : diaTxt(t.dia);
   }
-  const TIPO_UI = { habitual: ['neutro', 'calendar-days', 'Habitual'], unica: ['unica', 'user-plus', 'Única compra'], recupero: ['dejo', 'trending-down', 'Dejó de comprar'] };
+  const dirCorta = c => { const d = direccionDe(c); return d ? (d.length > 38 ? d.slice(0, 37) + '…' : d) : ''; };
+  const nombreCelda = c => `<button type="button" class="sv-linkname" data-sc="fila" data-k="${at(c.clave)}"${E.sel === c.clave ? ' aria-current="true"' : ''}>${esc(c.nombre)}</button>${dirCorta(c) ? `<div class="sv-sub sv-dir">${ico('map-pin', 'ico-sm')}${esc(dirCorta(c))}</div>` : ''}`;
+
+  // Navegación secundaria (chips) + buscador de clientes a la derecha
+  const navSecundaria = () => `<div class="sv-nav"><div class="sv-nav-c" role="group" aria-label="Secciones">${VISTAS.map(([v, t, i]) => `<button type="button" class="sv-chip" data-sc="vista" data-v="${v}" aria-pressed="${E.vista === v}">${ico(i, 'ico-sm')}${t}</button>`).join('')}</div>${buscador()}</div>`;
+  const cabecera = (icono, titulo, sub, derecha) => `<div class="sv-head"><div><h1>${icono ? ico(icono) : ''}${esc(titulo)}</h1><p>${sub}</p></div>${derecha || ''}</div>`;
+  const etiquetasEnUso = calc => { const m = new Map(); calc.clientes.forEach(c => (c.etiquetas || []).forEach(e => m.set(e.id, e))); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
+  // «Filtrar:» Todos · Hablarles · Seguimiento · Atrasados · una por etiqueta
+  function filtros(calc, etiqueta) {
+    const b = (v, txt) => `<button type="button" class="sv-chip" data-sc="filtro" data-f="${v}" aria-pressed="${E.filtro === v}">${txt}</button>`;
+    return `<div class="sv-toolbar" role="group" aria-label="Qué clientes mostrar"><span class="sv-muted">${etiqueta}</span>${b('todos', 'Todos')}${b('habitual', 'Hablarles')}${b('seguimiento', 'Seguimiento')}${b('atrasados', 'Atrasados')}${etiquetasEnUso(calc).map(e => `<button type="button" class="sv-chip" data-sc="filtro-et" data-e="${at(e.id)}" aria-pressed="${E.filtroEt === e.id}">${ico('tag', 'ico-sm')}${esc(e.nombre)}</button>`).join('')}</div>`;
+  }
+  const kpi = (tono, icono, titulo, n) => `<li class="sv-card sv-kpi"><span class="sv-ico ${tono}">${icono.length > 2 ? ico(icono) : icono}</span><div><div class="sv-muted">${titulo}</div><div class="sv-number">${n}</div></div></li>`;
+  const estadoSinClientes = () => `<div class="sc-estado" role="status"><b>No tenés clientes asignados todavía.</b><p>Cuando te asignen clientes, vas a ver acá a quién escribirle cada día. Si esperabas verlos, avisale a quien administra la app.</p></div>`;
+
+  // Alertas (filas con cuadrado de color, nombre, detalle, pill de señal y chevron: abre la ficha)
+  const ALERTA_UI = { reescribir: ['amber', '!'], esperando: ['blue', 'clock'], dejo: ['red', '!'], unica: ['amber', '!'], productos: ['amber', 'trending-down'], menos: ['amber', 'trending-down'] };
+  const ALERTA_TXT = { reescribir: 'Volver a escribir', esperando: 'Esperando', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Compra menos' };
+  function filasAlertas(calc, ag, max) {
+    const al = S.alertas(calc, ag, { hoy: hoy() }), todas = E.alertasTodas.has('all'), ver = todas ? al : al.slice(0, max);
+    if (!al.length) return { n: 0, html: `<p class="sv-vacio">${ico('circle-check')}Sin alertas por ahora. Todo lo que se mide está en orden.</p>` };
+    const fila = a => { const [tono, ic] = ALERTA_UI[a.tipo];
+      return `<li><button type="button" class="sv-alert" data-sc="fila" data-k="${at(a.clave)}" aria-label="${at(`${a.nombre}: ${a.detalle}. Abrir ficha`)}"><span class="sv-aic ${tono}">${ic.length > 2 ? ico(ic) : ic}</span><span class="sv-alert-t"><span class="sv-name">${esc(a.nombre)}</span><span class="sv-sub">${esc(a.detalle)}</span></span>${sp(tono, ALERTA_TXT[a.tipo])}<span class="sv-arrow">${ico('chevron-right')}</span></button></li>`; };
+    return { n: al.length, html: `<ul class="sv-list">${ver.map(fila).join('')}</ul>${al.length > max ? `<button type="button" class="sv-btn small sv-mas" data-sc="alertas-mas" data-t="all" aria-expanded="${todas}">${todas ? 'Ver menos' : `Ver las ${al.length - max} restantes`}</button>` : ''}` };
+  }
+
+  // ── Panel principal ──
+  function filaTarea(t) {
+    const c = t.c, k = at(c.clave), esp = t.estado === 'escribi', ocup = E.guardando.has(c.clave), nv = veTodo() ? '' : ' sv-task--nv';
+    const chk = puedeAgendar() ? `<input type="checkbox" class="sv-chk" data-sc="escribi" data-k="${k}"${esp ? ' checked' : ''}${ocup ? ' disabled aria-busy="true"' : ''} aria-label="${at((esp ? 'Desmarcar «Le escribí»: ' : 'Marcar «Le escribí»: ') + c.nombre)}">` : '<span></span>';
+    const pills = pillTipo(t.tipo) + (esp ? sp('amber', 'Esperando') : '') + (t.atrasado && !esp ? sp('red', 'Atrasado') : '') + (t.reescribir && !esp ? sp('amber', 'Volver a escribir') : '') + (t.recurrente ? sp('gray', 'Cada semana') : '') + (c.etiquetas || []).slice(0, 2).map(e => sp('tag', e.nombre)).join('');
+    const sub = esp ? `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)} · vuelve ${diaCorto(t.vuelveEl)}` : `${accionDe(t)} · ${desdeTxt(c)}`;
+    const btn = esp && puedeAgendar() ? `<button type="button" class="sv-btn small" data-sc="resultado" data-k="${k}" aria-haspopup="dialog"${ocup ? ' disabled' : ''}>Resultado</button>` : `<button type="button" class="sv-btn small" data-sc="fila" data-k="${k}" aria-label="${at('Ver ' + c.nombre)}">Ver</button>`;
+    return `<li class="sv-task${nv}" data-k="${k}">${chk}<div class="sv-task-n"><div><span class="sv-name">${esc(c.nombre)}</span> ${pills}</div><div class="sv-sub">${esc(sub)}</div></div>${prioHtml(t)}${veTodo() ? `<span class="sv-resp">${ico('user', 'ico-sm')}${esc(c.vendedor || 'Atención general')}</span>` : ''}${btn}</li>`;
+  }
+  // Los clientes con contacto esta semana, pendientes primero (una fila por cliente)
+  function filasContactar(calc, ag) {
+    const orden = t => (t.estado === 'pendiente' ? (t.atrasado ? 0 : 1) : t.estado === 'escribi' ? 2 : 3), m = new Map();
+    ag.dias.filter(d => d.semana === 0).forEach(d => d.tarjetas.forEach(t => { if (!pasa(t)) return; const p = m.get(t.clave); if (!p || orden(t) < orden(p)) m.set(t.clave, t); }));
+    const q = S.norm(E.pq);
+    return [...m.values()].filter(t => !q || S.norm(t.nombre).includes(q)).sort((a, b) => orden(a) - orden(b) || a.dia.localeCompare(b.dia) || a.nombre.localeCompare(b.nombre, 'es'));
+  }
+  function tablaContactar(calc, ag) {
+    const l = filasContactar(calc, ag), vt = veTodo(), ver = l.slice(0, 15);
+    if (!l.length) return `<p class="sv-vacio">${ico('search')}No hay clientes con contacto esta semana${E.pq ? ' que coincidan' : ''}.</p>`;
+    const fila = t => { const c = t.c, [sc, st] = senal(c, t), ek = t.estado === 'pidio' ? 'pidio' : t.estado === 'escribi' ? 'esperando' : t.atrasado ? 'atrasado' : 'pendiente';
+      return `<tr><td>${nombreCelda(c)}</td><td>${pillTipo(t.tipo)}</td><td>Hace ${esc(diasN(c.dias))}</td><td>${sp(sc, st)}</td>${vt ? `<td>${esc(c.vendedor || 'Atención general')}</td>` : ''}<td>${esc(proximoTxt(c, ag))}</td><td>${estadoPill(ek)}</td><td><button type="button" class="sv-btn small" data-sc="fila" data-k="${at(c.clave)}" aria-label="${at('Gestionar ' + c.nombre)}">Gestionar</button></td></tr>`; };
+    return `<div class="sv-tablewrap"><table class="sv-table"><thead><tr><th>Cliente</th><th>Segmento</th><th>Último pedido</th><th>Señal</th>${vt ? '<th>Responsable</th>' : ''}<th>Próximo contacto</th><th>Estado</th><th><span class="sc-sr">Acciones</span></th></tr></thead><tbody>${ver.map(fila).join('')}</tbody></table></div>${l.length > ver.length ? `<p class="sv-sub sv-pie">Se muestran ${ver.length} de ${l.length}. Los demás están en «Ver todos».</p>` : ''}`;
+  }
+  function refrescarPanelTabla() { const r = $('sv-contactar'); if (r && E.calc && E.ag) r.innerHTML = tablaContactar(E.calc, E.ag); }
+  function vistaPanel(calc, ag) {
+    const dia = ag.dias.find(d => d.fecha === hoyEf()) || { tarjetas: [] };
+    const pend = dia.tarjetas.filter(t => t.estado === 'pendiente'), espM = new Map();
+    ag.dias.forEach(d => d.tarjetas.forEach(t => { if (t.estado === 'escribi' && !t.recurrente && !espM.has(t.clave)) espM.set(t.clave, t); }));
+    const esp = [...espM.values()].sort((a, b) => String(a.escrito).localeCompare(String(b.escrito)) || a.nombre.localeCompare(b.nombre, 'es'));
+    const hechos = new Set(); dia.tarjetas.forEach(t => { if (t.estado === 'pidio' && !t.recurrente) hechos.add(t.clave); }); ag.dias.forEach(d => d.tarjetas.forEach(t => { if (t.escrito === hoy() && !t.recurrente) hechos.add(t.clave); }));
+    const dejaron = calc.clientes.filter(c => { const t = ag.porCliente.get(c.clave); return t && t.tipo === 'recupero'; }).length;
+    const tareas = pend.concat(esp).filter(pasa), al = filasAlertas(calc, ag, 6);
+    return `${cabecera('', 'Seguimiento comercial', 'Todo lo importante del día, sin perder clientes ni contactos.')}
+      ${filtros(calc, 'Filtrar:')}
+      <ul class="sv-kpis" aria-label="Resumen de hoy">${kpi('red', 'clock', 'Atrasados', pend.filter(t => t.atrasado).length)}${kpi('amber', 'trending-down', 'Dejaron de comprar', dejaron)}${kpi('blue', 'message-circle', 'Esperando respuesta', esp.length)}${kpi('green', 'check', 'Contactados / pidieron hoy', hechos.size)}</ul>
+      <div class="sv-two">
+        <section class="sv-card sv-sec" aria-labelledby="sv-hoy-t"><div class="sv-ch"><h2 id="sv-hoy-t">${ico('calendar-days')}Agenda de hoy</h2><span class="sv-actions">${pend.length ? `<button type="button" class="sv-linkbtn" data-sc="copiar" data-b="hoy">${ico('copy', 'ico-sm')}Copiar lista</button>` : ''}<span class="sv-count">${tareas.length} ${tareas.length === 1 ? 'tarea' : 'tareas'}</span></span></div>
+          ${tareas.length ? `<ul class="sv-list sv-list--tareas">${tareas.map(filaTarea).join('')}</ul>` : `<p class="sv-vacio">${ico('circle-check')}${pend.length ? 'Ningún pendiente coincide con el filtro.' : 'No hay nadie para escribirle hoy. Buen momento para repasar la agenda semanal.'}</p>`}</section>
+        <section class="sv-card sv-sec" aria-labelledby="sv-al-t"><div class="sv-ch"><h2 id="sv-al-t">${ico('triangle-alert')}Alertas comerciales</h2><span class="sv-count">${al.n} ${al.n === 1 ? 'alerta' : 'alertas'}</span></div>${al.html}</section>
+      </div>
+      <section class="sv-card sv-sec" aria-labelledby="sv-cc-t"><div class="sv-ch"><h2 id="sv-cc-t">${ico('users')}Clientes a contactar</h2><div class="sv-tools"><label class="sv-search">${ico('search', 'ico-sm')}<input type="search" id="sv-pq" class="sv-field" placeholder="Buscar cliente…" aria-label="Buscar entre los clientes a contactar" autocomplete="off" value="${at(E.pq)}"></label><button type="button" class="sv-btn small" data-sc="vista" data-v="clientes">Ver todos</button></div></div>
+        <div id="sv-contactar">${tablaContactar(calc, ag)}</div></section>`;
+  }
+
+  // ── Agenda semanal: 6 tarjetas por día (3 × 2), resumen y próximas tareas ──
+  const rangoSemana = dias => { const a = F.aFecha(dias[0].fecha), b = F.aFecha(dias[dias.length - 1].fecha), m = i => MESES_L[i];
+    return a.getMonth() === b.getMonth() ? `${a.getDate()} al ${b.getDate()} de ${m(b.getMonth())} ${b.getFullYear()}` : `${a.getDate()} de ${m(a.getMonth())} al ${b.getDate()} de ${m(b.getMonth())} ${b.getFullYear()}`; };
+  function tareaDia(t) {
+    const c = t.c, ocup = E.guardando.has(t.clave), arr = puedeEditar() && !ocup && t.estado !== 'pidio' && !t.recurrente && ancho(), det = detalleTarjeta(t);
+    const ek = t.estado === 'pidio' ? ['green', 'Pidió'] : t.estado === 'escribi' ? ['amber', 'Esperando'] : t.reescribir ? ['red', 'Volver a escribir'] : t.atrasado ? ['red', 'Atrasado'] : ['blue', 'Pendiente'];
+    const sub = t.estado === 'pidio' ? 'Pidió esta semana' : t.estado === 'escribi' ? `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)}` : accionDe(t);
+    return `<li class="sc-it"><button type="button" class="daytask${t.estado === 'pidio' ? ' daytask--hecha' : ''}${t.recurrente ? ' daytask--rec' : ''}${E.guardando.has(t.clave) ? ' daytask--guardando' : ''}" data-sc="fila" data-k="${at(t.clave)}" data-est="${t.estado}" data-tipo="${t.tipo}" title="${at(det)}" aria-label="${at(det)}"${t.recurrente ? ' data-rec="1"' : ''}${arr ? ' data-arr="1"' : ''}${E.sel === t.clave ? ' aria-current="true"' : ''}${ocup ? ' aria-busy="true"' : ''}>
+      <span class="dt-main"><span class="dt-top"><span class="sv-name">${esc(c.nombre)}</span>${pillTipo(t.tipo)}${t.recurrente ? sp('gray', 'Cada semana') : ''}</span><span class="sv-sub">${esc(sub)}</span><span class="sv-sub dt-pr">${prioHtml(t)}${veTodo() ? ` · ${esc(c.vendedor || 'Atención general')}` : ''}${(c.etiquetas || []).length ? ` · ${esc(c.etiquetas.map(e => e.nombre).join(', '))}` : ''}</span></span>${sp(ek[0], ek[1])}</button></li>`;
+  }
+  function diaTarjeta(d) {
+    const ts = filtrar(d.tarjetas), n = ts.length, f = F.aFecha(d.fecha), zona = !d.pasado && puedeAgendar() ? ` data-zona="dia" data-fecha="${d.fecha}"` : ` data-fecha="${d.fecha}"`;
+    return `<section class="sv-card sv-day${d.hoy ? ' sv-day--hoy' : ''}${d.pasado ? ' sv-day--pasado' : ''}"${zona} data-dia="${d.dow}" aria-label="${at(`${mayus(S.DIAS[d.dow])} ${f.getDate()}${d.hoy ? ' (hoy)' : ''}: ${n === 1 ? '1 tarea' : n + ' tareas'}`)}">
+      <div class="sv-dh"><b>${ico('calendar-days', 'ico-sm')}${esc(mayus(S.DIAS[d.dow]))} ${f.getDate()}${d.hoy ? ' <span class="sv-hoy">Hoy</span>' : ''}</b><span class="sv-count">${n} ${n === 1 ? 'tarea' : 'tareas'}</span></div>
+      ${n ? `<ul class="sc-dia-l sv-dl">${ts.map(tareaDia).join('')}</ul>` : '<p class="sv-vacio sv-vacio--dia">Sin tareas</p>'}</section>`;
+  }
+  function cuerpoAgenda(ag) {
+    const dias = ag.dias.filter(d => d.semana === E.semana), todos = dias.flatMap(d => d.tarjetas).filter(pasa);
+    const linea = (txt, n) => `<div class="sv-line"><span>${txt}</span><b>${n}</b></div>`;
+    const prox = ag.dias.filter(d => !d.pasado).flatMap(d => d.tarjetas).filter(t => t.estado === 'pendiente' && !t.recurrente && pasa(t)).slice(0, 5);
+    return `<div class="sv-calendar" id="sv-cal">${dias.map(diaTarjeta).join('')}</div>
+      <aside class="sv-aside" aria-label="Resumen y próximas tareas">
+        <section class="sv-card sv-sec"><div class="sv-ch"><h2>Resumen de la semana</h2></div>${linea('Atrasados', todos.filter(t => t.estado === 'pendiente' && t.atrasado).length)}${linea('Esperando', todos.filter(t => t.estado === 'escribi' && !t.recurrente).length)}${linea('Pidieron', todos.filter(t => t.estado === 'pidio' && !t.recurrente).length)}${linea('Volver a escribir', todos.filter(t => t.estado === 'pendiente' && t.reescribir).length)}</section>
+        <section class="sv-card sv-sec"><div class="sv-ch"><h2>${ico('clock')}Próximas tareas</h2></div>${prox.length ? prox.map(t => { const [txt, , cls] = prioDe(t); return `<button type="button" class="sv-up" data-sc="fila" data-k="${at(t.clave)}"><span><span class="sv-name">${esc(t.nombre)}</span><span class="sv-sub">${esc(accionDe(t))} · ${esc(t.dia === hoyEf() ? 'hoy' : diaCorto(t.dia))}</span></span>${sp(cls, txt)}</button>`; }).join('') : '<p class="sv-vacio">Sin tareas pendientes.</p>'}</section>
+      </aside>`;
+  }
+  function vistaAgenda(calc, ag) {
+    const dias = ag.dias.filter(d => d.semana === E.semana);
+    const sel = `<div class="sv-sem" role="group" aria-label="Semana">${[['0', 'Esta semana'], ['1', 'Semana que viene']].map(([s, t]) => `<button type="button" class="sv-chip" data-sc="semana" data-s="${s}" aria-pressed="${String(E.semana) === s}">${t}</button>`).join('')}</div>`;
+    const mas = ag.masAdelante ? `<p class="sv-sub sv-pie">Más adelante: ${ag.masAdelante} ${ag.masAdelante === 1 ? 'cliente' : 'clientes'} con su día después del sábado de la semana que viene (se los encuentra en Clientes).</p>` : '';
+    return `${cabecera('calendar-days', 'Agenda semanal', `Seguimientos de lunes a sábado · ${esc(rangoSemana(dias))}`, sel)}${filtros(calc, 'Filtrar por:')}<div class="sv-cal-l" id="sv-cal-l">${cuerpoAgenda(ag)}</div>${mas}`;
+  }
+  // Arrastrando una tarjeta sobre «Semana que viene» (o «Esta semana») se cambia de semana sin soltarla
+  function repintarGrilla() {
+    const w = $('sv-cal-l'); if (!w || !E.ag) return;
+    w.innerHTML = cuerpoAgenda(E.ag);
+    document.querySelectorAll('#sc-raiz [data-sc="semana"]').forEach(b => b.setAttribute('aria-pressed', String(String(E.semana) === b.dataset.s)));
+    const sub = document.querySelector('#sc-raiz .sv-head p'); if (sub) sub.innerHTML = `Seguimientos de lunes a sábado · ${esc(rangoSemana(E.ag.dias.filter(d => d.semana === E.semana)))}`;
+    marcarMas();
+  }
+  // Cuando la lista de un día tiene más tareas de las que entran, se difumina el borde de abajo (hay más para ver al desplazar).
+  function marcarMas() { document.querySelectorAll('#sc-raiz .sc-dia-l').forEach(l => l.classList.toggle('sc-dia-l--mas', l.scrollHeight - l.scrollTop - l.clientHeight > 4)); }
+  document.addEventListener('scroll', ev => { const l = ev.target; if (l && l.classList && l.classList.contains('sc-dia-l')) l.classList.toggle('sc-dia-l--mas', l.scrollHeight - l.scrollTop - l.clientHeight > 4); }, true);
+  window.addEventListener('resize', () => marcarMas());
+
+  // ── Clientes ──
   function filtrarClientes(calc, ag) {
-    const f = E.cf, q = S.norm(E.cq), yoN = S.norm;
+    const f = E.cf, q = S.norm(E.cq);
     return calc.clientes.filter(c => {
       if (q && !S.norm(c.nombre).includes(q) && !S.norm(direccionDe(c)).includes(q)) return false;
       if (f.tipo && S.tipoDe(c) !== f.tipo) return false;
+      if (f.senal && senal(c, ag.porCliente.get(c.clave))[2] !== f.senal) return false;
       if (f.etiqueta && !(c.etiquetas || []).some(e => e.id === f.etiqueta)) return false;
-      if (f.estado && estadoClave(c, ag) !== f.estado) return false;
-      if (f.vendedor && veTodo()) { if (f.vendedor === '__ninguno' ? !!c.vendedor : yoN(c.vendedor || '') !== yoN(f.vendedor)) return false; }
+      if (f.vendedor && veTodo()) { if (f.vendedor === '__ninguno' ? !!c.vendedor : S.norm(c.vendedor || '') !== S.norm(f.vendedor)) return false; }
       return true;
     }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }
   function tablaClientes(calc, ag) {
-    const l = filtrarClientes(calc, ag), edit = puedeEditar(), ver = l.slice(0, E.cLimite), vt = veTodo();
-    if (!l.length) return `<p class="sc-vacio-p">${ico('search')}Ningún cliente coincide con los filtros.</p>`;
-    const fila = c => {
-      const k = at(c.clave), dis = E.guardando.has(c.clave) ? ' disabled' : '', pausa = c.manual && c.manual.tipo === 'pausa', [tn, ti, tt] = TIPO_UI[S.tipoDe(c)], dir = direccionDe(c);
-      const acc = !edit ? '' : pausa ? `<button type="button" class="sc-btn sc-btn--chico" data-sc="volver-seg" data-k="${k}" aria-label="${at('Volver a seguimiento: ' + c.nombre)}"${dis}>${ico('play', 'ico-sm')}Volver</button>`
-        : `<button type="button" class="sc-btn sc-btn--chico" data-sc="sacar" data-k="${k}" aria-label="${at('Sacar de seguimiento: ' + c.nombre)}" aria-haspopup="dialog"${dis}>Sacar de seguimiento</button>`;
-      return `<tr class="${pausa ? 'sc-tr--pausa' : ''}" data-k="${k}">
-        <th scope="row" data-label="Cliente"><button type="button" class="sc-fila-n" data-sc="fila" data-k="${k}"${E.sel === c.clave ? ' aria-current="true"' : ''}>${esc(c.nombre)}</button>${dir ? `<span class="sc-tab-dir">${esc(dir.length > 44 ? dir.slice(0, 43) + '…' : dir)}</span>` : ''}</th>
-        <td data-label="Tipo">${pillT(tn, ti, tt)}</td>
-        <td data-label="Último pedido">${esc(corta(c.ultimo))} <span class="sc-muted">· ${c.dias === 0 ? 'hoy' : 'hace ' + diasN(c.dias)}</span></td>
-        <td data-label="Frecuencia">${c.intervaloPropio ? '' : '~'}cada ${esc(diasN(Math.max(1, Math.round(c.intervalo))))}</td>
-        <td data-label="Próximo contacto">${esc(proximoTxt(c, ag))}</td>
-        <td data-label="Etiquetas">${chipsEt(c) || '<span class="sc-muted">—</span>'}</td>
-        ${vt ? `<td data-label="Vendedor">${c.vendedor ? esc(c.vendedor) : '<span class="sc-muted">Atención general</span>'}</td>` : ''}
-        <td class="sc-tab-acc">${acc}</td></tr>`;
-    };
-    return `<div class="sc-tabla-w"><table class="sc-tabla"><thead><tr><th scope="col">Cliente</th><th scope="col">Tipo</th><th scope="col">Último pedido</th><th scope="col">Frecuencia</th><th scope="col">Próximo contacto</th><th scope="col">Etiquetas</th>${vt ? '<th scope="col">Vendedor</th>' : ''}<th scope="col"><span class="sc-sr">Acciones</span></th></tr></thead><tbody>${ver.map(fila).join('')}</tbody></table></div>
-      ${l.length > ver.length ? `<div class="sc-mas-f"><button type="button" class="sc-btn" data-sc="clientes-mas">Mostrar más (${l.length - ver.length} restantes)</button></div>` : ''}`;
+    const l = filtrarClientes(calc, ag), ver = l.slice(0, E.cLimite), vt = veTodo();
+    if (!l.length) return `<p class="sv-vacio">${ico('search')}Ningún cliente coincide con los filtros.</p>`;
+    const fila = c => { const t = ag.porCliente.get(c.clave), [sc, st] = senal(c, t), tp = S.tipoDe(c);
+      return `<tr class="${c.manual && c.manual.tipo === 'pausa' ? 'sv-tr--pausa' : ''}"><td>${nombreCelda(c)}</td><td>${pillTipo(tp)}</td><td>${c.dias === 0 ? 'Hoy' : 'Hace ' + esc(diasN(c.dias))}</td><td>${sp(sc, st)}</td>${vt ? `<td>${esc(c.vendedor || 'Atención general')}</td>` : ''}<td>${estadoPill(estadoClave(c, ag))}</td></tr>`; };
+    return `<div class="sv-tablewrap"><table class="sv-table"><thead><tr><th>Cliente</th><th>Tipo</th><th>Último pedido</th><th>Señal</th>${vt ? '<th>Responsable</th>' : ''}<th>Estado</th></tr></thead><tbody>${ver.map(fila).join('')}</tbody></table></div>
+      ${l.length > ver.length ? `<div class="sv-pie"><button type="button" class="sv-btn small" data-sc="clientes-mas">Mostrar más (${l.length - ver.length} restantes)</button></div>` : ''}`;
   }
-  const resumenClientes = (calc, ag) => { const n = filtrarClientes(calc, ag).length; return `${n} ${n === 1 ? 'cliente' : 'clientes'}${n !== calc.clientes.length ? ` de ${calc.clientes.length}` : ''}`; };
+  const resumenClientes = (calc, ag) => { const n = filtrarClientes(calc, ag).length; return `${n} ${n === 1 ? 'cliente' : 'clientes'}`; };
   function vistaClientes(calc, ag) {
     const f = E.cf, ets = v2Activo() ? v2().etiquetas : [], vt = veTodo();
-    const sel = (campo, etiqueta, opciones) => `<label class="sc-sel"><span>${etiqueta}</span><select data-cf="${campo}">${opciones.map(([v, t]) => `<option value="${at(v)}"${f[campo] === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
-    const vendedores = [...new Set(calc.clientes.map(c => c.vendedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-    return `<section class="sc-panel" aria-labelledby="sc-cli-t"><div class="sc-panel-h"><div><h3 id="sc-cli-t">Todos los clientes</h3><p class="sc-panel-s" id="sc-cli-n" aria-live="polite">${esc(resumenClientes(calc, ag))}</p></div>${esGestor() ? `<button type="button" class="sc-btn" data-sc="etiquetas" aria-haspopup="dialog">${ico('tag', 'ico-sm')}Etiquetas</button>` : ''}</div>
-      <div class="sc-cli-bar"><label class="sc-buscar sc-buscar--cli">${ico('search', 'ico-sm')}<input type="search" id="sc-cq" placeholder="Buscar por nombre o dirección" aria-label="Buscar en la lista de clientes" autocomplete="off" value="${at(E.cq)}"></label>
+    const enSeg = calc.clientes.filter(c => !['pausa', 'inactivo'].includes(estadoClave(c, ag)));
+    const sel = (campo, etiqueta, opciones) => `<label class="sv-sel"><span class="sv-muted">${etiqueta}</span><select class="sv-field" data-cf="${campo}">${opciones.map(([v, t]) => `<option value="${at(v)}"${f[campo] === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+    const vendedores = [...new Set(calc.clientes.map(c => c.vendedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')), al = filasAlertas(calc, ag, 8);
+    return `${cabecera('users', 'Clientes', 'Seguimiento comercial, recompra y alertas por negocio.', esGestor() ? `<button type="button" class="sv-btn primary" data-sc="etiquetas" aria-haspopup="dialog">${ico('tag', 'ico-sm')}Etiquetas</button>` : '')}
+      <ul class="sv-kpis" aria-label="Resumen de clientes">${kpi('blue', 'users', 'Total clientes', calc.clientes.length)}${kpi('green', 'check', 'En seguimiento', enSeg.length)}${kpi('red', '!', 'Dejaron de comprar', enSeg.filter(c => S.tipoDe(c) === 'recupero').length)}${kpi('blue', 'plus', 'Única compra', calc.clientes.filter(c => c.n === 1).length)}</ul>
+      <section class="sv-card sv-sec sv-filtros" aria-label="Filtros"><div class="sv-tools"><label class="sv-search sv-search--cli">${ico('search', 'ico-sm')}<input type="search" id="sc-cq" class="sv-field" placeholder="Buscar cliente…" aria-label="Buscar en la lista de clientes" autocomplete="off" value="${at(E.cq)}"></label>
         ${sel('tipo', 'Tipo', [['', 'Todos'], ['habitual', 'Habitual'], ['unica', 'Única compra'], ['recupero', 'Dejó de comprar']])}
+        ${sel('senal', 'Señal', [['', 'Todas'], ...Object.entries(SENALES)])}
         ${ets.length ? sel('etiqueta', 'Etiqueta', [['', 'Todas'], ...ets.map(e => [e.id, e.nombre])]) : ''}
-        ${sel('estado', 'Estado', [['', 'Todos'], ...Object.entries(ESTADOS_CLI)])}
-        ${vt ? sel('vendedor', 'Vendedor', [['', 'Todos'], ['__ninguno', 'Atención general'], ...vendedores.map(v => [v, v])]) : ''}</div>
-      <div id="sc-cli-res">${tablaClientes(calc, ag)}</div></section>`;
+        ${vt ? sel('vendedor', 'Vendedor', [['', 'Todos'], ['__ninguno', 'Atención general'], ...vendedores.map(v => [v, v])]) : ''}
+        <button type="button" class="sv-btn small" data-sc="limpiar-filtros">Limpiar filtros</button></div></section>
+      <div class="sv-two sv-two--cli">
+        <section class="sv-card sv-sec" aria-labelledby="sv-cli-t"><div class="sv-ch"><h2 id="sv-cli-t">Listado de clientes</h2><span class="sv-count" id="sv-cli-n" aria-live="polite">${esc(resumenClientes(calc, ag))}</span></div><div id="sv-cli-res">${tablaClientes(calc, ag)}</div></section>
+        <section class="sv-card sv-sec" aria-labelledby="sv-alc-t"><div class="sv-ch"><h2 id="sv-alc-t">${ico('triangle-alert')}Alertas destacadas</h2></div>${al.html}</section>
+      </div>`;
   }
   // Al escribir o elegir un filtro solo se redibuja la lista: el campo y el teclado no se tocan.
   function refrescarClientes() {
-    const r = $('sc-cli-res'); if (!r || !E.calc || !E.ag) return render();
-    r.innerHTML = tablaClientes(E.calc, E.ag); const n = $('sc-cli-n'); if (n) n.textContent = resumenClientes(E.calc, E.ag);
+    const r = $('sv-cli-res'); if (!r || !E.calc || !E.ag) return render();
+    r.innerHTML = tablaClientes(E.calc, E.ag); const n = $('sv-cli-n'); if (n) n.textContent = resumenClientes(E.calc, E.ag);
   }
 
   function cuerpo(calc, ag) {
     if (bloqueado()) return estadoDatos();
     if (sinAsignar() || (v2Activo() && !calc.clientes.length && calc.ocultos > 0)) return estadoSinClientes();
-    return E.vista === 'clientes' ? vistaClientes(calc, ag) : E.vista === 'agenda' ? vistaAgenda(calc, ag) : vistaHoy(calc, ag);
+    return E.vista === 'clientes' ? vistaClientes(calc, ag) : E.vista === 'agenda' ? vistaAgenda(calc, ag) : vistaPanel(calc, ag);
   }
+
 
   // ── Ficha ──
   // ¿Cuánto pasó respecto de su ritmo? Dos barras horizontales, mismo origen (cero) y misma escala. Solo con ritmo propio.
@@ -701,7 +680,7 @@
       if (t.estado === 'escribi') b.push(`<button type="button" class="sc-btn sc-btn--prim" data-sc="resultado" data-k="${k}" aria-haspopup="dialog"${dis}>${ico('list', 'ico-sm')}Resultado</button>`);
       b.push(`<button type="button" class="sc-btn" data-sc="mover" data-k="${k}" aria-haspopup="dialog"${dis}>${ico('calendar-days', 'ico-sm')}Mover a…</button>`);
     }
-    if (puedeEditar()) b.push(pausado ? `<button type="button" class="sc-btn sc-btn--prim" data-sc="retomar" data-k="${k}"${dis}>${ico('play', 'ico-sm')}Retomar</button>` : `<button type="button" class="sc-btn" data-sc="sinseg" data-k="${k}" aria-haspopup="dialog"${dis}>${ico('pause', 'ico-sm')}Sin seguimiento</button>`);
+    if (puedeEditar()) b.push(pausado ? `<button type="button" class="sc-btn sc-btn--prim" data-sc="retomar" data-k="${k}"${dis}>${ico('play', 'ico-sm')}Volver a seguimiento</button>` : `<button type="button" class="sc-btn" data-sc="sinseg" data-k="${k}" aria-haspopup="dialog"${dis}>${ico('pause', 'ico-sm')}Sacar de seguimiento</button>`);
     const tipo = pausado ? '' : tipoFicha(c);
     return `<section class="sc-acc" aria-label="Seguimiento de este cliente">${tipo}<p class="sc-acc-l">${lineaAgenda(c)}</p>${b.length ? `<div class="sc-btns">${b.join('')}</div>` : ''}</section>`;
   }
@@ -723,6 +702,16 @@
   }
 
   const observacionDe = c => { const cli = ((estadoApp() && estadoApp().clientes) || []).find(x => String(x.n).toLowerCase() === c.nombre.toLowerCase()); return cli && cli.obs ? cli.obs : ''; };
+  // Encabezado con datos en línea (.facts de la referencia) y cuatro mini-estadísticas
+  function factsFicha(c, dir) {
+    const f = (k, v) => `<div class="sv-fact"><span class="sv-muted">${k}</span><b>${v}</b></div>`, t = E.ag && E.ag.porCliente.get(c.clave);
+    return `<div class="sv-facts">${f('Dirección', dir ? esc(dir) : 'Sin completar')}${f('Última entrega', c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada')}${(v2Activo() && (veTodo() || esGestor())) ? f('Vendedor', esc(c.vendedor || 'Atención general')) : ''}${(c.etiquetas || []).length ? `<div class="sv-fact"><span class="sv-muted">Etiquetas</span>${chipsEt(c)}</div>` : ''}</div>`;
+  }
+  function minisFicha(c) {
+    const t = E.ag && E.ag.porCliente.get(c.clave), [sc, st] = senal(c, t), cada = Math.max(1, Math.round(c.intervalo));
+    const m = (k, v, cls) => `<div class="sv-mini ${cls || ''}"><span class="sv-muted">${k}</span><strong>${v}</strong></div>`;
+    return `<div class="sv-minis">${m('Último pedido', c.dias === 0 ? 'Hoy' : 'Hace ' + esc(diasN(c.dias)))}${m('Frecuencia', `${c.intervaloPropio ? '' : '~'}cada ${esc(diasN(cada))}`, 'green')}${m('Señal', esc(st), sc === 'red' ? 'red' : sc === 'amber' ? 'amber' : '')}${m('Próximo contacto', E.ag ? esc(proximoTxt(c, E.ag)) : '—')}</div>`;
+  }
   function ficha(c) {
     const dir = direccionDe(c), obs = observacionDe(c);
     return `<div class="modal-handle"></div>
@@ -730,13 +719,12 @@
       <div class="sc-f sc-t-${tono(c)}">
       ${E.aviso ? bannerAviso() : ''}
       <div class="sc-f-cab">${pill(c)}<span class="sc-wa-slot">${contactadoPill(c)}</span></div>
+      ${factsFicha(c, dir)}
+      ${minisFicha(c)}
+      ${obs ? `<p class="sc-f-obs sc-muted">${ico('info', 'ico-sm')}<span>${esc(obs)}</span></p>` : ''}
       ${accionesFicha(c)}
       ${metaFicha(c)}
       ${dejoSec(c)}
-      <p class="sc-f-dir">${ico('map-pin', 'ico-sm')}<span>${dir ? esc(dir) : 'Dirección sin completar'}</span></p>
-      ${obs ? `<p class="sc-f-obs sc-muted">${ico('info', 'ico-sm')}<span>${esc(obs)}</span></p>` : ''}
-      <p class="sc-f-ult">${ico('calendar', 'ico-sm')}<span>Último pedido: <b>${esc(F.fechaLarga(c.ultimaCarga || c.ultimo))}</b></span></p>
-      <p class="sc-f-ult">${ico('truck', 'ico-sm')}<span>Última entrega: <b>${c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada'}</b>${c.ultimaEntrega ? ' <span class="sc-muted">(despacho)</span>' : ''}</span></p>
       ${panelSeguimiento(c)}
       <button type="button" class="sc-wa-link" data-wa-client="${esc(c.nombre)}">WhatsApp e historial de contacto</button>
       <section class="sc-f-sec sc-f-sec--1"><h4>¿Cuánto pasó respecto de su ritmo?</h4>${comparacion(c)}</section>
@@ -790,7 +778,7 @@
     document.querySelectorAll('#sc-raiz [aria-current]').forEach(x => x.removeAttribute('aria-current'));
     const f = $('sc-ficha'); if (f) f.innerHTML = '';
     let el = null;
-    if (o && o.tipo === 'card') el = document.querySelector(`#sc-raiz .sc-card[data-k="${CSS.escape(o.k)}"][data-est="${o.est}"]`) || document.querySelector(`#sc-raiz .sc-card[data-k="${CSS.escape(o.k)}"]`);
+    if (o && o.tipo === 'card') el = document.querySelector(`#sc-raiz .daytask[data-k="${CSS.escape(o.k)}"][data-est="${o.est}"]`) || document.querySelector(`#sc-raiz .daytask[data-k="${CSS.escape(o.k)}"]`);
     else if (o && o.tipo === 'vista') el = document.querySelector(`#sc-raiz [data-sc="fila"][data-k="${CSS.escape(o.k)}"]`);
     if (!el) el = $('sc-q');
     if (el) el.focus({ preventScroll: true });
@@ -816,7 +804,6 @@
     const sinPermiso = E.datos.estado === 'sinPermiso';
     return `<div class="sc-estado" role="alert"><b>${sinPermiso ? 'Tu usuario todavía no tiene permiso para el seguimiento.' : 'No se pudieron cargar las pausas y los movimientos.'}</b><p>${sinPermiso ? 'Avisale a quien administra la app. Mientras tanto no se muestra el calendario.' : 'Sin eso, el calendario podría incluir a clientes que están sin seguimiento. Revisá la conexión y probá de nuevo.'}${E.datos.mensaje ? ` <span class="sc-muted">(${esc(E.datos.mensaje)})</span>` : ''}</p><button type="button" class="sc-accion" data-sc="reintentar-datos">Reintentar</button></div>`;
   }
-  const leyenda = () => `<p class="sc-ley"><b>Hablarles</b>: compran siempre y les toca. <b>Seguimiento</b>, para que vuelvan: <span class="sc-pill sc-t-unica">${ico('user-plus', 'ico-sm')}Única compra</span> (franja violeta) y <span class="sc-pill sc-t-dejo">${ico('trending-down', 'ico-sm')}Dejó de comprar</span> (franja naranja). A los que les escribiste pasan a <b>Esperando</b> (pedido o respuesta) y, si no piden en 2 días hábiles, vuelven como <span class="sc-pill sc-t-marca">${ico('rotate-ccw', 'ico-sm')}Volver a escribir</span>. Los que ya pidieron <span class="sc-ley-ic sc-hecha-ic--pidio">${ico('circle-check', 'ico-sm')}</span> quedan al final, en «Hechos».${puedeAgendar() ? (ancho() ? ' Agarrá una tarjeta y soltala en otro día, o abrila y usá «Mover a…».' : ' Abrí una tarjeta y usá «Mover a…» para cambiarla de día.') : ''}</p>`;
   const buscador = () => `<div class="sc-bus"><label class="sc-buscar">${ico('search', 'ico-sm')}<input type="search" id="sc-q" placeholder="Buscar un cliente" aria-label="Buscar un cliente" aria-controls="sc-bus-l" autocomplete="off" value="${at(E.q)}"></label><div id="sc-bus-l" class="sc-bus-l" aria-live="polite">${resultadosBusqueda()}</div></div>`;
   function render() {
     const raiz = $('sc-raiz'); if (!raiz) return;
@@ -838,7 +825,7 @@
     const foco = document.activeElement && document.activeElement.id === 'sc-q' ? { a: document.activeElement.selectionStart, b: document.activeElement.selectionEnd } : null;
     raiz.className = 'sc';
     const sinVista = bloqueado() || sinAsignar();
-    raiz.innerHTML = `<div class="sc-cab"><div class="sc-cab-t"><h2>Clientes</h2><p class="sc-fecha">${esc(fechaTitulo())}</p></div>${sinVista ? '' : selectorVistas()}${sinVista ? '' : buscador()}</div>${aviso}${avisos()}
+    raiz.innerHTML = `${sinVista ? '' : navSecundaria()}${aviso}${avisos()}
       <div id="sc-cuerpo">${cuerpo(calc, E.ag)}</div>`;
     marcarMas();
     if (foco) { const q = $('sc-q'); if (q) { q.focus({ preventScroll: true }); try { q.setSelectionRange(foco.a, foco.b); } catch (e) { /* tipo search sin selección */ } } }
@@ -861,7 +848,7 @@
   // Al escribir en el buscador solo se cambian los resultados: el campo y el teclado no se tocan.
   function renderBusqueda() { const l = $('sc-bus-l'); if (!l || !E.calc) return render(); l.innerHTML = resultadosBusqueda(); }
   function esqueleto() {
-    return `<div class="sc" aria-busy="true"><div class="sc-cab"><div class="sc-cab-t"><h2>Clientes</h2><p class="sc-fecha">Cargando el historial de pedidos…</p></div></div>${'<div class="sc-esq"><i></i><i></i></div>'.repeat(6)}</div>`;
+    return `<div class="sc" aria-busy="true"><div class="sv-head"><div><h1>Seguimiento comercial</h1><p>Cargando el historial de pedidos…</p></div></div>${'<div class="sc-esq"><i></i><i></i></div>'.repeat(6)}</div>`;
   }
 
   // ── Acciones ──
@@ -869,10 +856,10 @@
   function seleccionar(k, boton) {
     const c = E.calc && E.calc.clientes.find(x => x.clave === k); if (!c) return;
     E.sel = k; E.fichaAbierta = true;
-    E.origen = !boton ? { tipo: 'bus', k } : boton.classList.contains('sc-card') ? { tipo: 'card', k, est: boton.dataset.est } : boton.classList.contains('sc-bus-it') ? { tipo: 'bus', k } : { tipo: 'vista', k };
+    E.origen = !boton ? { tipo: 'bus', k } : boton.classList.contains('daytask') ? { tipo: 'card', k, est: boton.dataset.est } : boton.classList.contains('sc-bus-it') ? { tipo: 'bus', k } : { tipo: 'vista', k };
     if (E.q) { E.q = ''; const q = $('sc-q'); if (q) q.value = ''; renderBusqueda(); }
     document.querySelectorAll('#sc-raiz [aria-current]').forEach(x => x.removeAttribute('aria-current'));
-    document.querySelectorAll(`#sc-raiz .sc-card[data-k="${CSS.escape(k)}"]`).forEach(x => x.setAttribute('aria-current', 'true'));
+    document.querySelectorAll(`#sc-raiz .daytask[data-k="${CSS.escape(k)}"]`).forEach(x => x.setAttribute('aria-current', 'true'));
     pintarFicha(E.calc);
     cargarContactos(k);
   }
@@ -910,7 +897,7 @@
     const btn = f.acc && document.querySelector(`#sc-ficha [data-sc="${f.acc}"][data-k="${CSS.escape(f.k)}"]`);
     if (btn && btn.disabled) return;   // se está guardando: el botón se habilita al terminar y recién ahí recibe el foco
     E.foco = null;
-    const kk = CSS.escape(f.k), el = btn || document.querySelector(`#sc-raiz [data-sc="${f.acc || 'escribi'}"][data-k="${kk}"]:not([disabled]), #sc-raiz [data-sc="resultado"][data-k="${kk}"]:not([disabled])`) || document.querySelector(`#sc-raiz .sc-card[data-k="${kk}"], #sc-raiz [data-sc="fila"][data-k="${kk}"]`);
+    const kk = CSS.escape(f.k), el = btn || document.querySelector(`#sc-raiz [data-sc="${f.acc || 'escribi'}"][data-k="${kk}"]:not([disabled]), #sc-raiz [data-sc="resultado"][data-k="${kk}"]:not([disabled])`) || document.querySelector(`#sc-raiz .daytask[data-k="${kk}"], #sc-raiz [data-sc="fila"][data-k="${kk}"]`);
     if (el) el.focus({ preventScroll: true });
   }
 
@@ -1332,10 +1319,10 @@
   function empezarArrastre(a) {
     a.activo = true; cerrarToast();
     document.body.classList.add('sc-arrastrando'); $('sc-raiz').classList.add('sc--arr');
-    a.el.classList.add('sc-card--arr');
+    a.el.classList.add('daytask--arr');
     const r = a.el.getBoundingClientRect(); a.dx = a.sx - r.left; a.dy = a.sy - r.top;
     const pos = document.createElement('div'); pos.className = 'sc-ghost-pos';
-    const clon = a.el.cloneNode(true); clon.classList.remove('sc-card--arr'); clon.classList.add('sc-ghost-card'); clon.removeAttribute('data-sc'); clon.removeAttribute('aria-current'); clon.style.width = r.width + 'px';
+    const clon = a.el.cloneNode(true); clon.classList.remove('daytask--arr'); clon.classList.add('sc-ghost-card'); clon.removeAttribute('data-sc'); clon.removeAttribute('aria-current'); clon.style.width = r.width + 'px';
     pos.appendChild(clon); document.body.appendChild(pos); a.ghost = pos;
     const vuelta = () => {
       if (E.arr !== a) return;
@@ -1352,6 +1339,10 @@
     a.ghost.style.transform = `translate(${a.x - a.dx}px, ${a.y - a.dy}px)`;
     const el = document.elementFromPoint(a.x, a.y), z = el && el.closest ? el.closest('[data-zona]') : null, nueva = zonaValida(z) ? z : null;
     if (nueva !== a.zona) { if (a.zona) a.zona.classList.remove('sc-zona--sobre'); if (nueva) nueva.classList.add('sc-zona--sobre'); a.zona = nueva; }
+    // sobre «Esta semana» / «Semana que viene»: tras un instante se cambia de semana (la tarjeta sigue en la mano)
+    const sb = el && el.closest ? el.closest('[data-sc="semana"]') : null;
+    if (sb && Number(sb.dataset.s) !== E.semana) { if (a.dwell !== sb) { clearTimeout(a.dt); a.dwell = sb; a.dt = setTimeout(() => { if (E.arr === a) { E.semana = Number(sb.dataset.s); a.zona = null; repintarGrilla(); posicionar(a); } }, 450); } }
+    else if (a.dwell) { clearTimeout(a.dt); a.dwell = null; }
   }
   function moverArrastre(ev) {
     const a = E.arr; if (!a || ev.pointerId !== a.id) return;
@@ -1360,11 +1351,11 @@
   }
   function limpiarArrastre() {
     const a = E.arr; if (!a) return;
-    cancelAnimationFrame(a.raf);
+    cancelAnimationFrame(a.raf); clearTimeout(a.dt);
     if (a.ghost) a.ghost.remove();
     document.body.classList.remove('sc-arrastrando'); const r = $('sc-raiz'); if (r) r.classList.remove('sc--arr');
     document.querySelectorAll('.sc-zona--sobre').forEach(x => x.classList.remove('sc-zona--sobre'));
-    a.el.classList.remove('sc-card--arr');
+    a.el.classList.remove('daytask--arr');
     try { a.el.releasePointerCapture(a.id); } catch (e) { /* ya no la tenía */ }
     E.arr = null;
     if (E.renderPendiente && !$('sc-dlg')?.open) { E.renderPendiente = false; render(); }
@@ -1379,7 +1370,7 @@
   }
   const cancelarArrastre = () => { if (E.arr) limpiarArrastre(); };
 
-  document.addEventListener('pointerdown', ev => { const a = ev.target.closest && ev.target.closest('#sc-raiz .sc-card[data-arr]'); if (a) iniciarArrastre(ev, a); });
+  document.addEventListener('pointerdown', ev => { const a = ev.target.closest && ev.target.closest('#sc-raiz .daytask[data-arr]'); if (a) iniciarArrastre(ev, a); });
   document.addEventListener('pointermove', moverArrastre);
   document.addEventListener('pointerup', soltarArrastre);
   document.addEventListener('pointercancel', cancelarArrastre);
@@ -1423,6 +1414,8 @@
     else if (a === 'vista') { if (E.vista !== b.dataset.v) { E.vista = b.dataset.v; E.cLimite = 100; render(); } const x = document.querySelector(`#sc-raiz .sc-vista[data-v="${b.dataset.v}"]`); if (x) x.focus({ preventScroll: true }); }
     else if (a === 'alertas-mas') { const t = b.dataset.t; if (E.alertasTodas.has(t)) E.alertasTodas.delete(t); else E.alertasTodas.add(t); render(); const x = document.querySelector(`#sc-raiz [data-sc="alertas-mas"][data-t="${t}"]`); if (x) x.focus({ preventScroll: true }); }
     else if (a === 'clientes-mas') { E.cLimite += 100; refrescarClientes(); }
+    else if (a === 'semana') { E.semana = Number(b.dataset.s); repintarGrilla(); }
+    else if (a === 'limpiar-filtros') { E.cf = { tipo: '', senal: '', etiqueta: '', vendedor: '' }; E.cq = ''; E.cLimite = 100; render(); }
     else if (a === 'resultado') { E.foco = { k, acc: 'resultado' }; abrirResultado(k); }
     else if (a === 'etiquetas') abrirEtiquetas();
     else if (a === 'et-toggle') cambiarEtiqueta(k, b.dataset.e);
@@ -1473,7 +1466,7 @@
       return;
     }
     const cl = ev.target.classList; if (!cl) return;
-    const sel = cl.contains('sc-bus-it') ? '.sc-bus-it' : cl.contains('sc-card') ? '.sc-card' : '';
+    const sel = cl.contains('sc-bus-it') ? '.sc-bus-it' : cl.contains('daytask') ? '.daytask' : '';
     if (!sel || (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp')) return;
     const filas = [...raiz.querySelectorAll(sel)].filter(x => x.offsetParent !== null), i = filas.indexOf(ev.target), j = i + (ev.key === 'ArrowDown' ? 1 : -1);
     if (filas[j]) { ev.preventDefault(); filas[j].focus(); } else if (sel === '.sc-bus-it' && j < 0) { ev.preventDefault(); $('sc-q').focus(); }
@@ -1486,6 +1479,7 @@
     else if (d.matches('#sc-ficha details.sc-cambios')) E.cambiosAbierto = d.open;
   }, true);
   document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sc-q') { E.q = ev.target.value; renderBusqueda(); } });
+  document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sv-pq') { E.pq = ev.target.value; refrescarPanelTabla(); } });
   document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'sc-cq') { E.cq = ev.target.value; E.cLimite = 100; refrescarClientes(); } });
 
   window.SegUI = {

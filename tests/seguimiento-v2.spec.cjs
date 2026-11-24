@@ -3,7 +3,7 @@
 const {test,expect}=require('@playwright/test');
 const fs=require('node:fs');
 const SHOTS=process.env.SEG_SHOTS||'';
-const shot=async(page,name,opts={})=>{if(!SHOTS)return;fs.mkdirSync(SHOTS,{recursive:true});await page.screenshot({path:`${SHOTS}/v2-${name}.png`,animations:'disabled',...opts});};
+const shot=async(page,name,opts={})=>{if(!SHOTS)return;fs.mkdirSync(SHOTS,{recursive:true});await page.addStyleTag({content:'#installBar{display:none!important}'});await page.screenshot({path:`${SHOTS}/v3-${name}.png`,animations:'disabled',...opts});};
 const mockClient=`window.supabase={createClient:()=>({
  auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>({}),signOut:async()=>({})},
  from(table){const filters=[];const q={select(){return q},eq(k,v){filters.push(['eq',k,v]);return q},neq(){return q},is(){return q},in(){return q},order(){return q},limit(){return q},range(){return q},or(){return q},upsert(){return q},update(){return q},then(a,b){return window.__db({table,filters,who:typeof state==='undefined'?null:state.who}).then(a,b)}};return q},
@@ -86,6 +86,13 @@ function setup(opts={}){
    if(!y||!y.gestor)return err('Solo quien administra','42501');
    const c=clienteDe(a.p_cliente_id);c.vendedor=a.p_vendedor?Object.values(YO).find(u=>norm(u.nombre)===norm(a.p_vendedor)).nombre:null;return {data:{ok:true,vendedor:c.vendedor}};
   }
+  if(q.name==='seg_decidir'){
+   const a=q.args;if(!puede(q,a.p_cliente_id))return sinPermiso();
+   db.decisiones=db.decisiones||[];db.decisiones.forEach(d=>{if(d.cliente_id===a.p_cliente_id)d.vigente=false;});
+   const d={id:'d'+(db.decisiones.length+1)+'-0000-0000-0000-000000000000',cliente_id:a.p_cliente_id,cliente_nombre:clienteDe(a.p_cliente_id).nombre,tipo:a.p_tipo,motivo:a.p_motivo,nota:a.p_nota,revision_en:a.p_revision,pedidos_conocidos:a.p_conocidos,desde:a.p_desde,version:1,autor:y.nombre,creado_en:new Date().toISOString(),vigente:true};
+   db.decisiones.push(d);return {data:{ok:true,id:d.id}};
+  }
+  if(q.name==='seg_cerrar_decision'){const a=q.args;(db.decisiones||[]).forEach(d=>{if(d.cliente_id===a.p_cliente_id)d.vigente=false;});return {data:{ok:true}};}
   if(q.name==='admin_clientes_listar'){
    return {data:db.clientes.filter(c=>!q.args.p_q||norm(c.nombre).includes(norm(q.args.p_q))).map(c=>({id:c.id,nombre:c.nombre,direccion:c.direccion,observaciones:c.observaciones,eliminado_en:null,fusionado_en:null,version:'2026-11-01T10:00:00.000001+00:00',pedidos:6,ultimo_pedido:'2026-11-17',telefonos:[]}))};
   }
@@ -93,6 +100,7 @@ function setup(opts={}){
   if(q.table==='pedidos')return {data:structuredClone(db.pedidos)};
   if(q.table==='clientes')return {data:db.clientes.map(c=>({id:c.id,nombre:c.nombre,direccion:c.direccion,eliminado_en:c.eliminado_en,observaciones:c.observaciones}))};
   if(q.table==='productos')return {data:db.productos};
+  if(q.table==='seg_decisiones')return {data:(db.decisiones||[]).filter(d=>d.vigente&&puede(q,d.cliente_id))};
   if(q.table==='seg_agenda')return {data:[...db.agenda.values()].filter(f=>puede(q,f.cliente_id))};
   return {data:[]};
  }
@@ -113,49 +121,51 @@ async function abrir(browser,s,who,{viewport={width:1440,height:1000},contexto={
   const d=await sbGetAppData();state={...state,...d,who:w,pin:'ok'};mostrarApp();},{w:who});
  return page;
 }
-async function entrar(browser,s,who,o){const page=await abrir(browser,s,who,o);await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#sc-raiz .sc-vistas')).toBeVisible();await expect(page.locator('#sc-raiz .sc-kpis, #sc-raiz .sc-estado')).toBeVisible();return page;}
-const fila=(page,k)=>page.locator(`#sc-raiz .sc-fila[data-k="${k}"]`);
-const nombresHoy=async page=>(await page.locator('#sc-raiz .sc-hoy-p .sc-filas .sc-fila .sc-fila-n').allTextContents()).sort();
-const vista=async(page,v)=>{await page.locator(`#sc-raiz .sc-vista[data-v="${v}"]`).click();await expect(page.locator(`#sc-raiz .sc-vista[data-v="${v}"]`)).toHaveAttribute('aria-pressed','true');};
+async function entrar(browser,s,who,o){const page=await abrir(browser,s,who,o);await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#sc-raiz .sv-nav-c')).toBeVisible();await expect(page.locator('#sc-raiz .sv-kpis, #sc-raiz .sc-estado')).toBeVisible();return page;}
+const fila=(page,k)=>page.locator(`#sc-raiz .sv-task[data-k="${k}"]`);
+const nombresHoy=async page=>(await page.locator('#sc-raiz .sv-list--tareas .sv-task .sv-name').allTextContents()).sort();
+const vista=async(page,v)=>{await page.locator(`#sc-raiz .sv-chip[data-sc="vista"][data-v="${v}"]`).click();await expect(page.locator(`#sc-raiz .sv-chip[data-sc="vista"][data-v="${v}"]`)).toHaveAttribute('aria-pressed','true');};
 const sinErrores=page=>expect(page.errors).toEqual([]);
 
 test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vista por defecto con indicadores y alertas',async({browser})=>{
  const s=setup();const page=await entrar(browser,s,'Juan Marcos');
- await expect(page.locator('#sc-raiz .sc-vista[data-v="hoy"]')).toHaveAttribute('aria-pressed','true');
- const kpis=await page.locator('#sc-raiz .sc-kpi').allInnerTexts();
- expect(kpis.map(t=>t.replace(/\s+/g,' ').trim())).toEqual(['6 Para hoy','1 Atrasados','0 Esperando respuesta o pedido','0 Hechos hoy']);
+ await expect(page.locator('#sc-raiz .sv-chip[data-v="hoy"]')).toHaveAttribute('aria-pressed','true');
+ const kpis=await page.locator('#sc-raiz .sv-kpi').allInnerTexts();
+ expect(kpis.map(t=>t.replace(/\s+/g,' ').trim())).toEqual(['Atrasados 1','Dejaron de comprar 2','Esperando respuesta 0','Contactados / pidieron hoy 0']);
  expect(await nombresHoy(page)).toEqual(['Almacén Norte','Cliente sin dueño','Dejó Hace Rato','Kiosco Sur','Sauce Mercado','Única Compra Vieja']);
  await expect(fila(page,'sauce mercado')).toContainText('Atrasado');
  await expect(fila(page,'unica compra vieja')).toContainText('Dejó de comprar');   // un solo pedido hace 23 días: pasó el doble del ritmo de la cartera (tipoDe: «recupero» gana sobre «única»)
  await expect(fila(page,'almacen norte')).toContainText('Habitual');
- await expect(fila(page,'almacen norte')).toContainText('Último pedido hace 8 días');
+ await expect(fila(page,'almacen norte')).toContainText('Le toca escribirle · 8 días desde el último pedido');
+ await expect(fila(page,'almacen norte')).toContainText('Alta'.replace('Alta','Normal'));
+ await expect(page.locator('#sv-hoy-t').locator('xpath=..')).toContainText('6 tareas');
  // alertas comerciales: cada una abre la ficha
- const al=page.locator('#sc-raiz .sc-alertas');
- await expect(al.locator('.sc-al-h')).toContainText(['Dejó de comprar','Única compra sin volver']);
- await expect(al).not.toContainText('Compra menos');   // sin datos para decirlo honestamente
- await al.locator('.sc-al-it',{hasText:'Única Compra Vieja'}).click();
+ const al=page.locator('#sc-raiz .sv-alert');
+ await expect(al).toHaveCount(2);await expect(al.nth(0)).toContainText('Dejó Hace Rato');await expect(al.nth(1)).toContainText('Una compra');
+ expect((await al.allTextContents()).join(' ')).not.toContain('Compra menos');   // sin datos para decirlo honestamente
+ await al.filter({hasText:'Única Compra Vieja'}).click();
  await expect(page.locator('#scModal')).toHaveClass(/open/);await expect(page.locator('#sc-f-nom')).toHaveText('Única Compra Vieja');
  await page.keyboard.press('Escape');await expect(page.locator('#scModal')).not.toHaveClass(/open/);
- await shot(page,'hoy-pc');
+ await shot(page,'panel',{fullPage:true});
  // Agenda semanal: todos
  await vista(page,'agenda');
- await expect(page.locator('#sc-raiz .sc-sem')).toHaveCount(2);
- expect(await page.locator('#sc-raiz .sc-dia--hoy .sc-card[data-est="pendiente"]').count()).toBe(6);
- await shot(page,'agenda-pc');
+ await expect(page.locator('#sc-raiz .sv-day')).toHaveCount(6);await expect(page.locator('#sc-raiz .sv-head')).toContainText('23 al 28 de noviembre 2026');
+ expect(await page.locator('#sc-raiz .sv-day--hoy .daytask[data-est="pendiente"]').count()).toBe(6);
+ await shot(page,'agenda',{fullPage:true});
  // Clientes: lista completa con vendedor
  await vista(page,'clientes');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(7);
- await expect(page.locator('#sc-raiz .sc-tabla thead')).toContainText('Vendedor');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(7);
+ await expect(page.locator('#sc-raiz .sv-table thead')).toContainText('Responsable');
  await expect(page.locator('#sc-raiz select[data-cf="vendedor"]')).toBeVisible();
  await expect(page.locator('#sc-raiz [data-sc="etiquetas"]')).toBeVisible();
  await page.locator('#sc-raiz select[data-cf="vendedor"]').selectOption('Thiago');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(3);
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(3);
  await page.locator('#sc-raiz select[data-cf="vendedor"]').selectOption('__ninguno');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(1);
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
  await page.locator('#sc-raiz select[data-cf="vendedor"]').selectOption('');
- await page.locator('#sc-cq').fill('sauce');await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(1);
+ await page.locator('#sc-cq').fill('sauce');await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
  await page.locator('#sc-cq').fill('');
- await shot(page,'clientes-pc');
+ await shot(page,'clientes',{fullPage:true});
  // el buscador global abre la ficha
  await page.locator('#sc-q').fill('kiosco sur');await page.locator('#sc-raiz .sc-bus-it').first().click();
  await expect(page.locator('#sc-f-nom')).toHaveText('Kiosco Sur');
@@ -166,20 +176,20 @@ test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vis
 test('Thiago ve solo sus clientes en Hoy, Agenda y Clientes, sin selector de vendedor ni gestión de etiquetas',async({browser})=>{
  const s=setup();const page=await entrar(browser,s,'Thiago');
  expect(await nombresHoy(page)).toEqual(['Almacén Norte','Kiosco Sur','Única Compra Vieja']);
- await expect(page.locator('#sc-raiz .sc-kpi').first()).toContainText('3');
- await expect(page.locator('#sc-raiz .sc-alertas')).not.toContainText('Sauce Mercado');
+ await expect(page.locator('#sv-hoy-t').locator('xpath=..')).toContainText('3 tareas');
+ expect((await page.locator('#sc-raiz .sv-alert').allTextContents()).join(' ')).not.toContain('Sauce Mercado');
  await shot(page,'thiago-hoy');
  await vista(page,'agenda');
- expect(await page.locator('#sc-raiz .sc-card').evaluateAll(l=>[...new Set(l.map(x=>x.dataset.k))].sort())).toEqual(['almacen norte','kiosco sur','unica compra vieja']);
+ expect(await page.locator('#sc-raiz .daytask').evaluateAll(l=>[...new Set(l.map(x=>x.dataset.k))].sort())).toEqual(['almacen norte','kiosco sur','unica compra vieja']);
  await vista(page,'clientes');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(3);
- await expect(page.locator('#sc-raiz .sc-tabla thead')).not.toContainText('Vendedor');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(3);
+ await expect(page.locator('#sc-raiz .sv-table thead')).not.toContainText('Responsable');
  await expect(page.locator('#sc-raiz select[data-cf="vendedor"]')).toHaveCount(0);
  await expect(page.locator('#sc-raiz [data-sc="etiquetas"]')).toHaveCount(0);
  // el buscador tampoco muestra a los demás
  await page.locator('#sc-q').fill('sauce');await expect(page.locator('#sc-raiz .sc-bus-l')).toContainText('Ningún cliente coincide');
  // la ficha no ofrece vendedor ni etiquetas editables
- await page.locator('#sc-q').fill('');await page.locator('#sc-raiz .sc-tabla [data-sc="fila"]').first().click();
+ await page.locator('#sc-q').fill('');await page.locator('#sc-raiz .sv-table [data-sc="fila"]').first().click();
  await expect(page.locator('#scModal')).toHaveClass(/open/);
  await expect(page.locator('#sc-ficha select[data-sc="vendedor-sel"]')).toHaveCount(0);
  await expect(page.locator('#sc-ficha [data-sc="et-toggle"]')).toHaveCount(0);
@@ -195,14 +205,13 @@ test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de 
  const f=fila(page,'kiosco sur');
  await f.locator('[data-sc="escribi"]').click();
  await expect(page.locator('#sc-toast')).toContainText('Le escribiste a Kiosco Sur');
- await expect(page.locator('#sc-raiz .sc-kpi').nth(0)).toContainText('5');await expect(page.locator('#sc-raiz .sc-kpi').nth(2)).toContainText('1');
- const esp=page.locator('#sc-raiz #sc-esp-t').locator('xpath=ancestor::section');
- await expect(esp).toContainText('Kiosco Sur');await expect(esp).toContainText('vuelve el');
+ await expect(page.locator('#sc-raiz .sv-kpi').nth(2)).toContainText('1');await expect(page.locator('#sc-raiz .sv-kpi').nth(3)).toContainText('1');
+ await expect(f.locator('[data-sc="escribi"]')).toBeChecked();await expect(f).toContainText('Esperando');await expect(f).toContainText('vuelve');
  expect(s.db.llamadas.filter(l=>l.f==='seg_escribi').map(l=>l.p_fecha)).toEqual([HOY]);
  // deshacer devuelve a pendiente
  await page.locator('#sc-toast [data-sc="deshacer"]').click();
- await expect(fila(page,'kiosco sur').locator('[data-sc="escribi"]')).toBeVisible();
- await fila(page,'kiosco sur').locator('[data-sc="escribi"]').click();
+ await expect(fila(page,'kiosco sur').locator('[data-sc="escribi"]')).not.toBeChecked();
+ await fila(page,'kiosco sur').locator('[data-sc="escribi"]').check();
  await expect(fila(page,'kiosco sur').locator('[data-sc="resultado"]')).toBeVisible();
  // menú de resultado
  await fila(page,'kiosco sur').locator('[data-sc="resultado"]').click();
@@ -221,10 +230,10 @@ test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de 
  const llamada=s.db.llamadas.find(l=>l.f==='contacto');expect(llamada.p_id).toMatch(/^[0-9a-f-]{36}$/);expect(llamada.p_ciclo).toBe('2026-11-17');
  expect(s.db.agenda.get('c2')).toMatchObject({fecha:'2026-11-26',escrito_en:null});
  await vista(page,'agenda');
- await expect(page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-26"] .sc-card[data-k="kiosco sur"]')).toBeVisible();
- await expect(page.locator('#sc-raiz .sc-dia--hoy .sc-card[data-k="kiosco sur"]')).toHaveCount(0);
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]')).toHaveCount(0);
  // la ficha muestra el historial
- await page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-26"] .sc-card[data-k="kiosco sur"]').click();
+ await page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]').click();
  await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Tiene stock');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Le llega el viernes');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Juan Marcos');
  sinErrores(page);
 });
@@ -263,12 +272,30 @@ test('Una operación lenta deja el botón deshabilitado y no se envía dos veces
 
 test('Agenda semanal: se sigue pudiendo arrastrar una tarjeta a otro día',async({browser})=>{
  const s=setup();const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
- const origen=page.locator('#sc-raiz .sc-dia--hoy .sc-card[data-k="kiosco sur"]'),destino=page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-27"]');
+ const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]'),destino=page.locator('#sc-raiz .sv-day[data-fecha="2026-11-27"]');
  await expect(origen).toHaveAttribute('data-arr','1');
  const a=await origen.boundingBox(),b=await destino.boundingBox();
  await page.mouse.move(a.x+20,a.y+10);await page.mouse.down();await page.mouse.move(a.x+60,a.y+40,{steps:4});await page.mouse.move(b.x+b.width/2,b.y+60,{steps:10});await page.mouse.up();
- await expect(page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-27"] .sc-card[data-k="kiosco sur"]')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-27"] .daytask[data-k="kiosco sur"]')).toBeVisible();
  expect(s.db.llamadas.filter(l=>l.f==='seg_agendar')).toMatchObject([{p_cliente_id:'c2',p_fecha:'2026-11-27',p_ciclo:'2026-11-17'}]);
+ sinErrores(page);
+});
+
+test('Agenda: se arrastra una tarjeta sobre «Semana que viene» y se suelta en un día de esa semana; «Sacar de seguimiento» vive en la ficha',async({browser})=>{
+ const s=setup();const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
+ const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]');
+ const a=await origen.boundingBox(),sw=await page.locator('#sc-raiz [data-sc="semana"][data-s="1"]').boundingBox();
+ await page.mouse.move(a.x+20,a.y+10);await page.mouse.down();await page.mouse.move(a.x+60,a.y+40,{steps:4});await page.mouse.move(sw.x+sw.width/2,sw.y+sw.height/2,{steps:10});
+ await expect(page.locator('#sc-raiz [data-sc="semana"][data-s="1"]')).toHaveAttribute('aria-pressed','true');
+ const b=await page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"]').boundingBox();
+ await page.mouse.move(b.x+b.width/2,b.y+60,{steps:10});await page.mouse.up();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ expect(s.db.llamadas.filter(l=>l.f==='seg_agendar')).toMatchObject([{p_cliente_id:'c2',p_fecha:'2026-12-01'}]);
+ // la fila de la lista de Clientes no trae el botón: está en la ficha
+ await vista(page,'clientes');await expect(page.locator('#sc-raiz .sv-table [data-sc="sacar"]')).toHaveCount(0);
+ await page.locator('#sc-raiz .sv-table [data-sc="fila"][data-k="sauce mercado"]').click();
+ await page.locator('#sc-ficha [data-sc="sinseg"]').click();await expect(page.locator('#sc-dlg')).toBeVisible();await page.locator('#sc-dlg [data-d="pausar-ok"]').click();
+ await expect(page.locator('#sc-ficha [data-sc="retomar"]')).toHaveText(/Volver a seguimiento/);
  sinErrores(page);
 });
 
@@ -303,13 +330,14 @@ test('Ficha emergente: vendedor, etiquetas e historial; crear una etiqueta con d
  // ya no le toca hoy (martes): le toca el primer miércoles desde su vencimiento (25/11); además aparece cada miércoles de la ventana
  await expect(fila(page,'kiosco sur')).toHaveCount(0);
  await vista(page,'agenda');
- await expect(page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-25"] .sc-card[data-k="kiosco sur"]')).toBeVisible();
- await expect(page.locator('#sc-raiz .sc-dia[data-fecha="2026-12-02"] .sc-card[data-k="kiosco sur"]')).toBeVisible();
- await expect(page.locator('#sc-raiz .sc-dia[data-fecha="2026-11-25"] .sc-card[data-k="kiosco sur"] .sc-et')).toHaveText('Santo Tomé');
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-25"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-25"] .daytask[data-k="kiosco sur"]')).toContainText('Santo Tomé');
+ await page.locator('#sc-raiz [data-sc="semana"][data-s="1"]').click();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-12-02"] .daytask[data-k="kiosco sur"]')).toBeVisible();
  // filtro por etiqueta en Hoy
  await vista(page,'hoy');await page.locator('#sc-raiz [data-sc="filtro-et"]').click();
- await expect(page.locator('#sc-raiz .sc-hoy-p .sc-fila')).toHaveCount(0);
- await expect(page.locator('#sc-raiz .sc-hoy-p')).toContainText('Ningún pendiente coincide');
+ await expect(page.locator('#sc-raiz .sv-task')).toHaveCount(0);
+ await expect(page.locator('#sc-raiz .sv-sec').first()).toContainText('Ningún pendiente coincide');
  // borrar la etiqueta
  await vista(page,'clientes');await page.locator('#sc-raiz [data-sc="etiquetas"]').click();
  await expect(page.locator('#sc-dlg')).toContainText('1 cliente');
@@ -322,7 +350,7 @@ test('Oscar (administrador sin ve_todo) ve solo los suyos pero puede asignar y g
  const s=setup();const page=await entrar(browser,s,'Oscar');
  expect(await nombresHoy(page)).toEqual(['Sauce Mercado']);
  await vista(page,'clientes');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(1);
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
  await expect(page.locator('#sc-raiz [data-sc="etiquetas"]')).toBeVisible();
  await expect(page.locator('#sc-raiz select[data-cf="vendedor"]')).toHaveCount(0);
  sinErrores(page);
@@ -331,14 +359,14 @@ test('Oscar (administrador sin ve_todo) ve solo los suyos pero puede asignar y g
 test('Sin clientes asignados: mensaje amable; sin la migración la pestaña se ve como antes',async({browser})=>{
  let s=setup({sinYo:true});let page=await abrir(browser,s,'Thiago');await page.evaluate(()=>goTab('clientes'));
  await expect(page.locator('#sc-raiz .sc-estado')).toContainText('No tenés clientes asignados todavía');
- await expect(page.locator('#sc-raiz .sc-vistas')).toHaveCount(0);await expect(page.locator('#sc-raiz #sc-q')).toHaveCount(0);   // ni vistas ni buscador (no se filtra a nadie)
+ await expect(page.locator('#sc-raiz .sv-nav-c')).toHaveCount(0);await expect(page.locator('#sc-raiz #sc-q')).toHaveCount(0);   // ni vistas ni buscador (no se filtra a nadie)
  await page.context().close();
  s=setup({instalado:false});page=await abrir(browser,s,'Joaquin');await page.evaluate(()=>goTab('clientes'));
- await expect(page.locator('#sc-raiz .sc-kpis')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-kpis')).toBeVisible();
  expect((await nombresHoy(page)).length).toBe(6);
  await vista(page,'clientes');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr')).toHaveCount(7);
- await expect(page.locator('#sc-raiz .sc-tabla thead')).not.toContainText('Vendedor');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(7);
+ await expect(page.locator('#sc-raiz .sv-table thead')).not.toContainText('Responsable');
  await expect(page.locator('#sc-raiz [data-sc="etiquetas"]')).toHaveCount(0);
  sinErrores(page);
 });
@@ -348,14 +376,14 @@ test('Celular 390 px: Thiago ve Hoy, la tabla se vuelve tarjetas y no hay desbor
  const page=await entrar(browser,s,'Thiago',{viewport:{width:390,height:844},contexto:{hasTouch:true,isMobile:true}});
  await expect(page.locator('#bottomNav [data-tab="clientes"]')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
- await expect(page.locator('#sc-raiz .sc-kpis')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-kpis')).toBeVisible();
  await expect(fila(page,'kiosco sur').locator('[data-sc="escribi"]')).toBeVisible();
- await shot(page,'hoy-celular');
+ await shot(page,'celular');
  await vista(page,'clientes');
- await expect(page.locator('#sc-raiz .sc-tabla tbody tr').first()).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-table tbody tr').first()).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
  await vista(page,'agenda');
- await expect(page.locator('#sc-raiz .sc-cel')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-calendar')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
  // Mateo nunca ve la pestaña
  await page.context().close();
@@ -365,8 +393,8 @@ test('Celular 390 px: Thiago ve Hoy, la tabla se vuelve tarjetas y no hay desbor
 
 test('Movimiento reducido: sin transiciones en las vistas ni en los filtros',async({browser})=>{
  const s=setup();const page=await abrir(browser,s,'Juan Marcos');await page.emulateMedia({reducedMotion:'reduce'});
- await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#sc-raiz .sc-vistas')).toBeVisible();
- const dur=await page.evaluate(()=>['.sc-vista','.sc-fil-b','.sc-btn'].map(s=>getComputedStyle(document.querySelector('#sc-raiz '+s)).transitionDuration));
+ await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#sc-raiz .sv-nav-c')).toBeVisible();
+ const dur=await page.evaluate(()=>['.sv-chip','.sv-btn'].map(s=>getComputedStyle(document.querySelector('#sc-raiz '+s)).transitionDuration));
  for(const d of dur)expect(d.split(',').every(x=>x.trim()==='0s')).toBe(true);
 });
 
