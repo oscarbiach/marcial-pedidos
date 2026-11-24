@@ -684,6 +684,25 @@ test('foto grande queda sobre el encabezado y cierra solo su visor',async({brows
 });
 
 
+test('remito anticipado solo para Oscar y Joaquin; Mateo lo ve al pasar a Listos',async({browser})=>{
+ const s=await setup(browser);enCola(s,'preparando');
+ const oscar=await s.open('Oscar'),joaquin=await s.open('Joaquin'),mateo=await s.open('Mateo'),thiago=await s.open('Thiago');
+ for(const p of [mateo,thiago])await expect(p.locator('[data-rv="marcar-remito"]')).toHaveCount(0);
+ await oscar.locator('[data-rv="marcar-remito"]').click();
+ await expect(oscar.locator('[data-rv="marcar-remito"]')).toHaveAttribute('aria-pressed','true');
+ await expect(oscar.locator('#prep-raiz')).toHaveCount(0);
+ await s.emit('pedidos');
+ await expect(joaquin.locator('[data-rv="marcar-remito"]')).toHaveAttribute('aria-pressed','true');
+ await expect(mateo.locator('.rv-remito-done')).toHaveCount(0);
+ await joaquin.locator('[data-rv="marcar-remito"]').click();
+ await expect(joaquin.locator('[data-rv="marcar-remito"]')).toHaveAttribute('aria-pressed','false');
+ await joaquin.locator('[data-rv="marcar-remito"]').click();
+ await expect(joaquin.locator('[data-rv="marcar-remito"]')).toHaveAttribute('aria-pressed','true');
+ await mateo.locator('.rv-preparando [data-rv="mover"]').click();
+ await expect(mateo.locator('.rv-listo .rv-remito-done')).toHaveText('✓ Remito hecho');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('Listos muestra remito hecho y preparación distingue productos completos en vivo',async({browser})=>{
  const s=await setup(browser);enCola(s,'preparando');
  const page=await s.open('Oscar');

@@ -155,6 +155,7 @@
       <ul>${p.items.map(it => `<li class="${S.items.get(it.id)?.separado?'rv-product-done':''}"><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
       ${p.notas ? `<p class="rv-note ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>` : ''}
       ${envia()&&e==='por_preparar'?`<button data-rv="editar" data-id="${esc(p.id)}">Editar pedido</button>`:''}
+      ${e==='preparando'&&['Oscar','Joaquin'].includes(state.who)?`<button data-rv="marcar-remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" class="${p.remitoHecho?'rv-remito-done':''}" ${busy||!S.ready||S.error?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
       ${['pendiente','preparando'].includes(e) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
     </article>`;
   }
@@ -248,6 +249,18 @@
     } catch (e) { if(generation===S.generation){if(e.code==='REPARTO_TIMEOUT')S.error='Verificando el estado del pedido…';toast(e.message || 'No se pudo mover el pedido.');} }
     finally { if (generation === S.generation) { S.busy.delete(id); pintar(); cargar(); } }
   }
+  async function marcarRemito(id) {
+    if (!['Oscar','Joaquin'].includes(state.who)||etapa(id)!=='preparando'||S.busy.has(id)||!S.ready||S.error) return;
+    if (!navigator.onLine) { toast('Sin conexión. El remito no se cambió.'); return; }
+    const p=S.pedidos.find(p=>p.id===id), generation=S.generation;
+    if(!p)return;
+    S.revision++; S.busy.add(id); pintar();
+    try {
+      const result=await pedir(sbMarcarRemito(id,!p.remitoHecho));
+      if(!result?.ok)throw new Error(result?.error||'No se pudo guardar el remito.');
+    } catch(e) { if(generation===S.generation)toast(e.message||'No se pudo guardar el remito.'); }
+    finally { if(generation===S.generation){S.busy.delete(id);await cargar();pintar();} }
+  }
   function clic(e) {
     if (Date.now() < (S.noClickUntil || 0)) { e.preventDefault(); return; }
     const b = e.target.closest('[data-rv]');
@@ -257,6 +270,7 @@
       return;
     }
     if (b.disabled) return;
+    if (b.dataset.rv === 'marcar-remito') marcarRemito(b.dataset.id);
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
