@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node tests/reparto-db.cjs && node tests/gestion-db.cjs && node tests/admin-db.cjs && node tests/seguimiento-agenda.cjs",
+    "test": "node tests/reparto-db.cjs && node tests/gestion-db.cjs && node tests/admin-db.cjs && node tests/seguimiento-agenda.cjs && node tests/seguimiento-v2-db.cjs",
     "test:ui": "playwright test"
   },
   "repository": {

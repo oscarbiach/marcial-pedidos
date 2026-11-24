@@ -110,3 +110,12 @@ body.gestion-admin #adminBtn { display: inline-flex; }
 }
 #adm-fusion .adm-fila[aria-current="true"] { background: var(--m-azul-100); }
 #adm-fusion fieldset legend { padding: 0; margin-bottom: 2px; }
+
+/* Seguimiento: vendedor y etiquetas en la ficha del cliente */
+.adm-seg { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--m-linea); }
+.adm-etqs { display: flex; flex-wrap: wrap; gap: 6px; }
+.adm-etq { box-sizing: border-box; min-height: 36px; padding: 0 14px; border: 1px solid var(--m-linea-2); border-radius: var(--m-r-pill); background: var(--m-superficie); color: var(--m-tinta); font: inherit; font-size: var(--m-t-sm); font-weight: 700; cursor: pointer; }
+.adm-etq[aria-pressed="true"] { background: var(--m-marino-800); border-color: var(--m-marino-800); color: #fff; }
+.adm-etq[aria-pressed="true"]::before { content: "\2713\00a0"; }
+.adm-etq:disabled { opacity: .55; cursor: progress; }
+.adm-etq:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }

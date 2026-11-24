@@ -27,18 +27,20 @@
 
   // Ajustes que dependen del negocio. Se pueden pisar desde afuera con opciones.config (ver calcular).
   const CONFIG = {
+    // Seguimiento v2 (24/11/2026): se suma Thiago (también en celular). Qué clientes ve cada uno NO sale de esta lista: lo decide la base (seg_usuarios.ve_todo y
+    // clientes.vendedor) y el motor lo aplica con opciones.usuario / opciones.meta.
     // Quién ve la pestaña Clientes (nombres como figuran en la app; se comparan sin mayúsculas ni tildes): Oscar, Joaquin y Charly (decisión del
     // usuario, 13/10). Charly pasa a llamarse Juan Marcos: están los dos para que el cambio de nombre no le saque el acceso. Es solo de interfaz:
     // no protege los datos (la base deja leer los pedidos a cualquier sesión con PIN válido).
-    usuarios: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
+    usuarios: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos', 'Thiago'],
     // Quién ve Clientes también en el celular (pantalla táctil angosta): Oscar, Joaquin y Juan Marcos. Los demás siguen igual que antes:
     // en el celular la pestaña no se muestra y redirige a Pedidos. En PC no cambia nada.
-    celular: ['Oscar', 'Joaquin', 'Juan Marcos'],
+    celular: ['Oscar', 'Joaquin', 'Juan Marcos', 'Thiago'],
     // «Le escribí»: pasados estos días hábiles (lunes a sábado; el domingo no cuenta) sin que el cliente pida, la tarjeta vuelve a pendiente con «Volver a escribir».
     reescribirDias: 2,
     // Quién puede mover, pausar y resolver avisos (por ahora los mismos que ven la pestaña; propuesta a validar con el usuario). Solo de interfaz:
     // el permiso real lo da la base (tabla seg_editores, ver supabase/14-seguimiento-decisiones.sql).
-    editores: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos'],
+    editores: ['Oscar', 'Joaquin', 'Charly', 'Juan Marcos', 'Thiago'],
     // Cuentas que no son clientes: de prueba o muestra (eventuales, no hay ritmo de compra que seguir; decisión del usuario 13/10).
     // Se comparan sin mayúsculas ni tildes: coincide el nombre completo o el comienzo + espacio.
     excluir: ['negro - prueba', 'muestras', 'tomas cliente nuevo'],
@@ -67,6 +69,13 @@
     productosMax: 5,
     dejoMax: 2,               // cuántos avisos «dejó de llevar» se muestran por fila (se recortan DESPUÉS de filtrar los ya explicados)
     fechasFicha: 12,          // cuántas fechas de pedido se muestran en la línea de tiempo de la ficha
+    unicaSinVolverDias: 14,   // alerta «Única compra sin volver»: pasaron más de estos días desde su único pedido
+    esperandoAlertaDias: 2,   // alerta «Esperando hace 2+ días»: días corridos desde que se le escribió y sigue sin pedir
+    menosUltimos: 2,          // «Compra menos»: renglones por pedido de los últimos N pedidos…
+    menosPrevios: 6,          // …contra el promedio de los N anteriores
+    menosMinPrevios: 3,       // hacen falta al menos estos pedidos anteriores (todos con renglones cargados)
+    menosMinRenglones: 4,     // y que antes llevara al menos tantos renglones por pedido (si no, la diferencia no dice nada)
+    menosRatio: 0.6,          // «compra menos» = los últimos pedidos tienen el 60 % o menos de los renglones de antes
   };
 
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -260,6 +269,17 @@
       const av = avisosProductos(productos, prods, x.clave, R, hoy, U);
       const dejoDeTodos = av.avisos, dejoDe = dejoDeTodos.slice(0, U.dejoMax), cambiosProductos = av.contexto;
 
+      // «Compra menos»: renglones (productos distintos) por pedido de los últimos pedidos contra el promedio de los anteriores. Solo si TODOS esos pedidos
+      // tienen renglones cargados; si no, no se dice nada (no se inventa). Las cantidades no se comparan: mezclan cajas, unidades y kilos.
+      const nMenos = U.menosUltimos + U.menosPrevios, colaMenos = x.pedidos.slice(-nMenos);
+      let compraMenos = null;
+      if (colaMenos.length >= U.menosUltimos + U.menosMinPrevios && colaMenos.every(p => (p.items || []).length)) {
+        const reng = p => new Set((p.items || []).map(it => norm(nombreProducto(it && it.prod))).filter(Boolean)).size;
+        const ult = colaMenos.slice(-U.menosUltimos).map(reng), prev = colaMenos.slice(0, -U.menosUltimos).map(reng);
+        const mU = ult.reduce((a, b) => a + b, 0) / ult.length, mP = prev.reduce((a, b) => a + b, 0) / prev.length;
+        if (mP >= U.menosMinRenglones && mU <= mP * U.menosRatio) compraMenos = { ultimos: mU, previos: mP, nUltimos: ult.length, nPrevios: prev.length };
+      }
+
       // Última observación (nota de un pedido)
       const conNota = [...x.pedidos].reverse().find(p => String(p.notas || '').trim());
       const observacion = conNota ? { texto: String(conNota.notas).trim(), fecha: diaCarga(conNota) } : null;
@@ -329,9 +349,20 @@
         diaUltimo: fechaLarga(ultimo), primer: x.fechas[0],
         // Solo para mostrar (no cambian ningún bloque): razón del bloque, confianza del ritmo y datos de la ficha
         razon, refTipo, ultimoDespacho: despachoDe.has(ultimo), fechasRecientes, nFechas: x.fechas.length, nIntervalos: x.gaps.length,
-        pedidosVentana: enVentana.length, porDia, plazo, ultimaCarga, ultimaEntrega,
+        pedidosVentana: enVentana.length, porDia, plazo, ultimaCarga, ultimaEntrega, compraMenos,
       };
     });
+
+    // Seguimiento v2: vendedor, etiquetas y último contacto de cada cliente (opciones.meta: Map u objeto clave → { vendedor, etiquetas: [{id, nombre, dia_semana, siempre}], contacto })
+    // y visibilidad (opciones.usuario = { nombre, ve_todo }): quien no ve todo solo tiene los clientes cuyo vendedor es él. Sin `usuario` no se filtra nada.
+    const metaIn = opciones && opciones.meta, usuario = opciones && opciones.usuario;
+    const metaDe = k => (metaIn instanceof Map ? metaIn.get(k) : metaIn && metaIn[k]) || {};
+    clientes.forEach(c => { const m = metaDe(c.clave); c.vendedor = m.vendedor ? String(m.vendedor) : null; c.etiquetas = Array.isArray(m.etiquetas) ? m.etiquetas.slice() : []; c.contacto = m.contacto || null; });
+    const yo = usuario && !usuario.ve_todo ? norm(usuario.nombre) : null;
+    const todosN = clientes.length, clavesTodas = new Set(clientes.map(c => c.clave));
+    if (yo !== null) { for (let i = clientes.length - 1; i >= 0; i--) if (!clientes[i].vendedor || norm(clientes[i].vendedor) !== yo) clientes.splice(i, 1); }
+    const clavesVisibles = new Set(clientes.map(c => c.clave));
+    for (let i = cierresPendientes.length - 1; i >= 0; i--) if (!clavesVisibles.has(cierresPendientes[i].clave)) cierresPendientes.splice(i, 1);
 
     // 4. Bloques ordenados
     const orden = {
@@ -346,9 +377,8 @@
     const bloques = {}; BLOQUES.forEach(b => { bloques[b] = clientes.filter(c => c.bloque === b).sort(orden[b]); });
     const noTocar = { inactivo: 0, semana: 0, ciclo: 0 }; bloques.notocar.forEach(c => { noTocar[c.motivo]++; });
     const pausa = { total: bloques.pausa.length, revisar: bloques.pausa.filter(c => c.manual.revisar).length };
-    const claves = new Set(clientes.map(c => c.clave));
-    const sinCliente = [...decs.keys()].filter(k => !claves.has(k));   // decisiones de clientes que ya no figuran (no se pierden: solo no se muestran)
-    return { hoy, lunes, medianaCartera, bloques, clientes, excluidos, noTocar, pausa, cierresPendientes, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
+    const sinCliente = [...decs.keys()].filter(k => !clavesTodas.has(k));   // decisiones de clientes que ya no figuran (no se pierden: solo no se muestran)
+    return { hoy, lunes, medianaCartera, bloques, clientes, ocultos: todosN - clientes.length, excluidos, noTocar, pausa, cierresPendientes, reglas: { validas: R.lista, invalidas: R.invalidas }, decisionesSinCliente: sinCliente };
   }
 
   // ── Calendario de 2 semanas (pedido del usuario, 18/11/2026) ──
@@ -358,8 +388,14 @@
   const sinDomingo = d => (diaSemana(d) === 0 ? sumarDias(d, 1) : d);
   // fecha + n días hábiles (de lunes a sábado: los domingos no cuentan)
   const habilMas = (f, n) => { let d = f; for (let i = 0; i < n;) { d = sumarDias(d, 1); if (diaSemana(d) !== 0) i++; } return d; };
+  // Etiquetas con día fijo (seg_etiquetas.dia_semana, 1 = lunes … 6 = sábado). `c.etiquetas` lo completa calcular() con opciones.meta.
+  const diasFijos = c => [...new Set((c.etiquetas || []).map(e => Number(e && e.dia_semana)).filter(d => d >= 1 && d <= 6))];
+  const primerDia = (desde, dow) => { let d = desde; for (let i = 0; i < 7 && diaSemana(d) !== dow; i++) d = sumarDias(d, 1); return d; };
+  // Día de contacto. Regla de siempre (Codex #27): vence = último pedido + frecuencia; el día habitual NO lo posterga. Excepción explícita: un cliente
+  // con una etiqueta de día fijo se ubica en el primer día con ese día de la semana desde el vencimiento (si tiene varias etiquetas con día, la más próxima).
   const diaCalculado = c => {
-    const vence = sumarDias(c.ultimo, Math.max(1, Math.round(c.intervalo)));
+    const vence = sumarDias(c.ultimo, Math.max(1, Math.round(c.intervalo))), fijos = diasFijos(c);
+    if (fijos.length) return fijos.map(d => primerDia(vence, d)).sort()[0];
     return sinDomingo(vence);
   };
   // Tipo de cliente (para saber si se le habla o se le hace seguimiento):
@@ -403,13 +439,33 @@
       const escribi = !!(fila && dia10(fila.escrito) && dia10(fila.escrito) >= c.ultimo), escritoF = escribi ? dia10(fila.escrito) : '';
       const vuelveEl = escribi ? habilMas(escritoF, reDias) : '', espera = escribi && hoyEf < vuelveEl, reescribir = escribi && !espera;
       const atraso = base < hoy ? diffDias(hoy, base) : 0;
+      // Resultado «No contestó» (seg_contactos): la base ya le sacó la espera; como no hay «Le escribí» vigente la app lo recuerda con «Volver a escribir» hasta que pida o se le escriba de nuevo.
+      const ct = c.contacto || null, noContesto = !escribi && !!ct && ct.resultado === 'no_contesto' && dia10(ct.creado_en) >= c.ultimo;
       let dia = base, atrasado = false;
       if (espera) dia = base >= lunes ? base : hoyEf;                              // esperando: la tarjeta se queda donde estaba
-      else if (reescribir) dia = hoyEf;                                            // no pidió en los días que se esperaba: vuelve a hoy
+      else if (reescribir || noContesto) dia = hoyEf;                              // no pidió en los días que se esperaba (o no contestó): vuelve a hoy
       else if (base < hoyEf) { dia = hoyEf; atrasado = !movido && atraso >= 2 && tipo === 'habitual'; }   // vencido: se corre a hoy; «atrasado» solo un habitual con 2 días o más pasados de su día
-      const t = { clave: c.clave, nombre: c.nombre, c, estado: espera ? 'escribi' : 'pendiente', reescribir, tipo, dia, calculado, movido, escrito: escritoF, vuelveEl, atraso, atrasado, recuperacion: tipo === 'recupero', fuera: dia > ultimoDia };
+      const t = { clave: c.clave, nombre: c.nombre, c, estado: espera ? 'escribi' : 'pendiente', reescribir: reescribir || noContesto, noContesto, contacto: ct, tipo, dia, calculado, movido, escrito: escritoF, vuelveEl, atraso, atrasado, recuperacion: tipo === 'recupero', fuera: dia > ultimoDia };
       porCliente.set(c.clave, t);
       if (t.fuera) masAdelante++; else tarjetas.push(t);
+    });
+    // Etiqueta con día fijo y «aparecer aunque ya se les habló» (siempre): el cliente figura CADA semana ese día dentro de la ventana, aunque haya pedido o se le haya
+    // escrito (con su estado: si pidió esta semana, «Pidió»). Son tarjetas de repetición (`recurrente`): no se mueven ni cuentan como el ciclo del cliente.
+    // Sin día fijo, `siempre` no tiene ningún efecto.
+    const finSemana0 = sumarDias(lunes, 7);
+    calc.clientes.forEach(c => {
+      if ((c.manual && c.manual.tipo === 'pausa') || (c.bloque === 'notocar' && c.motivo === 'inactivo')) return;
+      const dias = [...new Set((c.etiquetas || []).filter(e => e && e.siempre).map(e => Number(e.dia_semana)).filter(d => d >= 1 && d <= 6))];
+      if (!dias.length) return;
+      const principal = porCliente.get(c.clave), tipo = tipoDe(c), pid = pidio.get(c.clave);
+      for (let i = 0; i < 14; i++) {
+        const fecha = sumarDias(lunes, i);
+        if (!dias.includes(diaSemana(fecha)) || fecha < hoyEf || fecha > ultimoDia || tarjetas.some(t => t.clave === c.clave && t.dia === fecha)) continue;
+        let estado = 'pendiente', escrito = '', vuelveEl = '';
+        if (fecha < finSemana0 && pid) estado = 'pidio';
+        else if (principal && principal.estado === 'escribi' && fecha < principal.vuelveEl) { estado = 'escribi'; escrito = principal.escrito; vuelveEl = principal.vuelveEl; }
+        tarjetas.push({ clave: c.clave, nombre: c.nombre, c, estado, reescribir: false, noContesto: false, contacto: c.contacto || null, tipo, dia: fecha, calculado: fecha, movido: false, escrito, vuelveEl, atraso: 0, atrasado: false, recuperacion: tipo === 'recupero', fuera: false, recurrente: true });
+      }
     });
     const hecho = t => (t.estado === 'pendiente' ? 0 : t.estado === 'escribi' ? 1 : 2), grupo = t => (t.tipo === 'habitual' ? 0 : 1);
     // dentro de un día: primero los pendientes (los habituales y después los de seguimiento; los atrasados primero en su grupo), después los que están esperando (le escribió)
@@ -422,6 +478,33 @@
     }
     const conteo = { todos: tarjetas.length, habitual: tarjetas.filter(t => t.tipo === 'habitual').length, seguimiento: tarjetas.filter(t => t.tipo !== 'habitual').length };
     return { hoy, lunes, hasta: ultimoDia, dias, masAdelante, pausados, porCliente, pidieron: pidio, conteo };
+  }
+
+  // Alertas comerciales del panel «Hoy» (Seguimiento v2): una por cliente y motivo, a partir de lo que ya calculó el motor. Cada una nombra al cliente y se abre en su ficha.
+  //   reescribir  → «Volver a escribir» (le escribió, pasaron los días hábiles y no pidió; o no contestó)
+  //   esperando   → esperando respuesta o pedido hace `esperandoAlertaDias` días corridos o más
+  //   dejo        → «Dejó de comprar» (tipo recupero)
+  //   unica       → «Única compra sin volver» (un solo pedido, hace más de `unicaSinVolverDias` días)
+  //   productos   → «Dejó de llevar» uno o más productos (ya sin los retirados, reemplazados o con excepción)
+  //   menos       → «Compra menos»: SOLO si el cliente tiene renglones cargados en todos los pedidos comparados (ver `compraMenos` en calcular); si no, no se inventa
+  const ALERTAS = { reescribir: 'Volver a escribir', esperando: 'Esperando hace días', dejo: 'Dejó de comprar', unica: 'Única compra sin volver', productos: 'Dejó de llevar', menos: 'Compra menos' };
+  const ALERTAS_ORDEN = ['reescribir', 'esperando', 'dejo', 'unica', 'productos', 'menos'];
+  function alertas(calc, ag, opciones) {
+    const o = opciones || {}, hoy = o.hoy || calc.hoy, U = Object.assign({}, UMBRALES, o.umbrales), out = [];
+    const add = (tipo, c, detalle, peso) => out.push({ tipo, titulo: ALERTAS[tipo], clave: c.clave, nombre: c.nombre, detalle, peso });
+    calc.clientes.forEach(c => {
+      if (c.manual && c.manual.tipo === 'pausa') return;
+      const t = ag.porCliente.get(c.clave); if (!t) return;   // los inactivos (más de 150 días) no figuran
+      if (t.estado === 'escribi') { const d = diffDias(hoy, t.escrito); if (d >= U.esperandoAlertaDias) add('esperando', c, `Le escribiste ${diasTxt(d)} y sigue sin ${t.tipo === 'habitual' ? 'pedir' : 'contestar'}`, d); }
+      else if (t.reescribir && t.estado === 'pendiente') add('reescribir', c, t.noContesto ? 'No contestó la última vez' : `Le escribiste ${diasTxt(diffDias(hoy, t.escrito))} y no pidió`, 1);
+      // Un cliente con un solo pedido que pasó de largo es «Única compra sin volver» (aunque tipoDe ya lo cuente como «recupero» por haber pasado el doble del ritmo de la cartera);
+      // «Dejó de comprar» es de quien compraba más de una vez.
+      if (c.n === 1) { if (c.dias > U.unicaSinVolverDias) add('unica', c, `Pidió una sola vez, ${diasTxt(c.dias)}`, c.dias); }
+      else if (t.tipo === 'recupero') add('dejo', c, `Hace ${c.dias} días que no pide (${cadaTxt(c)})`, c.dias);
+      if (c.dejoDeTodos.length) add('productos', c, 'Dejó de llevar ' + lista(c.dejoDeTodos.slice(0, 3).map(q => q.nombre)) + (c.dejoDeTodos.length > 3 ? ` y ${c.dejoDeTodos.length - 3} más` : ''), c.dejoDeTodos.length);
+      if (c.compraMenos) { const m = c.compraMenos, f = v => String(Math.round(v * 10) / 10).replace('.', ','); add('menos', c, `Sus últimos ${m.nUltimos} pedidos tienen ${f(m.ultimos)} renglones en promedio; antes, ${f(m.previos)}`, m.previos - m.ultimos); }
+    });
+    return out.sort((a, b) => ALERTAS_ORDEN.indexOf(a.tipo) - ALERTAS_ORDEN.indexOf(b.tipo) || b.peso - a.peso || a.nombre.localeCompare(b.nombre, 'es'));
   }
 
   // Textos para la lista ("hace 12 días · suele cada 7")
@@ -441,7 +524,7 @@
   // Clientes que hoy tienen el aviso «dejó de llevar» de un producto (para mostrar el alcance ANTES de confirmar una regla global).
   const alcanceAviso = (calc, claveProducto) => calc.clientes.filter(c => c.dejoDeTodos.some(q => q.clave === claveProducto)).map(c => ({ clave: c.clave, nombre: c.nombre }));
 
-  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto, agenda, diaCalculado, tipoDe,
+  const api = { CONFIG, UMBRALES, DIAS, BLOQUES, TIPOS_DECISION, TIPOS_REGLA, MOTIVOS, norm, calcular, alcanceAviso, textoDias, diasTxt, cadaTxt, ritmoTxt, atrasoTxt, lineaTexto, nombreProducto, agenda, alertas, ALERTAS, ALERTAS_ORDEN, diaCalculado, tipoDe,
     fechas: { ymd, aFecha, sumarDias, habilMas, diffDias, lunesDe, diaSemana, fmtCorta, fechaLarga } };
   raiz.SegClientes = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

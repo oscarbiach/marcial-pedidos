@@ -49,6 +49,7 @@
   function alCerrar() {
     if (!E.abierto) return;
     E.abierto = false; limpiarBorr(); cancelarConfirmacion(); if (E.fu) cerrarFusion();
+    SEG.estado = 'nuevo'; SEG.guardando = false; SEG.error = '';   // el seguimiento se vuelve a leer la próxima vez que se abra el panel
     ['cli', 'his'].forEach(k => { E[k].F = null; E[k].tok++; E[k].cargada = false; E[k].cargando = false; clearTimeout(E[k].timer); const s = $(k === 'cli' ? 'adm-clientes' : 'adm-historial'); if (s) { s.innerHTML = ''; } E[k].montado = false; });
     const o = E.origen; E.origen = null;
     const el = o && o.isConnected && o !== document.body ? o : $('adminBtn');
@@ -156,6 +157,7 @@
         <label class="adm-campo ancho">Dirección<input name="direccion" data-f="direccion" maxlength="300" autocomplete="off" value="${esc(F.borr.direccion)}" ${dis}></label>
         <label class="adm-campo ancho">Observación (opcional)<textarea name="observaciones" data-f="observaciones" rows="2" maxlength="1000" ${dis}>${esc(F.borr.observaciones || '')}</textarea><small>Se ve también en la ficha del seguimiento comercial.</small></label>
         ${F.nuevo ? '' : `<div class="adm-campo ancho">Teléfono de WhatsApp vinculado<div class="adm-valor">${(o.telefonos || []).length ? esc(o.telefonos.join(' · ')) : 'Sin teléfono vinculado'}</div><small>Solo lectura: se vincula desde WhatsApp.</small></div>`}
+        ${F.nuevo || fus ? '' : '<div class="ancho adm-seg" id="adm-cli-seg"></div>'}
       </div>
       <div class="adm-aviso" id="adm-cli-aviso" hidden></div>
       <div class="adm-msg" id="adm-cli-msg" role="alert">${esc(F.error)}</div>
@@ -168,8 +170,44 @@
         ${F.nuevo || fus ? '' : `<button type="button" class="adm-btn" data-adm="cli-fusionar" ${dis}>Fusionar con otro cliente…</button>`}
       </div>
       ${F.nuevo ? '' : '<div class="adm-bloque"><h4>Historial de cambios</h4><ul class="adm-hist" id="adm-cli-hist"></ul></div>'}</form>`;
-    pintarHistorialCliente(); avisoCliente();
+    pintarHistorialCliente(); avisoCliente(); pintarSeg(); cargarSeg();
     if (foco) { const h = $('adm-ficha-h'); if (h) h.focus({ preventScroll: true }); }
+  }
+  // ── Seguimiento: vendedor y etiquetas del cliente (las mismas funciones seg_* de la pestaña Clientes; cada cambio se guarda al momento, es idempotente por naturaleza) ──
+  // Sin la migración del seguimiento v2 el bloque no aparece. Se pide una sola vez al abrir el panel (seg_clientes_meta devuelve a todos los clientes a quien administra).
+  const SEG = { estado: 'nuevo', usuarios: [], etiquetas: [], porId: new Map(), guardando: false, error: '' };
+  const segNoInstalada = e => !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(String(e.message || '')));
+  async function cargarSeg(forzar) {
+    if (SEG.estado === 'cargando' || (!forzar && (SEG.estado === 'ok' || SEG.estado === 'noInstalado'))) return;
+    SEG.estado = 'cargando'; SEG.error = '';
+    try {
+      const m = await rpc('seg_clientes_meta') || {};
+      SEG.usuarios = m.usuarios || []; SEG.etiquetas = m.etiquetas || []; SEG.porId = new Map((m.clientes || []).map(c => [c.cliente_id, c])); SEG.estado = 'ok';
+    } catch (e) { SEG.estado = segNoInstalada(e) ? 'noInstalado' : 'error'; SEG.error = segNoInstalada(e) ? '' : msg(e); }
+    pintarSeg();
+  }
+  function pintarSeg() {
+    const c = $('adm-cli-seg'), F = E.cli.F; if (!c || !F || F.nuevo) return;
+    if (SEG.estado === 'noInstalado' || SEG.estado === 'nuevo') { c.innerHTML = ''; return; }
+    if (SEG.estado === 'cargando') { c.innerHTML = '<p class="adm-nota">Cargando vendedor y etiquetas…</p>'; return; }
+    if (SEG.estado === 'error') { c.innerHTML = `<p class="adm-nota">No se pudieron leer el vendedor y las etiquetas (${esc(SEG.error)}). <button type="button" class="adm-btn chico" data-adm="seg-reintentar">Reintentar</button></p>`; return; }
+    const m = SEG.porId.get(F.id) || { vendedor: null, etiquetas: [] }, act = new Set(m.etiquetas || []), dis = SEG.guardando ? 'disabled' : '';
+    c.innerHTML = `<div class="adm-campo">Vendedor del seguimiento<select id="adm-seg-v" data-adm-seg="vendedor" aria-label="Vendedor del seguimiento" ${dis}><option value="">Atención general (sin vendedor)</option>${SEG.usuarios.map(u => `<option value="${esc(u.nombre)}"${key(u.nombre) === key(m.vendedor) ? ' selected' : ''}>${esc(u.nombre)}</option>`).join('')}</select><small>Quién ve y atiende a este cliente en la pestaña Clientes. Se guarda al elegir.</small></div>
+      <div class="adm-campo">Etiquetas de grupo${SEG.etiquetas.length ? `<div class="adm-etqs" role="group" aria-label="Etiquetas del cliente">${SEG.etiquetas.map(t => `<button type="button" class="adm-etq" data-adm="seg-et" data-e="${esc(t.id)}" aria-pressed="${act.has(t.id)}" ${dis}>${esc(t.nombre)}</button>`).join('')}</div>` : '<div class="adm-valor">Todavía no hay etiquetas (se crean en la pestaña Clientes).</div>'}</div>
+      <div class="adm-msg" id="adm-seg-msg" role="alert">${esc(SEG.error)}</div>`;
+  }
+  async function guardarSeg(que, valorNuevo) {
+    const F = E.cli.F; if (!F || SEG.guardando) return;
+    const previo = SEG.porId.get(F.id) || { cliente_id: F.id, vendedor: null, etiquetas: [] }, nuevo = { ...previo };
+    let llamada;
+    if (que === 'vendedor') { if ((previo.vendedor || '') === valorNuevo) return; nuevo.vendedor = valorNuevo || null; llamada = () => rpc('seg_cliente_vendedor', { p_cliente_id: F.id, p_vendedor: valorNuevo || null }); }
+    else { const s = new Set(previo.etiquetas || []); if (s.has(valorNuevo)) s.delete(valorNuevo); else s.add(valorNuevo); nuevo.etiquetas = [...s]; llamada = () => rpc('seg_cliente_etiquetas', { p_cliente_id: F.id, p_etiquetas: nuevo.etiquetas }); }
+    SEG.guardando = true; SEG.error = ''; SEG.porId.set(F.id, nuevo); pintarSeg();
+    try { await llamada(); if (que === 'vendedor') toast('Vendedor guardado'); }
+    catch (e) { SEG.porId.set(F.id, previo); SEG.error = 'No se pudo guardar: ' + msg(e); }
+    SEG.guardando = false;
+    if (E.cli.F === F) { pintarSeg(); const f = que === 'vendedor' ? $('adm-seg-v') : document.querySelector(`#adm-cli-seg [data-e="${CSS.escape(String(valorNuevo))}"]`); if (f) f.focus({ preventScroll: true }); }
+    if (!SEG.error) { cargarCambios('clientes', F.id).then(c => { F.cambios = c; if (E.cli.F === F) pintarHistorialCliente(); }).catch(() => {}); if (window.SegUI && SegUI.cargarDatos) SegUI.cargarDatos(true); }
   }
   function avisoCliente() {
     const F = E.cli.F, a = $('adm-cli-aviso'); if (!F || !a) return;
@@ -531,7 +569,7 @@
   }
 
   // ── Historial de cambios (ficha) ──
-  const CAMPOS = { observaciones: 'Observación', fecha_pedido: 'Fecha del pedido', cliente: 'Cliente', direccion: 'Dirección', notas: 'Observación', fecha_entrega: 'Entrega', retiro: 'Retiro', nombre: 'Nombre' };
+  const CAMPOS = { observaciones: 'Observación', fecha_pedido: 'Fecha del pedido', cliente: 'Cliente', direccion: 'Dirección', notas: 'Observación', fecha_entrega: 'Entrega', retiro: 'Retiro', nombre: 'Nombre', vendedor: 'Vendedor' };
   const valor = (k, v) => v === null || v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'Sí' : 'No') : /^\d{4}-\d\d-\d\d/.test(String(v)) && /fecha/.test(k) ? fmt(dia(v)) : String(v);
   async function cargarCambios(tabla, id) { const r = await rpc('admin_cambios_leer', { p_tabla: tabla, p_registro: String(id) }); return Array.isArray(r) ? r : []; }
   function listaCambios(c) {
@@ -571,6 +609,8 @@
       else if (a === 'fu-elegir') elegirOtro(b.dataset.id);
       else if (a === 'fu-ok') ejecutarFusion();
       else if (a === 'cli-restaurar') bajaCliente(false);
+      else if (a === 'seg-et') guardarSeg('etiqueta', b.dataset.e);
+      else if (a === 'seg-reintentar') cargarSeg(true);
       else if (a === 'his-abrir' || a === 'his-reabrir') abrirPedido(b.dataset.id);
       else if (a === 'his-volver') { const id = E.his.F && E.his.F.id; E.his.F = null; pintarListaHistorial(); pintarFichaPedido(); const s = (id && document.querySelector(`#adm-his-lista [data-id="${CSS.escape(id)}"]`)) || $('adm-his-q'); if (s) s.focus({ preventScroll: true }); }
       else if (a === 'his-mas') buscarHistorial(true);
@@ -600,6 +640,7 @@
       if (t.name === 'fu-quien' && E.fu) { E.fu.quien = t.value; cargarImpacto(); }
       else if (t.id === 'adm-fu-entiendo' && E.fu) { E.fu.entiendo = t.checked; pintarFusion(); }
       else if (t.id === 'adm-cli-bajas') { E.cli.bajas = t.checked; cargarClientes(); }
+      else if (t.dataset.admSeg === 'vendedor') guardarSeg('vendedor', t.value);
       else if (t.id === 'adm-his-desde') { E.his.desde = t.value; buscarHistorial(false); }
       else if (t.id === 'adm-his-hasta') { E.his.hasta = t.value; buscarHistorial(false); }
       else if (t.id === 'adm-his-est') { E.his.estado = t.value; buscarHistorial(false); }

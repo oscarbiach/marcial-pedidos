@@ -15,6 +15,15 @@
    todavía no existe o no se pudo leer: el calendario funciona igual con los días calculados, sin poder mover ni marcar).
      agendar(p)          → { ok:true } | { ok:false, error }   p = { clave, fecha ('YYYY-MM-DD' o null = volver a su día), ciclo (fecha de su último pedido) }   (idempotente)
      escribi(p)          → { ok:true } | { ok:false, error }   p = { clave, fecha (día en que le escribió, o null para desmarcar) }                         (idempotente)
+   Seguimiento v2 (supabase/migrations/20261124_seguimiento_v2.sql): `cargar()` trae también `v2: { instalado, yo: { nombre, ve_todo, gestor } | null, etiquetas: [{ id, nombre, dia_semana, siempre }],
+   usuarios: [{ nombre, ve_todo }] (solo para quien puede asignar), clientes: [{ clave, vendedor, etiquetas: [id], contacto }], error? }`. Con `instalado: false` (la migración no está aplicada) la app
+   se ve como antes: sin vendedores, etiquetas ni resultados. Escrituras (todas idempotentes: el id lo genera la pantalla UNA vez por acción y se reutiliza en los reintentos):
+     etiquetaGuardar(p)    → { ok, etiqueta } | { ok:false, error }   p = { id, nombre, dia_semana (1 a 6 o null), siempre }
+     etiquetaBorrar(id)    → { ok:true }
+     clienteEtiquetas(p)   → { ok, etiquetas }                        p = { clave, etiquetas: [id] }   (reemplaza el conjunto)
+     clienteVendedor(p)    → { ok, vendedor }                         p = { clave, vendedor (nombre o null) }
+     contactoRegistrar(p)  → { ok, id, yaEstaba? }                    p = { id, clave, resultado ('no_contesto'|'tiene_stock'|'no_interesa'|'otro'), volver_el, nota, ciclo }
+     contactosLeer(clave)  → { ok, lista: [{ id, resultado, volver_el, nota, autor, creado_en }] }  (últimos 30)
    El autor lo pone el almacén (en la base lo decide el servidor por el mail de la sesión; acá nunca se confía en lo que diga la pantalla). */
 (function (raiz) {
   'use strict';
@@ -30,7 +39,11 @@
   //         semilla?: () => ({ clave: { fecha, ciclo, escrito } }) (agenda de ejemplo del modo prueba: solo se usa mientras no se haya guardado nada) }
   function almacenLocal(opts) {
     const quien = () => (opts.quien && opts.quien()) || 'Prueba', hoy = () => opts.hoy(), ahora = () => (opts.ahora ? opts.ahora() : new Date().toISOString());
-    const leer = () => { try { const d = JSON.parse(opts.storage.getItem(opts.clave)); if (d && Array.isArray(d.decisiones) && Array.isArray(d.reglas)) { if (!d.agenda || typeof d.agenda !== 'object') d.agenda = {}; return d; } } catch (e) { /* vacío o dañado: se empieza de cero */ } return { decisiones: [], reglas: [], agenda: opts.semilla && !opts.storage.getItem(opts.clave) ? (opts.semilla() || {}) : {} }; };
+    const v2Vacio = d => { ['etiquetas', 'contactos'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; }); ['clienteEtiquetas', 'vendedores'].forEach(k => { if (!d[k] || typeof d[k] !== 'object') d[k] = {}; }); return d; };
+    const leer = () => { try { const d = JSON.parse(opts.storage.getItem(opts.clave)); if (d && Array.isArray(d.decisiones) && Array.isArray(d.reglas)) { if (!d.agenda || typeof d.agenda !== 'object') d.agenda = {}; return v2Vacio(d); } } catch (e) { /* vacío o dañado: se empieza de cero */ } return v2Vacio({ decisiones: [], reglas: [], agenda: opts.semilla && !opts.storage.getItem(opts.clave) ? (opts.semilla() || {}) : {} }); };
+    // Modo prueba: quien entra ve todo y puede asignar (no hay base que limite). opts.yo permite probar otros perfiles.
+    const yoLocal = () => (opts.yo ? opts.yo() : { nombre: quien(), ve_todo: true, gestor: true });
+    const USUARIOS = [{ nombre: 'Oscar', ve_todo: false }, { nombre: 'Joaquin', ve_todo: true }, { nombre: 'Juan Marcos', ve_todo: true }, { nombre: 'Thiago', ve_todo: false }];
     const guardar = d => { opts.storage.setItem(opts.clave, JSON.stringify(d)); };
     const cerrar = (x, cierre) => { x.vigente = false; x.cerradaEn = ahora(); x.cerradaPor = quien(); x.cierre = cierre; };
     const actual = x => (x ? { id: x.id, tipo: x.tipo, autor: x.autor, creado: x.creado } : null);
@@ -38,9 +51,56 @@
       modo: 'prueba',
       async cargar() {
         const d = leer();
+        const yo = yoLocal(), ult = {};
+        d.contactos.forEach(c => { if (!ult[c.clave] || String(c.creado_en) >= String(ult[c.clave].creado_en)) ult[c.clave] = c; });
+        const claves = new Set([...Object.keys(d.vendedores), ...Object.keys(d.clienteEtiquetas).filter(k => (d.clienteEtiquetas[k] || []).length), ...Object.keys(ult)]);
+        const activas = d.etiquetas.filter(e => e.activa !== false);
         return { estado: 'ok', decisiones: d.decisiones.filter(x => x.vigente), reglas: d.reglas.filter(x => x.vigente), agendaOk: true,
-          agenda: Object.entries(d.agenda).map(([clave, f]) => ({ clave, fecha: f.fecha || null, ciclo: f.ciclo || null, escrito: f.escrito || null })) };
+          agenda: Object.entries(d.agenda).map(([clave, f]) => ({ clave, fecha: f.fecha || null, ciclo: f.ciclo || null, escrito: f.escrito || null })),
+          v2: { instalado: true, yo, etiquetas: activas.map(e => ({ id: e.id, nombre: e.nombre, dia_semana: e.dia_semana, siempre: !!e.siempre })), usuarios: yo.gestor ? USUARIOS : [],
+            clientes: [...claves].map(clave => ({ clave, vendedor: d.vendedores[clave] || null, etiquetas: (d.clienteEtiquetas[clave] || []).filter(id => activas.some(e => e.id === id)),
+              contacto: ult[clave] ? { resultado: ult[clave].resultado, volver_el: ult[clave].volver_el, nota: ult[clave].nota, autor: ult[clave].autor, creado_en: ult[clave].creado_en } : null })) } };
       },
+      // Seguimiento v2 en modo prueba (imitan las funciones seg_* de la migración).
+      async etiquetaGuardar(p) {
+        const nombre = String(p.nombre || '').trim(), dia = vacio(p.dia_semana) ? null : Number(p.dia_semana);
+        if (!nombre) return { ok: false, error: 'Escribí el nombre de la etiqueta' };
+        if (dia !== null && !(dia >= 1 && dia <= 6)) return { ok: false, error: 'El día tiene que ser de lunes a sábado' };
+        const d = leer();
+        if (d.etiquetas.some(e => e.id !== p.id && e.activa !== false && norm(e.nombre) === norm(nombre))) return { ok: false, error: 'Ya hay una etiqueta con ese nombre' };
+        const e = d.etiquetas.find(x => x.id === p.id) || (d.etiquetas.push({ id: p.id }), d.etiquetas[d.etiquetas.length - 1]);
+        Object.assign(e, { nombre, dia_semana: dia, siempre: !!p.siempre, activa: true }); guardar(d);
+        return { ok: true, etiqueta: { id: e.id, nombre, dia_semana: dia, siempre: !!p.siempre } };
+      },
+      async etiquetaBorrar(id) { const d = leer(), e = d.etiquetas.find(x => x.id === id); if (e) e.activa = false; guardar(d); return { ok: true, yaEstaba: !e }; },
+      async clienteEtiquetas(p) {
+        if (!p.clave) return { ok: false, error: 'Falta el cliente' };
+        const d = leer(), ok = new Set(d.etiquetas.filter(e => e.activa !== false).map(e => e.id)); d.clienteEtiquetas[p.clave] = [...new Set(p.etiquetas || [])].filter(id => ok.has(id)); guardar(d);
+        return { ok: true, etiquetas: d.clienteEtiquetas[p.clave] };
+      },
+      async clienteVendedor(p) {
+        if (!p.clave) return { ok: false, error: 'Falta el cliente' };
+        const v = vacio(p.vendedor) ? null : USUARIOS.find(u => norm(u.nombre) === norm(p.vendedor));
+        if (!vacio(p.vendedor) && !v) return { ok: false, error: 'Ese vendedor no existe en el seguimiento' };
+        const d = leer(); if (v) d.vendedores[p.clave] = v.nombre; else delete d.vendedores[p.clave]; guardar(d);
+        return { ok: true, vendedor: v ? v.nombre : null };
+      },
+      async contactoRegistrar(p) {
+        const R = ['no_contesto', 'tiene_stock', 'no_interesa', 'otro'], nota = String(p.nota || '').trim() || null;
+        if (!p.id || !p.clave) return { ok: false, error: 'Falta el cliente' };
+        if (!R.includes(p.resultado)) return { ok: false, error: 'Resultado desconocido' };
+        if (!fechaOk(p.volver_el) || !fechaOk(p.ciclo)) return { ok: false, error: 'Fecha inválida' };
+        if (nota && nota.length > 500) return { ok: false, error: 'La nota es demasiado larga' };
+        if ((p.resultado === 'tiene_stock' || p.resultado === 'no_interesa') && vacio(p.volver_el)) return { ok: false, error: 'Elegí el día para volver a escribirle' };
+        const d = leer(); if (d.contactos.some(c => c.id === p.id)) return { ok: true, id: p.id, yaEstaba: true };
+        const volver = p.resultado === 'no_contesto' ? null : o(p.volver_el);
+        d.contactos.push({ id: p.id, clave: p.clave, resultado: p.resultado, volver_el: volver, nota, autor: quien(), creado_en: ahora() });
+        const f = d.agenda[p.clave] || { fecha: null, ciclo: null };
+        if (p.resultado === 'no_contesto') d.agenda[p.clave] = Object.assign(f, { escrito: null });
+        else if (volver) d.agenda[p.clave] = Object.assign(f, { fecha: volver, ciclo: o(p.ciclo), escrito: null });
+        guardar(d); return { ok: true, id: p.id };
+      },
+      async contactosLeer(clave) { return { ok: true, lista: leer().contactos.filter(c => c.clave === clave).sort((a, b) => String(b.creado_en).localeCompare(String(a.creado_en))).slice(0, 30).map(c => ({ id: c.id, resultado: c.resultado, volver_el: c.volver_el, nota: c.nota, autor: c.autor, creado_en: c.creado_en })) }; },
       // Imitan a seg_agendar y seg_escribi: un renglón por cliente; repetir la misma llamada deja lo mismo.
       async agendar(p) {
         if (!p.clave) return { ok: false, error: 'Falta el cliente' };
@@ -159,7 +219,22 @@
             if (ar.error) { agendaOk = false; agendaMensaje = noInstalada(ar.error) ? '' : err(ar.error); }
             else agenda = (ar.data || []).map(x => ({ clave: claveDe(x.cliente_id), fecha: x.fecha || null, ciclo: x.ciclo || null, escrito: x.escrito_en || null })).filter(x => x.clave);
           } catch (e) { agendaOk = false; agendaMensaje = noInstalada(e) ? '' : err(e); }
-          return { estado: 'ok', decisiones, reglas, agenda, agendaOk, agendaMensaje };
+          // Seguimiento v2 (vendedor, etiquetas, resultado de contacto). Sin la migración (funciones inexistentes) la app se ve como antes; un error de conexión sí frena
+          // (sin saber quién es el usuario no se puede decidir qué clientes mostrar).
+          let v2 = { instalado: false, yo: null, etiquetas: [], usuarios: [], clientes: [] };
+          const yoR = await sb.rpc('seg_yo');
+          if (yoR.error) { if (!noInstalada(yoR.error)) return { estado: 'error', decisiones: [], reglas: [], mensaje: err(yoR.error) }; }
+          else {
+            v2.instalado = true; v2.yo = yoR.data || null;
+            if (v2.yo) {
+              const mr = await sb.rpc('seg_clientes_meta');
+              if (mr.error) return { estado: 'error', decisiones: [], reglas: [], mensaje: err(mr.error) };
+              const m = mr.data || {};
+              v2.etiquetas = m.etiquetas || []; v2.usuarios = m.usuarios || [];
+              v2.clientes = (m.clientes || []).map(x => ({ clave: claveDe(x.cliente_id) || norm(x.nombre), vendedor: x.vendedor || null, etiquetas: x.etiquetas || [], contacto: x.contacto || null })).filter(x => x.clave);
+            }
+          }
+          return { estado: 'ok', decisiones, reglas, agenda, agendaOk, agendaMensaje, v2 };
         } catch (e) { return noInstalada(e) ? { estado: 'noInstalado', decisiones: [], reglas: [] } : { estado: 'error', decisiones: [], reglas: [], mensaje: err(e) }; }
       },
       async decidir(p) {
@@ -181,6 +256,30 @@
         if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
         const id = idDe(p.clave); if (!id) return sinCliente;
         return rpc('seg_escribi', { p_cliente_id: id, p_fecha: o(p.fecha) });
+      },
+      // Seguimiento v2: todas pasan por las funciones seg_* (permisos y duplicados los resuelve la base).
+      async etiquetaGuardar(p) { return rpc('seg_etiqueta_guardar', { p_id: p.id, p_datos: { nombre: p.nombre, dia_semana: vacio(p.dia_semana) ? null : Number(p.dia_semana), siempre: !!p.siempre } }); },
+      async etiquetaBorrar(id) { return rpc('seg_etiqueta_borrar', { p_id: id }); },
+      async clienteEtiquetas(p) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(p.clave); if (!id) return sinCliente;
+        return rpc('seg_cliente_etiquetas', { p_cliente_id: id, p_etiquetas: p.etiquetas || [] });
+      },
+      async clienteVendedor(p) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(p.clave); if (!id) return sinCliente;
+        return rpc('seg_cliente_vendedor', { p_cliente_id: id, p_vendedor: o(p.vendedor) });
+      },
+      async contactoRegistrar(p) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(p.clave); if (!id) return sinCliente;
+        return rpc('seg_contacto_registrar', { p_id: p.id, p_cliente_id: id, p_resultado: p.resultado, p_volver_el: o(p.volver_el), p_nota: o(String(p.nota || '').trim()), p_ciclo: o(p.ciclo) });
+      },
+      async contactosLeer(clave) {
+        if (!registro) { try { await cargarRegistro(); } catch (e) { return { ok: false, error: err(e) }; } }
+        const id = idDe(clave); if (!id) return sinCliente;
+        const r = await sb.rpc('seg_contactos_leer', { p_cliente_id: id });
+        return r.error ? { ok: false, error: err(r.error), codigo: r.error.code } : { ok: true, lista: Array.isArray(r.data) ? r.data : [] };
       },
       async crearRegla(p) {
         let cid = null;
