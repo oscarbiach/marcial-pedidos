@@ -414,7 +414,7 @@ body.sc-arrastrando, body.sc-arrastrando * { cursor: grabbing !important; user-s
 .sc-espera-t .ico { width: 12px; height: 12px; }
 
 /* Los campos de los modales de la app traen borde propio: dentro del buscador no va (quedaba un borde doble). */
-.modal .sc-buscar input, .modal .sc-buscar input:focus { border: 0; box-shadow: none; outline: 0; background: transparent; border-radius: 0; padding: 13px 0; margin: 0; width: auto; }
+.modal .sc-buscar input, .modal .sc-buscar input:focus, #tab-clientes .sc-buscar input, #tab-clientes .sc-buscar input:focus, #tab-clientes .sc-buscar input:focus-visible { border: 0; box-shadow: none; outline: 0; background: transparent; border-radius: 0; padding: 13px 0; margin: 0; width: auto; }
 .sc-f-obs { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0 0; font-size: var(--m-t-md); line-height: 1.4; overflow-wrap: anywhere; }
 .sc-f-obs .ico { flex: none; margin-top: 2px; }
 

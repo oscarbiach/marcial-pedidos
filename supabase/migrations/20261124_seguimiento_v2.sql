@@ -1,7 +1,7 @@
 -- =============================================================================
 --  Seguimiento v2 (24/11/2026): clientes por vendedor, etiquetas de grupo y resultado de contacto.
 -- -----------------------------------------------------------------------------
---  Idempotente: se puede correr de nuevo sin duplicar ni perder datos. NO se aplicó en Supabase (hace falta OK del usuario).
+--  Idempotente: se puede correr de nuevo sin duplicar ni perder datos. Aplicada en Supabase el 24/11/2026 con OK del usuario (en 3 partes).
 --  Requiere lo ya aplicado: seg_editores, seg_decisiones, seg_agenda (14 y 21), notas_acceso, stock_es_admin()/stock_autor() y,
 --  para registrar los cambios de vendedor, admin_cambios (20261120_panel_admin.sql; si no está, se omite el registro).
 --

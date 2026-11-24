@@ -277,5 +277,27 @@ const U=n=>'00000000-0000-0000-0000-00000000000'+n;
  assert.equal((await one("select count(*)::int n from seg_decisiones where cliente_id=$1 and vigente",[C])).n,1);
  // Corregir el cliente de un pedido a un nombre fusionado lo apunta al final de la cadena
  await as(2);r=await call('admin_pedido_guardar',[uuid(),'nuevo3',await ver('nuevo3'),J({cliente:'esteban vergara don chegusan'})]);assert.equal(r.pedido.cliente,'Esteban');await as(1);
+ // ═══ Fusión + seguimiento v2: vendedor, etiquetas e historial de contactos pasan al que queda ═══
+ await db.exec(`alter table clientes add column if not exists vendedor text;
+  create table if not exists seg_etiquetas(id uuid primary key,nombre text);
+  create table if not exists clientes_etiquetas(cliente_id uuid references clientes(id) on delete cascade,etiqueta_id uuid references seg_etiquetas(id),primary key(cliente_id,etiqueta_id));
+  create table if not exists seg_contactos(id uuid primary key,cliente_id uuid references clientes(id),resultado text);
+  create or replace function seg_es_gestor() returns boolean language sql as $$select stock_es_admin()$$;`);
+ await db.exec(fs.readFileSync('supabase/migrations/20261124_seguimiento_v2_fusion.sql','utf8'));
+ const X='30000000-0000-0000-0000-00000000000a',Y='30000000-0000-0000-0000-00000000000b',E1='31000000-0000-0000-0000-000000000001',E2='31000000-0000-0000-0000-000000000002';
+ await db.exec(`insert into clientes(id,nombre,vendedor) values('${X}','Sauce Viejo Kiosco','Thiago'),('${Y}','Kiosco Sauce',null);
+  insert into seg_etiquetas values('${E1}','Sauce'),('${E2}','Mayorista');
+  insert into clientes_etiquetas values('${X}','${E1}'),('${X}','${E2}'),('${Y}','${E1}');
+  insert into seg_contactos values('32000000-0000-0000-0000-000000000001','${X}','tiene_stock');`);
+ fu=await call('admin_cliente_fusionar',[uuid(),X,Y,await cv(X),await cv(Y)]);
+ assert.equal((await one(`select vendedor from clientes where id='${Y}'`)).vendedor,'Thiago');
+ assert.deepEqual((await db.query(`select etiqueta_id from clientes_etiquetas where cliente_id='${Y}' order by etiqueta_id`)).rows.map(r=>r.etiqueta_id),[E1,E2]);
+ assert.equal((await one(`select count(*)::int n from clientes_etiquetas where cliente_id='${X}'`)).n,0);
+ assert.equal((await one(`select cliente_id from seg_contactos where id='32000000-0000-0000-0000-000000000001'`)).cliente_id,Y);
+ assert.equal(fu.actualizados.seg_contactos,1);assert.equal(fu.actualizados.vendedor,'Thiago');
+ // Si el que queda ya tiene vendedor, lo conserva
+ const W='30000000-0000-0000-0000-00000000000c';await db.exec(`insert into clientes(id,nombre,vendedor) values('${W}','Kiosco W','Oscar')`);
+ const Z='30000000-0000-0000-0000-00000000000d';await db.exec(`insert into clientes(id,nombre,vendedor) values('${Z}','Kiosco Z','Joaquin')`);
+ await call('admin_cliente_fusionar',[uuid(),Z,W,await cv(Z),await cv(W)]);assert.equal((await one(`select vendedor from clientes where id='${W}'`)).vendedor,'Oscar');
  console.log('OK: panel admin + observaciones y fusión (permisos, fecha real, estados, trigger, idempotencia, versión, renombre, baja, búsqueda paginada y registro).');await db.close();
 })().catch(e=>{console.error(e);process.exitCode=1;});
