@@ -1130,6 +1130,14 @@ test('bitácora: marcación personal, resumen de Joaquín y corrección con moti
    return rpc(n,a);
   };goTab('bitacora');
  });
+ await expect(p.getByRole('button',{name:'Semana anterior',exact:true})).toHaveCount(0);
+ await p.getByRole('button',{name:'Consultar registro',exact:true}).click();
+ await expect(p.getByRole('button',{name:'Marcar entrada',exact:true})).toHaveCount(0);
+ await p.getByRole('button',{name:'Semana anterior',exact:true}).click();
+ await expect(p.locator('.bt-semana')).toContainText('09/11/2026');
+ await p.getByRole('button',{name:'Volver a esta semana',exact:true}).click();
+ await expect(p.locator('.bt-semana')).toContainText('16/11/2026');
+ await expect(p.getByRole('button',{name:'Semana anterior',exact:true})).toHaveCount(0);
  await expect(p.getByRole('button',{name:'Marcar entrada',exact:true})).toBeVisible();
  await p.getByRole('button',{name:'Marcar entrada',exact:true}).click();await expect(p.getByRole('button',{name:'Marcar salida',exact:true})).toBeVisible();
  await expect(p.locator('.bt-marca')).toContainText('Estás en jornada');
