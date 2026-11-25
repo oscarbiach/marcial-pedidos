@@ -1602,6 +1602,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=117">
+<link rel="stylesheet" href="turnos.css?v=134">
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
 <link rel="stylesheet" href="gestion.css?v=129">
@@ -1728,6 +1729,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
             <textarea id="n_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
           </div>
         </div>
+        <div class="field turno-campo"><label for="n_turno">Turno de entrega</label><select id="n_turno"><option value="">Sin turno</option><option value="manana">Mañana</option><option value="tarde">Tarde</option></select></div>
         <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
       </div>
       <!-- Historial del cliente: solo PC ancha. Aparece al elegir el
@@ -1967,6 +1969,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
           <textarea id="p_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
         </div>
       </div>
+      <div class="field turno-campo"><label for="p_turno">Turno de entrega</label><select id="p_turno"><option value="">Sin turno</option><option value="manana">Mañana</option><option value="tarde">Tarde</option></select></div>
       <button class="btn btn-primary" onclick="submitEditPedido()">Guardar Cambios</button>
       <button class="btn btn-secondary" onclick="closeModal('pedidoModal')">Cancelar</button>
     </div>
@@ -2189,7 +2192,7 @@ function mapPedido_(row) {
     });
   return {
     id: row.id, fecha: row.fecha, fechaPedido: row.fecha_pedido || '', quien: row.quien || '', cliente: row.cliente,
-    fechaEntrega: row.fecha_entrega || '', direccion: row.direccion || '',
+    fechaEntrega: row.fecha_entrega || '', turno: row.turno || '', direccion: row.direccion || '',
     items: items, notas: row.notas || '',
     estado: row.estado || 'Pendiente', fechaDespacho: row.fecha_despacho || '',
     retiro: !!row.retiro, remitoHecho: !!row.remito_hecho
@@ -2354,7 +2357,7 @@ async function sbGetAppData() {
 }
 
 // Columnas de pedidos que usa la app. fecha_pedido = fecha real corregida desde Administración (puede faltar en la base).
-const PED_COLS_ = 'id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)';
+const PED_COLS_ = 'id,fecha,quien,cliente,fecha_entrega,turno,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,eliminado_por,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)';
 async function selPedidos_(armar) {
   const r = await armar(PED_COLS_.replace('fecha,quien', 'fecha,fecha_pedido,quien'));
   return r.error ? armar(PED_COLS_) : r;
@@ -2416,13 +2419,13 @@ async function sbSavePedido(data) {
   const p = {
     id: id, fecha: hoyArg(), quien: data.quien || '', cliente: data.cliente,
     fecha_entrega: data.fechaEntrega || '', direccion: data.direccion || '',
-    notas: data.notas || '', retiro: !!data.retiro
+    notas: data.notas || '', retiro: !!data.retiro, turno: data.turno || ''
   };
   const its = (data.items || []).map((it, i) => ({
     producto: it.prod, cantidad: Number(it.qty) || 1,
     fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
-  const { data: res, error } = await sb.rpc('guardar_pedido', { p: p, its: its });
+  const { data: res, error } = await sb.rpc('pedido_guardar_turno', { p: p, its: its, p_editar: false });
   if (error) throw sbError_(error);
   return res;   // {ok:true, id} o {ok:true, id, yaEstaba:true}
 }
@@ -2487,7 +2490,8 @@ async function sbUpdatePedido(data) {
     producto: it.prod, cantidad: Number(it.qty) || 1,
     fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
-  const { data: res, error } = await sb.rpc('editar_pedido', { p: p, its: its });
+  if (Object.prototype.hasOwnProperty.call(data,'turno')) p.turno=data.turno || '';
+  const { data: res, error } = await sb.rpc('pedido_guardar_turno', { p: p, its: its, p_editar: true });
   if (error) throw sbError_(error);
   return res;   // {ok:true} o {ok:false, error}
 }
@@ -3254,6 +3258,7 @@ function resetCargarForm() {
   document.getElementById('n_direccion').dataset.auto = '';
   document.getElementById('n_notas').value = '';
   document.getElementById('n_fecha').value = '';
+  document.getElementById('n_turno').value = '';
   document.getElementById('n_retiro').checked = false;
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
@@ -3322,7 +3327,7 @@ function submitCargarPedido() {
   // No se espera al servidor: el pedido entra en la cola, aparece en la
   // lista al toque y el formulario queda limpio para el siguiente. El
   // envío corre solo, de fondo.
-  const nuevo = { cliente, direccion, fechaEntrega, notas, items, retiro, quien: state.who };
+  const nuevo = { cliente, direccion, fechaEntrega, turno:document.getElementById('n_turno').value, notas, items, retiro, quien: state.who };
   encolarPedido(nuevo);
   // Si venía de «Pedidos para cargar» («Cargar este»), ese pedido queda marcado como cargado.
   if (window.PedidosACargar) PedidosACargar.alGuardar(nuevo.id);
@@ -3604,7 +3609,7 @@ function encolarPedido(data) {
   // Se muestra ya en la lista, marcado como "enviando".
   state.pedidos.unshift({
     id: tmpId, fecha: state.today, quien: data.quien || '', cliente: data.cliente,
-    fechaEntrega: data.fechaEntrega || '', direccion: data.direccion || '',
+    fechaEntrega: data.fechaEntrega || '', turno:data.turno || '', direccion: data.direccion || '',
     items: data.items, notas: data.notas || '', estado: 'Pendiente',
     fechaDespacho: '', retiro: !!data.retiro, enCola: true
   });
@@ -3693,7 +3698,7 @@ function restaurarCola() {
     state.pedidos.unshift({
       id: item.tmpId, fecha: item.fecha || state.today,
       quien: item.data.quien || '', cliente: item.data.cliente,
-      fechaEntrega: item.data.fechaEntrega || '', direccion: item.data.direccion || '',
+      fechaEntrega: item.data.fechaEntrega || '', turno:item.data.turno || '', direccion: item.data.direccion || '',
       items: item.data.items, notas: item.data.notas || '', estado: 'Pendiente',
       fechaDespacho: '', retiro: !!item.data.retiro, enCola: true
     });
@@ -4406,6 +4411,7 @@ function pedidoBloqueHtml(p) {
         ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
         ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
         ${fecha ? `<span class="blk-fecha${fechaCls}">${fecha}</span>` : ''}
+        <span class="turno-chip">${Turnos.nombre(p.turno)}</span>
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
       ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
@@ -4476,6 +4482,7 @@ function pedidoCardHtml(p) {
           ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
           ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
           ${chip}
+          <span class="turno-chip">${Turnos.nombre(p.turno)}</span>
         </div>
       </div>
       ${pedidoRepoHtml(p)}
@@ -4493,18 +4500,10 @@ function pedidoCardHtml(p) {
 // a la más lejana: acá la pregunta es "qué tengo que preparar para el
 // jueves", no "cuándo lo cargué".
 function listaPorEntrega(list) {
-  const ord = list.slice().sort((a, b) =>
-    String(a.fechaEntrega).localeCompare(String(b.fechaEntrega)));
-  let html = '', last = null;
-  ord.forEach(p => {
-    if (p.fechaEntrega !== last) {
-      last = p.fechaEntrega;
-      const d = -daysSince(p.fechaEntrega);
-      html += `<div class="prog-dia">${nombreDiaCorto(p.fechaEntrega)} ${fmtDate(p.fechaEntrega)} · en ${d} día${d !== 1 ? 's' : ''}</div>`;
-    }
-    html += pedidoCardHtml(p);
-  });
-  return html;
+  return [...new Set(list.map(p=>p.fechaEntrega))].sort().map(fecha=>{
+    const d=-daysSince(fecha);
+    return `<div class="prog-dia">${nombreDiaCorto(fecha)} ${fmtDate(fecha)} · en ${d} día${d!==1?'s':''}</div>`+Turnos.grupos(list.filter(p=>p.fechaEntrega===fecha),pedidoCardHtml);
+  }).join('');
 }
 
 // Grupo simple (sin separadores por fecha de carga: esa fecha ahora va
@@ -4532,7 +4531,7 @@ function pedidoSectionHtml(titulo, list, zona) {
   const dropAttrs = conDrop ? ` id="dz-${zona}"` : '';
   return `<div class="pend-group">
     <div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>
-    <div class="order-list"${dropAttrs}>${list.map(pedidoCardHtml).join('')}</div>
+    <div class="order-list"${dropAttrs}>${Turnos.grupos(list,pedidoCardHtml)}</div>
   </div>`;
 }
 
@@ -5827,6 +5826,7 @@ function openPedidoDetail(id) {
     ${pedidoRepoHtml(p)}
     <div class="detail-section">
       <h4>Info</h4>
+      ${p.estado==='Pendiente'&&!sinConfirmar&&state.who!=='Mateo'?Turnos.selector(p):`<div class="detail-item"><span>Turno</span><b>${Turnos.nombre(p.turno)}</b></div>`}
       <div class="detail-item"><span>Cliente</span><b>${esc(p.cliente)}</b></div>
       ${p.direccion ? `<div class="detail-item"><span>Dirección</span>${dirLinkHtml(p.direccion, 'dir-link fuerte')}</div>` : ''}
       <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(p.fecha)}</b></div>
@@ -5895,6 +5895,7 @@ function openPedidoEdit(id, pedidoActual) {
   document.getElementById('p_direccion').dataset.auto = '';
   document.getElementById('p_notas').value = p.notas || '';
   document.getElementById('p_fecha').value = p.fechaEntrega || '';
+  document.getElementById('p_turno').value = p.turno || '';
   document.getElementById('p_retiro').checked = !!p.retiro;
   // Si el pedido ya tiene fecha, dirección u observación, los extras
   // arrancan abiertos para que se vean; si no, quedan plegados.
@@ -5928,7 +5929,7 @@ function submitEditPedido() {
       else toast('Error: ' + (r.error || 'No se pudo actualizar'));
     })
     .withFailureHandler(e => toast('Error: ' + e.message))
-    .updatePedido({ id: editId, cliente:edicionSoloProductos?.cliente??cliente, direccion:edicionSoloProductos?.direccion??direccion, fechaEntrega:edicionSoloProductos?.fechaEntrega??fechaEntrega, notas:edicionSoloProductos?.notas??notas, items, retiro:edicionSoloProductos?.retiro??retiro });
+    .updatePedido({ id: editId, cliente:edicionSoloProductos?.cliente??cliente, direccion:edicionSoloProductos?.direccion??direccion, fechaEntrega:edicionSoloProductos?.fechaEntrega??fechaEntrega, ...(edicionSoloProductos?{}:{turno:document.getElementById('p_turno').value}), notas:edicionSoloProductos?.notas??notas, items, retiro:edicionSoloProductos?.retiro??retiro });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -6602,11 +6603,12 @@ function abrirInstalar() {
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
+<script src="turnos.js?v=134"></script>
 <script src="gestion.js?v=129"></script>
 <script src="admin.js?v=130"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>
-<script src="reparto-control.js?v=117"></script>
-<script src="reparto-vivo.js?v=131"></script>
+<script src="reparto-control.js?v=134"></script>
+<script src="reparto-vivo.js?v=134"></script>
 </body>
 </html>

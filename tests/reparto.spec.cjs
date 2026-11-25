@@ -18,6 +18,12 @@ async function setup(browser){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='pedido_cambiar_turno'){
+   const a=q.args,p=db.pedidos.find(p=>p.id===a.p_id);
+   if(failItem)return {error:{message:'Sin conexión'}};
+   if(!p||p.estado!=='Pendiente'||(p.turno||'')!==a.p_anterior)return {error:{message:'El pedido cambió'}};
+   p.turno=a.p_turno;setTimeout(()=>emit('pedidos'),0);return {data:{ok:true}};
+  }
   if(q.name==='catalogo_aliases')return {data:Object.fromEntries(db.catalogo_decisiones.filter(d=>d.estado==='vinculado').map(d=>[d.clave,db.productos.find(p=>p.id===d.producto_id)?.nombre]))};
   if(q.name==='notas_leer')return {data:structuredClone(db.app_notas)};
   if(q.name==='notas_guardar'){
@@ -116,6 +122,44 @@ async function setup(browser){
  }
  return {db,open,emit,moves,errors,writes,uploads,fail:()=>{fail=true},failItem:v=>{failItem=v},failPhoto:v=>{failPhoto=v},failLoad:v=>{failLoad=v},changeOnLoad:()=>{changeOnLoad=true},close:async()=>Promise.all(pages.map(p=>p.close()))};
 }
+test('turnos manuales: grupos, cambio en vivo, error y carga independiente por turno',async({browser})=>{
+ const s=await setup(browser);s.db.pedidos[0].turno='manana';s.db.pedidos[1].turno='tarde';
+ s.db.prep_cola=[{pedido_id:'p1',etapa:'listo',version:1},{pedido_id:'p2',etapa:'preparando',version:1}];
+ const o=await s.open('Oscar'),m=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});
+ await expect(m.locator('.rv-listo [data-turno="manana"]')).toContainText('Almacén del Centro');
+ await expect(m.locator('.rv-preparando [data-turno="tarde"]')).toContainText('La Esquina');
+ await expect(m.locator('.turno-selector')).toHaveCount(0);
+ await m.locator('[data-rv-turno="manana"]').click();await expect(m.locator('.rv-card')).toHaveCount(1);
+ await expect(m.locator('[data-rv="camioneta"]')).toBeEnabled();
+ await m.locator('[data-rv="camioneta"]').click();await expect(m.locator('.rc-order')).toHaveCount(1);
+ await expect(m.locator('.rc-order')).toContainText('Almacén del Centro');await m.locator('[data-rc="cerrar"]').click();
+ await o.locator('[data-turno-id="p2"]').selectOption('manana');
+ await expect(o.locator('[data-turno-id="p2"]')).toBeEnabled();await s.emit('pedidos');
+ await expect(m.locator('.rv-card')).toHaveCount(2);await expect(m.locator('[data-rv="camioneta"]')).toBeDisabled();
+ s.failItem(true);await o.locator('[data-turno-id="p2"]').selectOption('tarde');
+ await expect(o.locator('[data-turno-id="p2"]')).toHaveValue('manana');s.failItem(false);
+ await o.evaluate(()=>goTab('pedidos'));
+ await expect(o.locator('#tab-pedidos .turno-grupo[data-turno="manana"]')).toContainText('La Esquina');
+ await o.evaluate(()=>openPedidoDetail('p2'));await o.locator('#detailBody [data-turno-id="p2"]').selectOption('');
+ await expect(o.locator('#detailBody [data-turno-id="p2"]')).toBeEnabled();await s.emit('pedidos');
+ await m.locator('[data-rv-turno=""]').click();await expect(m.locator('.rv-card')).toHaveCount(1);
+ await expect(m.locator('.rv-card')).toContainText('Sin turno');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('turno elegido se guarda y conserva al editar solo productos o mover fecha',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{window.turnoWrites=[];const rpc=sb.rpc;sb.rpc=(name,args)=>{if(name==='pedido_guardar_turno'){window.turnoWrites.push(args);return Promise.resolve({data:{ok:true,id:args.p.id}});}return rpc(name,args);};});
+ await p.evaluate(()=>sbSavePedido({id:'nuevo',cliente:'Cliente',turno:'tarde',items:[{prod:'Pan',qty:2}]}));
+ expect(await p.evaluate(()=>turnoWrites[0].p.turno)).toBe('tarde');
+ await p.evaluate(()=>sbUpdatePedido({id:'p1',cliente:'Cliente',fechaEntrega:'2026-11-17',items:[]}));
+ expect(await p.evaluate(()=>Object.hasOwn(turnoWrites[1].p,'turno'))).toBe(false);
+ await p.evaluate(row=>{state.pedidos=[mapPedido_(row)];openPedidoEdit('p1');},s.db.pedidos[0]);await p.locator('#p_turno').selectOption('manana');
+ await p.getByRole('button',{name:'Guardar Cambios',exact:true}).click();
+ expect(await p.evaluate(()=>turnoWrites[2].p.turno)).toBe('manana');
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',async({browser})=>{
  const s=await setup(browser),oscar=await s.open('Oscar'),mateo=await s.open('Mateo');
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
@@ -738,7 +782,7 @@ test('edición de reparto muestra solo productos y volver a Pedidos restaura los
  const b=p.locator('[data-rv="editar"]');
  const sizes=await b.evaluate(el=>({button:el.getBoundingClientRect().width,parent:el.parentElement.clientWidth,padding:parseFloat(getComputedStyle(el.parentElement).paddingLeft)+parseFloat(getComputedStyle(el.parentElement).paddingRight)}));expect(Math.abs(sizes.button-(sizes.parent-sizes.padding))).toBeLessThan(2);
  await b.click();await expect(p.locator('#p_cliente')).toBeHidden();await expect(p.locator('#p_extrasBtn')).toBeHidden();await expect(p.locator('#p_retiro')).toBeHidden();await expect(p.locator('#pedItemRows')).toBeVisible();
- await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=(name,args)=>{if(name==='editar_pedido'){window.edicionEnviada=args;return Promise.resolve({data:{ok:true}});}return rpc(name,args);};document.getElementById('p_cliente').value='Alterado';document.getElementById('p_fecha').value='2030-01-01';submitEditPedido();});
+ await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=(name,args)=>{if(name==='pedido_guardar_turno'&&args.p_editar){window.edicionEnviada=args;return Promise.resolve({data:{ok:true}});}return rpc(name,args);};document.getElementById('p_cliente').value='Alterado';document.getElementById('p_fecha').value='2030-01-01';submitEditPedido();});
  await expect.poll(()=>p.evaluate(()=>window.edicionEnviada?.p.cliente)).toBe('Almacén del Centro');expect(await p.evaluate(()=>window.edicionEnviada.p.fecha_entrega)).toBe('2026-11-16');
  await p.evaluate(pedido=>{closeModal('pedidoModal');state.pedidos=[mapPedido_(pedido)];openPedidoEdit(pedido.id);},s.db.pedidos[0]);
  await expect(p.locator('#p_cliente')).toBeVisible();await expect(p.locator('#p_extrasBtn')).toBeVisible();
