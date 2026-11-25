@@ -20,8 +20,8 @@
   const tarjetas=productos;
   return {pedidos,productos,tarjetas,pendientes};
  }
- function tarjeta(g){return `<article class="sp-card"><header><div><h2>${esc(g.prod)}</h2>${g.fetear?`<span class="sp-preparacion">FETEAR${isPanceta(g.prod)?g.sinCuero?' · SIN CUERO':' · CON CUERO':''}</span>`:''}</div><strong>${itemLineLabel(g)}</strong></header>
-  <div class="sp-filas">${g.filas.map(f=>`<div class="sp-fila"><div><b>${esc(f.cliente)}</b><span class="${f.fecha&&f.fecha<state.today?'sp-atrasado':''}">${esc(dia(f.fecha))}${f.retiro?' · Retiro':f.turno?' · '+esc(Turnos.nombre(f.turno)):''}</span></div><strong>${itemLineLabel(f.item)}</strong></div>`).join('')}</div>
+ function tarjeta(g){return `<article class="sp-card"><header><div><h2>${esc(g.prod)}</h2>${g.fetear?`<span class="sp-preparacion">FETEAR${isPanceta(g.prod)?g.sinCuero?' · SIN CUERO':' · CON CUERO':''}</span>`:''}</div><strong>${itemLabelCorto(g)}</strong></header>
+  <div class="sp-filas">${g.filas.map(f=>`<div class="sp-fila"><div><b>${esc(f.cliente)}</b><span class="${f.fecha&&f.fecha<state.today?'sp-atrasado':''}">${esc(dia(f.fecha))}${f.retiro?' · Retiro':f.turno?' · '+esc(Turnos.nombre(f.turno)):''}</span></div><strong>${itemLabelCorto(f.item)}</strong></div>`).join('')}</div>
   ${g.partes>1?`<div class="sp-parte">Detalle ${g.parte}/${g.partes} · total del producto en el encabezado</div>`:''}</article>`;}
  function estado(){
   const el=$('sp-estado');if(!el)return;
