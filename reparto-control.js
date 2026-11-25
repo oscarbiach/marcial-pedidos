@@ -103,7 +103,7 @@
   const loaded=S.rows.filter(r=>r.control?.cargado&&r.pedido.estado==='Despachado').length;
   const html=`<div class="rc-panel"><header><div><h2 id="rc-title">${S.modo==='camioneta'?'Camioneta · Control y carga':'Resumen para remito'}</h2>${S.modo==='camioneta'?`<p>${loaded} de ${S.ids.length} pedidos cargados</p>`:''}</div><button data-rc="cerrar" aria-label="Volver a Reparto">✕</button></header>
    <div id="rc-content" class="rc-content">${S.error?`<p class="rc-error" role="alert">${esc(S.error)} <button data-rc="actualizar">Reintentar</button></p>`:''}${S.actionError?`<p class="rc-error" role="alert">${esc(S.actionError)}</p>`:''}
-   ${S.rows.map(tarjeta).join('')||`<p>${S.loading?'Cargando pedidos…':'No hay pedidos disponibles.'}</p>`}</div></div>`;
+   ${Turnos.grupos(S.rows.map(r=>({...r,turno:r.pedido.turno})),tarjeta)||`<p>${S.loading?'Cargando pedidos…':'No hay pedidos disponibles.'}</p>`}</div></div>`;
   if(r._html===html)return;r._html=html;r.innerHTML=html;$('rc-content').scrollTop=scroll;
   if(focus?.a)[...r.querySelectorAll('[data-rc]')].find(el=>el.dataset.rc===focus.a&&el.dataset.id===focus.id)?.focus({preventScroll:true});
  }
