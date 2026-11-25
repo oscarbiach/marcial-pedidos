@@ -4,7 +4,7 @@
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const key=v=>String(v||'').trim().toLowerCase().replace(/[áéíóúü]/g,c=>({'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u'}[c])).replace(/\s+/g,' ');
  const S={who:null,epoch:0,cat:null,notes:[],aliases:{},mode:'catalogo',noteMode:'pendiente',q:'',nq:'',busy:false,catLoading:false,nLoading:false,catError:'',nError:'',channel:null};
- const admin=()=>['Oscar','Joaquin'].includes(state.who),oficina=()=>['Oscar','Joaquin','Thiago','Juan Marcos'].includes(state.who);
+ const admin=()=>['Oscar','Joaquin'].includes(state.who),oficina=()=>['Oscar','Joaquin','Thiago'].includes(state.who);
  async function rpc(name,args={}){const r=await RepartoRed.pedir(sb.rpc(name,args));if(r.error)throw r.error;return r.data;}
  const error=e=>e.message||'No se pudo guardar. Reintentá.';
  async function aliases(){const epoch=S.epoch;try{const data=await rpc('catalogo_aliases');if(epoch===S.epoch)S.aliases=data||{};}catch(e){/* La carga de pedidos sigue disponible. */}}
