@@ -1104,6 +1104,10 @@ test('monitor conserva medidas distintas, no cuenta cola local y abre desde enla
  await expect(p.locator('#stock-pantalla')).toBeVisible();
  const d=await p.evaluate(()=>StockPantalla._datos());expect(d.productos).toHaveLength(4);expect(d.pedidos).toHaveLength(1);
  expect(d.productos.filter(x=>x.prod==='Pan clásico').map(x=>x.qty).sort()).toEqual([2,3]);
+ await p.evaluate(()=>{state.products.push({n:'Pan clásico',u:'caja',box:48});StockPantalla.cerrar();StockPantalla.abrir();});
+ await expect(p.locator('#sp-grid')).toContainText('2 cajas');
+ await expect(p.locator('#sp-grid')).toContainText('3 un.');
+ await expect(p.locator('#sp-grid')).not.toContainText('(=');
  await expect(p.locator('#sp-grid')).toContainText('Sin fecha de entrega');await expect(p.locator('#sp-grid')).not.toContainText('999');
  await p.evaluate(()=>{state.who='Mateo';StockPantalla.render();});await expect(p.locator('#stock-pantalla')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
