@@ -1605,7 +1605,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="turnos.css?v=135">
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
-<link rel="stylesheet" href="gestion.css?v=129">
+<link rel="stylesheet" href="gestion.css?v=136">
 <link rel="stylesheet" href="admin.css?v=130">
 <link rel="stylesheet" href="reparto-control.css?v=117">
 <script src="marca/marca.js"></script>
@@ -2752,6 +2752,7 @@ function leerCache() {
 }
 
 function mostrarApp() {
+  document.body.classList.toggle('usuario-juan-marcos', state.who === 'Juan Marcos');
   if (window.GestionUI) GestionUI.iniciar();
   if (window.RepartoVivo) RepartoVivo.acceso();
   document.getElementById('loading').style.display = 'none';
@@ -3172,6 +3173,7 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', notas:'Notas' };
 
 function setTab(tab) {
+  if (state.who === 'Juan Marcos' && !['cargar','pedidos','whatsapp','clientes'].includes(tab)) tab = 'pedidos';
   // Productos ya no es una pestaña: vive en el panel de Administración (admin.js).
   if (tab === 'productos') { if (window.AdminUI && window.GestionUI && GestionUI.admin()) { AdminUI.abrir('productos'); return; } tab = 'pedidos'; }
   if(tab==='notas'&&!window.GestionUI?.oficina())tab='pedidos';
@@ -3235,7 +3237,7 @@ function goTab(tab) { setTab(tab); }
 function esCelular() { return !!(window.matchMedia && window.matchMedia('(max-width: 767.98px) and (pointer: coarse)').matches); }
 function bloqueadaEnCelular(tab) {
   if (!esCelular()) return false;
-  if (tab === 'whatsapp') return true;
+  if (tab === 'whatsapp') return state.who !== 'Juan Marcos';
   return tab === 'clientes' && !(window.SegUI && SegUI.puedeCelular && SegUI.puedeCelular(state && state.who));
 }
 window.addEventListener('resize', () => { if (bloqueadaEnCelular(activeTab)) setTab('pedidos'); });
@@ -6604,7 +6606,7 @@ function abrirInstalar() {
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
 <script src="turnos.js?v=135"></script>
-<script src="gestion.js?v=129"></script>
+<script src="gestion.js?v=136"></script>
 <script src="admin.js?v=130"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>

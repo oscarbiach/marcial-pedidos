@@ -1,4 +1,6 @@
 [data-tab="notas"],#notas-bell{display:none!important}
+body.usuario-juan-marcos [data-tab="reparto"]{display:none!important}
+body.usuario-juan-marcos.seg-visible #bottomNav [data-tab="whatsapp"]{display:flex!important}
 body.gestion-oficina [data-tab="notas"],body.gestion-oficina #notas-bell{display:inline-flex!important}
 #notas-bell{position:relative;align-items:center;justify-content:center;border:1px solid #cbd8e8;border-radius:50%;width:38px;height:38px;background:white;color:#193959;flex:none}
 #notas-bell b{position:absolute;right:-6px;top:-6px;border-radius:12px;background:#8056a6;color:white;font-size:11px;padding:2px 5px}#notas-bell b:empty{display:none}

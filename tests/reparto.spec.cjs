@@ -120,8 +120,9 @@ async function setup(browser,{turnosPlegados=false}={}){
   await page.evaluate(({w,products})=>{
     state.who=w;state.pin='ok';state.today='2026-11-16';state.products=products.map(productoDeFila_);ultimoRefresh=Date.now();
     document.getElementById('whoModal').classList.remove('open');
-    mostrarApp(); if(w!=='Mateo')goTab('reparto');
+    SegUI.aplicarAcceso();mostrarApp(); if(w!=='Mateo')goTab(w==='Juan Marcos'?'pedidos':'reparto');
   },{w:who,products:db.productos});
+  if(who==='Juan Marcos')return page;
   await expect(page.locator('.rv-connection')).toHaveText('En vivo');
   await expect(page.locator('.rv-empty').first()).not.toContainText('Cargando');
   if(!turnosPlegados){await page.evaluate(()=>RepartoVivo.montar());await page.clock.runFor(400);}
@@ -1026,9 +1027,21 @@ test('PIN de otro usuario no instala sesión y Juan Marcos admite su identidad a
  expect(s.errors).toEqual([]);await s.close();
 });
 
-test('Juan Marcos tiene seguimiento móvil, Notas y campana sin Productos',async({browser})=>{
- const s=await setup(browser),p=await s.open('Juan Marcos',{width:390,height:844},{hasTouch:true});
- await expect(p.locator('#notas-bell')).toBeVisible();await expect(p.locator('#bottomNav [data-tab="notas"]')).toBeVisible();await expect(p.locator('#bottomNav [data-tab="productos"]')).toBeHidden();
- expect(await p.evaluate(()=>SegClientes.CONFIG.celular.includes('Juan Marcos'))).toBe(true);
- await p.evaluate(()=>goTab('notas'));await expect(p.locator('#tab-notas')).toHaveClass(/active/);expect(await p.evaluate(()=>GestionUI.admin())).toBe(false);expect(s.errors).toEqual([]);await s.close();
+test('Juan Marcos solo tiene Cargar, Pedidos, WhatsApp y Clientes en PC y móvil',async({browser})=>{
+ const s=await setup(browser);
+ for(const mobile of [false,true]){
+  const p=await s.open('Juan Marcos',mobile?{width:390,height:844}:undefined,mobile?{hasTouch:true}:{});
+  const nav=mobile?'#bottomNav':'#pcNav';
+  await expect(p.locator('#notas-bell')).toBeHidden();
+  for(const tab of ['cargar','pedidos','whatsapp','clientes'])await expect(p.locator(`${nav} [data-tab="${tab}"]`)).toBeVisible();
+  for(const tab of ['reparto','notas','productos','stock']){
+   await expect(p.locator(`${nav} [data-tab="${tab}"]`)).toBeHidden();
+   await p.evaluate(t=>goTab(t),tab);await expect(p.locator('#tab-pedidos')).toHaveClass(/active/);
+  }
+  await p.locator(`${nav} [data-tab="whatsapp"]`).click();await expect(p.locator('#tab-whatsapp')).toHaveClass(/active/);
+  expect(await p.evaluate(()=>GestionUI.oficina())).toBe(false);
+  await p.evaluate(()=>{state.who='Oscar';mostrarApp();});
+  await expect(p.locator('#notas-bell')).toBeVisible();await expect(p.locator(`${nav} [data-tab="reparto"]`)).toBeVisible();
+ }
+ expect(s.errors).toEqual([]);await s.close();
 });
