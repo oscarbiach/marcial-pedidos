@@ -25,12 +25,14 @@ function setup(opts={}){
   etiquetas:[],clienteEt:new Map(),agenda:new Map(),contactos:[],llamadas:[],ops:new Set(),instalado:opts.instalado!==false,sinYo:!!opts.sinYo};
  const ctl={colgar:false,perderRespuesta:false,tick:0};
  const err=(message,code)=>({error:{message,code}});
+ const safeAliases=()=>db.aliases||[];
  const who2=q=>YO[q.who]||null;
  const clienteDe=id=>db.clientes.find(c=>c.id===id);
  const puede=(q,id)=>{const y=who2(q);return !!y&&(y.ve_todo||norm(clienteDe(id)?.vendedor)===norm(y.nombre));};
  const sinPermiso=()=>err('Ese cliente no está asignado a tu usuario','42501');
  async function request(q){
   const y=who2(q);
+  if(q.name==='seg_clientes_aliases')return {data:safeAliases()};
   if(q.name==='seg_es_editor')return {data:!!y};
   if(q.name==='seg_yo'){if(!db.instalado)return err('Could not find the function public.seg_yo','PGRST202');return {data:db.sinYo?null:y};}
   if(q.name==='seg_clientes_meta'){
@@ -411,5 +413,20 @@ test('Panel de administración: la ficha del cliente permite asignar vendedor y 
  await expect(seg.locator('[data-adm="seg-et"]')).toHaveAttribute('aria-pressed','true');
  expect(s.db.clienteEt.get('c2')).toEqual(['e-san']);
  await expect(seg.locator('#adm-seg-v')).toHaveValue('Juan Marcos');
+ sinErrores(page);
+});
+
+test('Juan Marcos opera sobre el cliente actual aunque el historial conserve nombres anteriores',async({browser})=>{
+ const s=setup();s.db.clientes.find(c=>c.id==='c2').nombre='Lucas Onlyburger Sauce';
+ s.db.pedidos=s.db.pedidos.filter(p=>p.cliente!=='Kiosco Sur').concat(semanal('Lucas Charruca','2026-11-17',6));
+ s.db.aliases=[{alias:'lucas charruca',nombre:'Lucas Onlyburger Sauce',cliente_id:'c2'}];
+ const page=await entrar(browser,s,'Juan Marcos');
+ await expect(fila(page,'lucas charruca')).toHaveCount(0);
+ await expect(fila(page,'lucas onlyburger sauce')).toBeVisible();
+ await fila(page,'lucas onlyburger sauce').locator('[data-sc="escribi"]').click();
+ await expect(fila(page,'lucas onlyburger sauce').locator('[data-sc="resultado"]')).toBeVisible();
+ expect(s.db.llamadas.find(l=>l.f==='seg_escribi').p_cliente_id).toBe('c2');
+ await vista(page,'clientes');await page.locator('#sc-cq').fill('Lucas');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
  sinErrores(page);
 });
