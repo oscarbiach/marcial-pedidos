@@ -175,6 +175,7 @@
   // opts: { sb (cliente de supabase-js), hoy: () => 'YYYY-MM-DD' }. Todo lo que escribe pasa por las funciones seg_* (ver el SQL).
   function almacenBase(opts) {
     const sb = opts.sb;
+    let aliases = [];
     let registro = null;   // clientes del registro: id y nombre (los pedidos todavía no traen cliente_id)
     const err = e => String((e && (e.message || e.msg)) || e || 'Error');
     const noInstalada = e => !!e && (e.code === 'PGRST202' || e.code === 'PGRST205' || e.code === '42P01' || e.code === '42883' || e.status === 404 || /could not find the (function|table)/i.test(err(e)));
@@ -182,10 +183,14 @@
       const r = await sb.from('clientes').select('id,nombre');
       if (r.error) throw r.error;
       registro = (r.data || []).map(c => ({ id: c.id, nombre: c.nombre, k: norm(c.nombre) }));
+      const a = await sb.rpc('seg_clientes_aliases');
+      if(a.error && !noInstalada(a.error))throw a.error;
+      aliases = a.error ? [] : (Array.isArray(a.data)?a.data:[]);
     }
     // El cliente del seguimiento se identifica por su nombre normalizado; se guarda por id del registro. Si no hay uno solo, no se guarda nada.
     function idDe(clave) {
-      const m = (registro || []).filter(c => c.k === clave);
+      const actual = aliases.find(a=>norm(a.alias)===clave);
+      const m = (registro || []).filter(c => actual ? c.id===actual.cliente_id : c.k === clave);
       return m.length === 1 ? m[0].id : null;
     }
     const claveDe = id => { const c = (registro || []).find(x => x.id === id); return c ? c.k : null; };
@@ -234,7 +239,7 @@
               v2.clientes = (m.clientes || []).map(x => ({ clave: claveDe(x.cliente_id) || norm(x.nombre), vendedor: x.vendedor || null, etiquetas: x.etiquetas || [], contacto: x.contacto || null })).filter(x => x.clave);
             }
           }
-          return { estado: 'ok', decisiones, reglas, agenda, agendaOk, agendaMensaje, v2 };
+          return { estado: 'ok', decisiones, reglas, agenda, agendaOk, agendaMensaje, v2, aliases };
         } catch (e) { return noInstalada(e) ? { estado: 'noInstalado', decisiones: [], reglas: [] } : { estado: 'error', decisiones: [], reglas: [], mensaje: err(e) }; }
       },
       async decidir(p) {

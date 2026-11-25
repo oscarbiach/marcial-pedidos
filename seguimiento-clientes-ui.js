@@ -73,7 +73,8 @@
   function mezclar() {
     const vistos = new Set(), todos = [];
     ((estadoApp() && estadoApp().pedidos) || []).concat(E.historial || []).forEach(p => { if (p && !vistos.has(p.id)) { vistos.add(p.id); todos.push(p); } });
-    return sinBajas(todos);
+    const aliases = new Map((E.datos.aliases || []).map(a=>[S.norm(a.alias),a.nombre]));
+    return sinBajas(todos.map(p=>aliases.has(S.norm(p.cliente))?{...p,cliente:aliases.get(S.norm(p.cliente))}:p));
   }
   // Clientes dados de baja (Administración): no figuran en el calendario ni en «Todos los clientes», salvo que tengan un pedido posterior a la baja.
   function sinBajas(lista) {
@@ -91,7 +92,7 @@
   }
   function recalcular() {
     const todos = mezclar();
-    const huella = todos.length + '|' + hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + todos.reduce((h, p) => h + String(p.id).length + String(p.estado).length + String(p.fechaDespacho || '').length + String(p.notas || '').length + (p.fechaPedido ? Number(String(p.fechaPedido).replace(/\D/g, '')) % 100000 : 0), 0) + '|' + ((estadoApp() && estadoApp().clientesBaja) || []).length;
+    const huella = todos.length + '|' + hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + todos.reduce((h, p) => h + String(p.id).length + String(p.estado).length + String(p.fechaDespacho || '').length + String(p.notas || '').length + (p.fechaPedido ? Number(String(p.fechaPedido).replace(/\D/g, '')) % 100000 : 0), 0) + '|' + JSON.stringify(todos.map(p=>p.cliente)) + '|' + JSON.stringify((estadoApp() && estadoApp().clientesBaja) || []);
     if (E.calc && E.huella === huella) return E.calc;
     E.huella = huella; E.calc = S.calcular(todos, hoy(), datosOk() ? { decisiones: decisionesVista(), reglas: E.datos.reglas, usuario: usuarioMotor(), meta: metaMapa() } : undefined);
     return E.calc;
@@ -181,7 +182,7 @@
     clearTimeout(vence);
     const previo = E.datos;
     if (r.estado === 'ok') {
-      E.datos = { estado: 'ok', decisiones: r.decisiones, reglas: r.reglas, agenda: r.agenda || [], agendaOk: !!r.agendaOk, agendaMensaje: r.agendaMensaje || '', v2: r.v2 || V2_VACIO, ts: Date.now(), ultimoOk: Date.now(), cargando: false, error: false, mensaje: '' };
+      E.datos = { estado: 'ok', decisiones: r.decisiones, reglas: r.reglas, agenda: r.agenda || [], agendaOk: !!r.agendaOk, agendaMensaje: r.agendaMensaje || '', v2: r.v2 || V2_VACIO, aliases: r.aliases || [], ts: Date.now(), ultimoOk: Date.now(), cargando: false, error: false, mensaje: '' };
       E.agendaMapa = new Map((r.agenda || []).map(x => [x.clave, { fecha: x.fecha || null, ciclo: x.ciclo || null, escrito: x.escrito || null }]));
     } else if (r.estado === 'error' && previo.ultimoOk) E.datos = Object.assign({}, previo, { cargando: false, error: true, mensaje: r.mensaje || '' });
     else { E.datos = { estado: r.estado, decisiones: [], reglas: [], agenda: [], agendaOk: false, agendaMensaje: '', v2: V2_VACIO, ts: Date.now(), ultimoOk: 0, cargando: false, error: false, mensaje: r.mensaje || '' }; E.agendaMapa = new Map(); }
