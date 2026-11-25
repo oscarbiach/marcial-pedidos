@@ -34,7 +34,8 @@ grant execute on function public.seg_clientes_aliases() to authenticated;
 with corregido as (
  update pedidos p set cliente=c.nombre
  from clientes c
- where p.id='mrv0ocwjdbk' and p.cliente='Lucas Charruca'
+ where p.cliente='Lucas Charruca' and p.fecha='2026-07-21'
+  and (select count(*) from pedidos x where x.cliente='Lucas Charruca')=1
   and p.estado='Despachado' and not p.remito_hecho
   and not exists(select 1 from prep_pedidos pp where pp.pedido_id=p.id)
   and c.id='8ba90423-f273-40cd-8c75-8818db97e864'
