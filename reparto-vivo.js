@@ -184,7 +184,7 @@
         const label = f && f < hoy ? 'Atrasados · ' + fmtDate(f) : etiquetaFecha(f);
         return `<section class="rv-day ${f === hoy ? 'rv-day-today' : f && f < hoy ? 'rv-day-late' : ''}">
           <button class="rv-day-toggle" data-rv="dia" data-day="${key}" aria-expanded="${abierto}" aria-controls="rv-dia-${key}"><span>${esc(label)}</span><b>${lista.length}</b><span aria-hidden="true">${abierto ? '⌃' : '⌄'}</span></button>
-          <div class="rv-day-cards" id="rv-dia-${key}" ${abierto ? '' : 'hidden'}>${abierto ? Turnos.grupos(lista,tarjeta) : ''}</div>
+          <div class="rv-day-cards" id="rv-dia-${key}" ${abierto ? '' : 'hidden'}>${abierto ? Turnos.grupos(lista,tarjeta,'reparto:fecha:'+key) : ''}</div>
         </section>`;
       }).join('');
   }
@@ -220,7 +220,7 @@
           if(e === 'pendiente') return (a.fechaEntrega || '9999').localeCompare(b.fechaEntrega || '9999');
           return String(S.filas.get(a.id)?.enviado_en || '').localeCompare(String(S.filas.get(b.id)?.enviado_en || '')) || a.id.localeCompare(b.id);
         });
-        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3>${e==='pendiente'?`<input class="rv-search" data-rv="buscar" type="text" inputmode="search" aria-label="Buscar en Sin enviar" placeholder="Buscar pedido…" autocomplete="off" value="${esc(S.busqueda)}">`:''}<div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : Turnos.grupos(pedidos,tarjeta)) || `<div class="rv-empty"><b>${!S.ready ? 'Cargando pedidos…' : e==='pendiente'&&S.busqueda.trim()?'Sin coincidencias':e==='por_preparar'?'Todo al día':'Sin pedidos'}</b>${!mateo()&&!(e==='pendiente'&&S.busqueda.trim())?`<p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Arrastrá un pedido hasta acá.'}</p>`:''}</div>`}</div></section>`;
+        return `<section class="rv-column rv-${e}" data-stage="${e}" aria-label="${etapas[e]}"><h3><span class="rv-dot"></span>${etapas[e]}<b>${pedidos.length}</b></h3>${e==='pendiente'?`<input class="rv-search" data-rv="buscar" type="text" inputmode="search" aria-label="Buscar en Sin enviar" placeholder="Buscar pedido…" autocomplete="off" value="${esc(S.busqueda)}">`:''}<div class="rv-list" data-col="${e}">${(e === 'pendiente' ? porFecha(pedidos) : Turnos.grupos(pedidos,tarjeta,'reparto:'+e)) || `<div class="rv-empty"><b>${!S.ready ? 'Cargando pedidos…' : e==='pendiente'&&S.busqueda.trim()?'Sin coincidencias':e==='por_preparar'?'Todo al día':'Sin pedidos'}</b>${!mateo()&&!(e==='pendiente'&&S.busqueda.trim())?`<p>${e === 'por_preparar' ? 'Cuando el equipo envíe un pedido, aparece acá.' : e === 'listo' ? 'Los pedidos preparados se reúnen acá.' : 'Arrastrá un pedido hasta acá.'}</p>`:''}</div>`}</div></section>`;
       }).join('')}</div>`;
     if (r._html === html) return;
     r._html = html;

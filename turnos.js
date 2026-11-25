@@ -4,9 +4,19 @@
  const opciones=[['manana','Mañana'],['tarde','Tarde'],['','Sin turno']];
  const clave=p=>['manana','tarde'].includes(p.turno)?p.turno:'';
  const nombre=t=>opciones.find(([k])=>k===t)?.[1]||'Sin turno';
- function grupos(lista,render){return opciones.map(([t,n])=>{
+ const abiertos=new Map();
+ const llave=(contexto,t)=>`${state.who}:${contexto}:${t}`;
+ function plegar(summary){
+  const grupo=summary.parentElement;
+  abiertos.set(grupo.dataset.turnoClave,!grupo.open);
+ }
+ function grupos(lista,render,contexto){return opciones.map(([t,n])=>{
   const pedidos=lista.filter(p=>clave(p)===t);
-  return pedidos.length?`<section class="turno-grupo" data-turno="${t}"><h4 class="turno-titulo turno-${t||'sin'}">${n}<span>${pedidos.length}</span></h4>${pedidos.map(render).join('')}</section>`:'';
+  if(!pedidos.length)return '';
+  const titulo=`<span class="turno-nombre">${n}</span><span class="turno-cantidad">${pedidos.length}</span>`;
+  if(!contexto)return `<section class="turno-grupo" data-turno="${t}"><h4 class="turno-titulo turno-${t||'sin'}">${titulo}</h4>${pedidos.map(render).join('')}</section>`;
+  const key=llave(contexto,t);
+  return `<details class="turno-grupo turno-plegable" data-turno="${t}" data-turno-clave="${esc(key)}" ${abiertos.get(key)?'open':''}><summary class="turno-titulo turno-${t||'sin'}" onclick="Turnos.plegar(this)">${titulo}</summary><div class="turno-contenido">${pedidos.map(render).join('')}</div></details>`;
  }).join('');}
  function selector(p,disabled=false){
   return `<label class="turno-selector" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()">Turno <select aria-label="Turno de ${esc(p.cliente)}" data-turno-id="${esc(p.id)}" data-anterior="${clave(p)}" onchange="Turnos.cambiar(this)" ${disabled?'disabled':''}>${opciones.map(([t,n])=>`<option value="${t}" ${clave(p)===t?'selected':''}>${n}</option>`).join('')}</select></label>`;
@@ -26,5 +36,5 @@
   finally{el.disabled=false;}
  }
  function filtros(actual,attr){return `<div class="turno-filtros" role="group" aria-label="Filtrar por turno">${[['todos','Todos'],...opciones].map(([t,n])=>`<button type="button" ${attr}="${t}" aria-pressed="${actual===t}">${n}</button>`).join('')}</div>`;}
- window.Turnos={clave,nombre,grupos,selector,cambiar,filtros};
+ window.Turnos={clave,nombre,grupos,selector,cambiar,filtros,plegar};
 })();

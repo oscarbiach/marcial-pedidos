@@ -1602,7 +1602,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=117">
-<link rel="stylesheet" href="turnos.css?v=134">
+<link rel="stylesheet" href="turnos.css?v=135">
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
 <link rel="stylesheet" href="gestion.css?v=129">
@@ -4502,7 +4502,7 @@ function pedidoCardHtml(p) {
 function listaPorEntrega(list) {
   return [...new Set(list.map(p=>p.fechaEntrega))].sort().map(fecha=>{
     const d=-daysSince(fecha);
-    return `<div class="prog-dia">${nombreDiaCorto(fecha)} ${fmtDate(fecha)} · en ${d} día${d!==1?'s':''}</div>`+Turnos.grupos(list.filter(p=>p.fechaEntrega===fecha),pedidoCardHtml);
+    return `<div class="prog-dia">${nombreDiaCorto(fecha)} ${fmtDate(fecha)} · en ${d} día${d!==1?'s':''}</div>`+Turnos.grupos(list.filter(p=>p.fechaEntrega===fecha),pedidoCardHtml,'pedidos:fecha:'+fecha);
   }).join('');
 }
 
@@ -4531,7 +4531,7 @@ function pedidoSectionHtml(titulo, list, zona) {
   const dropAttrs = conDrop ? ` id="dz-${zona}"` : '';
   return `<div class="pend-group">
     <div class="section-header"><h3>${titulo}</h3><span class="badge">${list.length}</span></div>
-    <div class="order-list"${dropAttrs}>${Turnos.grupos(list,pedidoCardHtml)}</div>
+    <div class="order-list"${dropAttrs}>${Turnos.grupos(list,pedidoCardHtml,'pedidos:'+(zona||titulo))}</div>
   </div>`;
 }
 
@@ -6603,12 +6603,12 @@ function abrirInstalar() {
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="turnos.js?v=134"></script>
+<script src="turnos.js?v=135"></script>
 <script src="gestion.js?v=129"></script>
 <script src="admin.js?v=130"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=117"></script>
 <script src="reparto-control.js?v=134"></script>
-<script src="reparto-vivo.js?v=134"></script>
+<script src="reparto-vivo.js?v=135"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@ const mockClient = `window.supabase={createClient:()=>({
  removeChannel(){window.__listeners=[]},storage:{from:()=>({createSignedUrls:async paths=>({data:paths.map(path=>({path,signedUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='}))}),upload:(path,blob)=>window.__db({upload:path,size:blob.size})})}
 })};`;
 function pedido(id,cliente,extra={}) {return {id,cliente,fecha:'2026-11-16',fecha_entrega:'2026-11-16',quien:'Oscar',direccion:'San Martín 123',estado:'Pendiente',retiro:false,eliminado_en:null,notas:'',pedido_items:[{id:Number(id.slice(1)),producto:'Mozzarella',cantidad:2,orden:0}],...extra};}
-async function setup(browser){
+async function setup(browser,{turnosPlegados=false}={}){
  const pages=[],errors=[],moves=[];
  const db={pedidos:[pedido('p1','Almacén del Centro'),pedido('p2','La Esquina'),pedido('p3','Retiro',{retiro:true}),pedido('p4','Eliminado',{eliminado_en:'2026-11-16'}),pedido('p5','Despachado',{estado:'Despachado'})],prep_cola:[],prep_items:[],prep_productos:[],prep_pedidos:[]};
  db.app_notas=[];db.catalogo_decisiones=[];
@@ -111,6 +111,12 @@ async function setup(browser){
   await page.goto('http://127.0.0.1:4173');
   // Esperar el inicio asincrónico (reloj y sesión) antes de simular el perfil.
   await expect(page.locator('#whoModal')).toHaveClass(/open/);
+  // These flows exercise the orders inside each shift. Open their groups as a
+  // user would; the dedicated folding test covers the default collapsed view.
+  if(!turnosPlegados)await page.evaluate(()=>{
+   const abrir=()=>document.querySelectorAll('details.turno-plegable:not([open])>summary').forEach(s=>s.click());
+   new MutationObserver(abrir).observe(document.body,{childList:true,subtree:true});abrir();
+  });
   await page.evaluate(({w,products})=>{
     state.who=w;state.pin='ok';state.today='2026-11-16';state.products=products.map(productoDeFila_);ultimoRefresh=Date.now();
     document.getElementById('whoModal').classList.remove('open');
@@ -118,10 +124,32 @@ async function setup(browser){
   },{w:who,products:db.productos});
   await expect(page.locator('.rv-connection')).toHaveText('En vivo');
   await expect(page.locator('.rv-empty').first()).not.toContainText('Cargando');
+  if(!turnosPlegados){await page.evaluate(()=>RepartoVivo.montar());await page.clock.runFor(400);}
   return page;
  }
  return {db,open,emit,moves,errors,writes,uploads,fail:()=>{fail=true},failItem:v=>{failItem=v},failPhoto:v=>{failPhoto=v},failLoad:v=>{failLoad=v},changeOnLoad:()=>{changeOnLoad=true},close:async()=>Promise.all(pages.map(p=>p.close()))};
 }
+test('turnos plegables en Pedidos y Reparto conservan apertura al actualizar',async({browser})=>{
+ const s=await setup(browser,{turnosPlegados:true});s.db.pedidos[0].turno='manana';s.db.pedidos[1].turno='tarde';
+ s.db.prep_cola=[{pedido_id:'p1',etapa:'por_preparar',version:1},{pedido_id:'p2',etapa:'preparando',version:1}];
+ const m=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});
+ const gm=m.locator('.rv-por_preparar details[data-turno="manana"]');
+ await expect(gm.locator('summary')).toContainText('Mañana');await expect(gm.locator('.rv-card')).toBeHidden();
+ await gm.locator('summary').click();await expect(gm.locator('.rv-card')).toBeVisible();
+ s.db.pedidos[0].direccion='Nueva dirección';await s.emit('pedidos');
+ await expect(gm.locator('.rv-card')).toContainText('Nueva dirección');await expect(gm).toHaveAttribute('open','');
+ await expect(m.locator('.rv-preparando .rv-card')).toBeHidden();
+ await gm.locator('summary').click();await s.emit('pedidos');await expect(gm.locator('.rv-card')).toBeHidden();
+ const o=await s.open('Oscar');await o.evaluate(rows=>{state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+ const pg=o.locator('#tab-pedidos details[data-turno="manana"]');
+ await expect(pg.locator('.order-card')).toBeHidden();
+ await pg.locator('summary').focus();await o.keyboard.press('Enter');await expect(pg.locator('.order-card')).toBeVisible();
+ await o.evaluate(()=>renderPedidos());await expect(pg.locator('.order-card')).toBeVisible();
+ await expect(o.locator('#tab-pedidos details[data-turno="tarde"] .order-card')).toBeHidden();
+ await pg.locator('summary').click();await o.evaluate(()=>renderPedidos());await expect(pg.locator('.order-card')).toBeHidden();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('turnos manuales: grupos, cambio en vivo, error y carga independiente por turno',async({browser})=>{
  const s=await setup(browser);s.db.pedidos[0].turno='manana';s.db.pedidos[1].turno='tarde';
  s.db.prep_cola=[{pedido_id:'p1',etapa:'listo',version:1},{pedido_id:'p2',etapa:'preparando',version:1}];
@@ -207,7 +235,8 @@ test('gesto corto no cambia de columna, scroll vertical y fallo de escritura',as
 });
 
 async function agarrar(page,id){
- const card=page.locator(`#rv-raiz .rv-card[data-id="${id}"]`);await card.scrollIntoViewIfNeeded();
+ const card=page.locator(`#rv-raiz .rv-card[data-id="${id}"]`);
+ await expect(async()=>{await expect(card).toBeVisible();await card.scrollIntoViewIfNeeded();}).toPass({timeout:5000});
  const r=await card.boundingBox();
  await page.mouse.move(r.x+35,r.y+55);await page.mouse.down();await page.mouse.move(r.x+50,r.y+65,{steps:3});
  await expect(page.locator('.rv-ghost')).toBeVisible();
