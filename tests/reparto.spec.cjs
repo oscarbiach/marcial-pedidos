@@ -1045,3 +1045,25 @@ test('Juan Marcos solo tiene Cargar, Pedidos, WhatsApp y Clientes en PC y móvil
  }
  expect(s.errors).toEqual([]);await s.close();
 });
+
+test('retiros sin turnos al cargar, editar y consultar pedidos',async({browser})=>{
+ const s=await setup(browser,{turnosPlegados:true});s.db.pedidos.find(p=>p.id==='p3').turno='tarde';
+ const p=await s.open('Oscar');
+ await p.evaluate(rows=>{state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+ const retiro=p.locator('#tab-pedidos .order-card.retiro');
+ await expect(retiro).toBeVisible();await expect(retiro.locator('.turno-chip')).toHaveCount(0);
+ await expect(p.locator('details[data-turno] .order-card.retiro')).toHaveCount(0);
+ await p.evaluate(()=>openPedidoDetail('p3'));await expect(p.locator('#detailBody .turno-selector')).toHaveCount(0);
+ await p.evaluate(()=>openPedidoEdit('p3'));await expect(p.locator('#p_turno')).toBeHidden();
+ await p.locator('#p_retiro').uncheck();await expect(p.locator('#p_turno')).toBeVisible();
+ await p.locator('#p_turno').selectOption('manana');await p.locator('#p_retiro').check();await expect(p.locator('#p_turno')).toHaveValue('');
+ await p.evaluate(()=>{window.turnoWrites=[];sb.rpc=(name,args)=>{if(name==='pedido_guardar_turno')window.turnoWrites.push(args);return Promise.resolve({data:{ok:true,id:'p3'}});};});
+ await p.evaluate(()=>sbUpdatePedido({id:'p3',cliente:'Retiro',retiro:true,turno:'tarde',items:[]}));
+ expect(await p.evaluate(()=>turnoWrites[0].p.turno)).toBe('');
+ await p.evaluate(()=>sbSavePedido({id:'nuevo',cliente:'Retiro',retiro:true,turno:'manana',items:[]}));
+ expect(await p.evaluate(()=>turnoWrites[1].p.turno)).toBe('');
+ const carga=await s.open('Oscar');await carga.evaluate(()=>goTab('cargar'));
+ await carga.locator('#n_retiro').check();await expect(carga.locator('#n_turno')).toBeHidden();
+ await carga.locator('#n_retiro').uncheck();await expect(carga.locator('#n_turno')).toBeVisible();
+ expect(s.errors).toEqual([]);await s.close();
+});

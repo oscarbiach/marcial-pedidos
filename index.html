@@ -1602,7 +1602,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=117">
-<link rel="stylesheet" href="turnos.css?v=135">
+<link rel="stylesheet" href="turnos.css?v=137">
 <link rel="stylesheet" href="armado-pedido.css?v=117">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
 <link rel="stylesheet" href="gestion.css?v=136">
@@ -1710,7 +1710,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         </div>
         <div class="form-extras-row">
           <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
-          <label class="retiro-mini"><input type="checkbox" id="n_retiro"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
+          <label class="retiro-mini"><input type="checkbox" id="n_retiro" onchange="Turnos.retiro('n')"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
         </div>
         <div class="extras-body" id="n_extras">
           <div class="row2">
@@ -1950,7 +1950,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       </div>
       <div class="form-extras-row">
         <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
-        <label class="retiro-mini"><input type="checkbox" id="p_retiro"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
+        <label class="retiro-mini"><input type="checkbox" id="p_retiro" onchange="Turnos.retiro('p')"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
       </div>
       <div class="extras-body" id="p_extras">
         <div class="row2">
@@ -2419,7 +2419,7 @@ async function sbSavePedido(data) {
   const p = {
     id: id, fecha: hoyArg(), quien: data.quien || '', cliente: data.cliente,
     fecha_entrega: data.fechaEntrega || '', direccion: data.direccion || '',
-    notas: data.notas || '', retiro: !!data.retiro, turno: data.turno || ''
+    notas: data.notas || '', retiro: !!data.retiro, turno: data.retiro?'':data.turno || ''
   };
   const its = (data.items || []).map((it, i) => ({
     producto: it.prod, cantidad: Number(it.qty) || 1,
@@ -2490,7 +2490,8 @@ async function sbUpdatePedido(data) {
     producto: it.prod, cantidad: Number(it.qty) || 1,
     fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
-  if (Object.prototype.hasOwnProperty.call(data,'turno')) p.turno=data.turno || '';
+  if (data.retiro) p.turno='';
+  else if (Object.prototype.hasOwnProperty.call(data,'turno')) p.turno=data.turno || '';
   const { data: res, error } = await sb.rpc('pedido_guardar_turno', { p: p, its: its, p_editar: true });
   if (error) throw sbError_(error);
   return res;   // {ok:true} o {ok:false, error}
@@ -3262,6 +3263,7 @@ function resetCargarForm() {
   document.getElementById('n_fecha').value = '';
   document.getElementById('n_turno').value = '';
   document.getElementById('n_retiro').checked = false;
+  Turnos.retiro('n');
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
   // En celular no se arranca con una fila vacía: los productos entran por
@@ -3329,7 +3331,7 @@ function submitCargarPedido() {
   // No se espera al servidor: el pedido entra en la cola, aparece en la
   // lista al toque y el formulario queda limpio para el siguiente. El
   // envío corre solo, de fondo.
-  const nuevo = { cliente, direccion, fechaEntrega, turno:document.getElementById('n_turno').value, notas, items, retiro, quien: state.who };
+  const nuevo = { cliente, direccion, fechaEntrega, turno:retiro?'':document.getElementById('n_turno').value, notas, items, retiro, quien: state.who };
   encolarPedido(nuevo);
   // Si venía de «Pedidos para cargar» («Cargar este»), ese pedido queda marcado como cargado.
   if (window.PedidosACargar) PedidosACargar.alGuardar(nuevo.id);
@@ -4413,7 +4415,7 @@ function pedidoBloqueHtml(p) {
         ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
         ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
         ${fecha ? `<span class="blk-fecha${fechaCls}">${fecha}</span>` : ''}
-        <span class="turno-chip">${Turnos.nombre(p.turno)}</span>
+        ${p.retiro?'':`<span class="turno-chip">${Turnos.nombre(p.turno)}</span>`}
       </div>
       <div class="blk-cliente">${esc(p.cliente)}</div>
       ${p.direccion ? `<div class="blk-dir">${dirLinkHtml(p.direccion, 'dir-link')}</div>` : ''}
@@ -4484,7 +4486,7 @@ function pedidoCardHtml(p) {
           ${p.enCola ? '<span class="cola-tag">' + mIco('upload', 'ico-sm') + ' Enviando…</span>' : ''}
           ${p.errorCola ? '<span class="cola-tag err">' + mIco('triangle-alert', 'ico-sm') + ' Sin enviar</span>' : ''}
           ${chip}
-          <span class="turno-chip">${Turnos.nombre(p.turno)}</span>
+          ${p.retiro?'':`<span class="turno-chip">${Turnos.nombre(p.turno)}</span>`}
         </div>
       </div>
       ${pedidoRepoHtml(p)}
@@ -5828,7 +5830,7 @@ function openPedidoDetail(id) {
     ${pedidoRepoHtml(p)}
     <div class="detail-section">
       <h4>Info</h4>
-      ${p.estado==='Pendiente'&&!sinConfirmar&&state.who!=='Mateo'?Turnos.selector(p):`<div class="detail-item"><span>Turno</span><b>${Turnos.nombre(p.turno)}</b></div>`}
+      ${p.retiro?'':p.estado==='Pendiente'&&!sinConfirmar&&state.who!=='Mateo'?Turnos.selector(p):`<div class="detail-item"><span>Turno</span><b>${Turnos.nombre(p.turno)}</b></div>`}
       <div class="detail-item"><span>Cliente</span><b>${esc(p.cliente)}</b></div>
       ${p.direccion ? `<div class="detail-item"><span>Dirección</span>${dirLinkHtml(p.direccion, 'dir-link fuerte')}</div>` : ''}
       <div class="detail-item"><span>Fecha de carga</span><b>${fmtDate(p.fecha)}</b></div>
@@ -5899,6 +5901,7 @@ function openPedidoEdit(id, pedidoActual) {
   document.getElementById('p_fecha').value = p.fechaEntrega || '';
   document.getElementById('p_turno').value = p.turno || '';
   document.getElementById('p_retiro').checked = !!p.retiro;
+  Turnos.retiro('p');
   // Si el pedido ya tiene fecha, dirección u observación, los extras
   // arrancan abiertos para que se vean; si no, quedan plegados.
   setExtrasOpen('p', !!(p.fechaEntrega || p.direccion || p.notas));
@@ -6605,7 +6608,7 @@ function abrirInstalar() {
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="turnos.js?v=135"></script>
+<script src="turnos.js?v=137"></script>
 <script src="gestion.js?v=136"></script>
 <script src="admin.js?v=130"></script>
 <script src="reparto-fotos.js?v=117"></script>
