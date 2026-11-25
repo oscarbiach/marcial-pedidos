@@ -1067,3 +1067,41 @@ test('retiros sin turnos al cargar, editar y consultar pedidos',async({browser})
  await carga.locator('#n_retiro').uncheck();await expect(carga.locator('#n_turno')).toBeVisible();
  expect(s.errors).toEqual([]);await s.close();
 });
+
+test('monitor de comprometido: clientes, fechas, retiros, actualización y pantalla grande',async({browser})=>{
+ const s=await setup(browser);const p=await s.open('Oscar',{width:1920,height:1080});
+ await p.evaluate(rows=>{state.pedidos=rows.filter(r=>!r.eliminado_en).map(mapPedido_);goTab('pedidos');StockPantalla.abrir();},s.db.pedidos);
+ await expect(p.locator('#stock-pantalla')).toBeVisible();
+ await expect(p.locator('#sp-cifras')).toHaveText('1 producto · 3 pedidos');
+ await expect(p.locator('#sp-grid')).toContainText('Almacén del Centro');await expect(p.locator('#sp-grid')).toContainText('Retiro');
+ await expect(p.locator('#sp-grid')).not.toContainText('Despachado');await expect(p.locator('#sp-grid')).not.toContainText('Eliminado');
+ expect(await p.evaluate(()=>document.getElementById('appShell').inert)).toBe(true);
+ await p.locator('#sp-filtro').selectOption('manana');await expect(p.locator('.sp-vacio')).toBeVisible();
+ await p.locator('#sp-filtro').selectOption('todos');
+ await p.evaluate(()=>{state.pedidos.find(p=>p.id==='p1').estado='Despachado';renderPedidos();});
+ await expect(p.locator('#sp-cifras')).toHaveText('1 producto · 2 pedidos');
+ await p.evaluate(()=>{state.pedidos=Array.from({length:32},(_,i)=>({id:'k'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega:'2026-11-16',items:[{prod:'Mozzarella',qty:1}]}));renderPedidos();});
+ await expect(p.locator('#sp-pagina')).toHaveText('1 / 2');await expect(p.locator('.sp-card')).toHaveCount(6);
+ await p.screenshot({path:'test-results/stock-monitor-1920.png'});
+ expect(await p.locator('.sp-card').evaluateAll(es=>es.every(e=>e.scrollHeight<=e.clientHeight+1))).toBe(true);
+ await p.clock.runFor(15000);await expect(p.locator('#sp-pagina')).toHaveText('2 / 2');
+ await p.locator('#sp-pausa').click();await p.clock.runFor(15000);await expect(p.locator('#sp-pagina')).toHaveText('2 / 2');
+ await p.setViewportSize({width:1366,height:768});await p.locator('#sp-anterior').click();
+ await p.screenshot({path:'test-results/stock-monitor-1366.png'});
+ expect(await p.locator('.sp-card').evaluateAll(es=>es.every(e=>e.scrollHeight<=e.clientHeight+1))).toBe(true);
+ await p.context().setOffline(true);await expect(p.locator('#sp-estado')).toContainText('Sin conexión');
+ await p.locator('[data-sp="cerrar"]').click();await expect(p.locator('#stock-pantalla')).toHaveCount(0);
+ expect(await p.evaluate(()=>document.getElementById('appShell').inert)).toBe(false);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('monitor conserva medidas distintas, no cuenta cola local y abre desde enlace',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{state.pedidos=[{id:'a',cliente:'A',estado:'Pendiente',fechaEntrega:'',items:[{prod:'Aceite',qty:2},{prod:'Aceite',qty:3,unidades:true},{prod:'Mozzarella',qty:1,fetear:true},{prod:'Mozzarella',qty:2}]},{id:'b',cliente:'No confirmado',estado:'Pendiente',enCola:true,items:[{prod:'Aceite',qty:999}]}];history.replaceState(null,'','?pantalla=comprometido');StockPantalla.iniciar();});
+ await expect(p.locator('#stock-pantalla')).toBeVisible();
+ const d=await p.evaluate(()=>StockPantalla._datos());expect(d.productos).toHaveLength(4);expect(d.pedidos).toHaveLength(1);
+ expect(d.productos.filter(x=>x.prod==='Aceite').map(x=>x.qty).sort()).toEqual([2,3]);
+ await expect(p.locator('#sp-grid')).toContainText('Sin fecha de entrega');await expect(p.locator('#sp-grid')).not.toContainText('999');
+ await p.evaluate(()=>{state.who='Mateo';StockPantalla.render();});await expect(p.locator('#stock-pantalla')).toHaveCount(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
