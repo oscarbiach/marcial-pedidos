@@ -1,0 +1,35 @@
+const {PGlite}=require('@electric-sql/pglite');
+const fs=require('fs'),assert=require('node:assert/strict'),{randomUUID}=require('crypto');
+const O='dbcd0e59-fc02-4c23-b1d6-aba342da21e8',J='e3e52cc0-d8e3-41e0-a641-26e33ffbcde6',M='e11a2d13-2b31-4fc4-bac2-26a882caa51b',X='00000000-0000-0000-0000-000000000001';
+(async()=>{const db=new PGlite();try{
+ await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);insert into auth.users values('${O}'),('${J}'),('${M}'),('${X}');create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.uid',true),'')::uuid$$;`);
+ await db.exec(fs.readFileSync('supabase/migrations/20261125_bitacora.sql','utf8'));
+ const as=uid=>db.query("select set_config('test.uid',$1,false)",[uid||'']);
+ const call=async(n,a=[])=>{const r=await db.query(`select ${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as r`,a);return r.rows[0].r;};
+ await as(X);await assert.rejects(call('bitacora_leer'),/Sin acceso/);await assert.rejects(call('bitacora_marcar',[randomUUID(),'entrada']),/Sin permiso/);
+ await as(O);const op=randomUUID(),a=await call('bitacora_marcar',[op,'entrada']);assert.equal(a.jornada.user_id,O);
+ assert.deepEqual(await call('bitacora_marcar',[op,'entrada']),a);
+ await assert.rejects(call('bitacora_marcar',[randomUUID(),'entrada']),/Ya tenés/);
+ let d=await call('bitacora_leer');assert.equal(d.personas.length,1);assert.equal(d.personas[0].activa.id,a.jornada.id);
+ await as(M);assert.equal((await call('bitacora_leer')).jornadas.length,0);await assert.rejects(call('bitacora_marcar',[randomUUID(),'salida']),/No tenés/);await assert.rejects(call('bitacora_marcar',[op,'entrada']),/Operación ya utilizada/);
+ await as(J);d=await call('bitacora_leer');assert.equal(d.personas.length,2);assert.equal(d.personas.filter(p=>p.activa).length,1);await assert.rejects(call('bitacora_marcar',[randomUUID(),'entrada']),/Sin permiso/);
+ await as(O);const out=randomUUID();const b=await call('bitacora_marcar',[out,'salida']);assert.ok(new Date(b.jornada.salida)>new Date(b.jornada.entrada));assert.deepEqual(await call('bitacora_marcar',[out,'salida']),b);
+ const semana=(await db.query("select (date_trunc('week',now() at time zone 'America/Argentina/Buenos_Aires')::date-7)::text as d")).rows[0].d;
+ const desde=semana+'T08:00:00-03:00',hasta=semana+'T12:00:00-03:00';
+ await assert.rejects(call('bitacora_corregir',[randomUUID(),null,M,null,desde,hasta,'Olvidó marcar']),/Solo Joaquín/);
+ await as(J);const cop=randomUUID();const c=await call('bitacora_corregir',[cop,null,M,null,desde,hasta,'Olvidó marcar']);assert.deepEqual(await call('bitacora_corregir',[cop,null,M,null,desde,hasta,'Olvidó marcar']),c);
+ d=await call('bitacora_leer',[semana]);assert.equal(d.personas.find(p=>p.user_id===M).segundos,14400);assert.equal(d.cambios.length,1);assert.equal(d.cambios[0].autor_id,J);
+ await assert.rejects(call('bitacora_corregir',[randomUUID(),null,M,null,desde,hasta,'Superpuesto']),/superpone/);
+ await call('bitacora_corregir',[randomUUID(),c.jornada.id,M,1,desde,semana+'T13:00:00-03:00','Horario correcto']);
+ await assert.rejects(call('bitacora_corregir',[randomUUID(),c.jornada.id,M,1,desde,hasta,'Versión vieja']),/horario cambió/);
+ await assert.rejects(call('bitacora_corregir',[randomUUID(),null,M,null,hasta,desde,'Mal orden']),/Revisá/);
+ await assert.rejects(call('bitacora_corregir',[randomUUID(),null,M,null,'2099-01-01T12:00:00Z',null,'Futuro']),/Revisá/);
+ // Jornada que cruza de domingo a lunes: solo las dos horas dentro de la semana.
+ const cruce=(await db.query("select ($1::date-1)::text as d",[semana])).rows[0].d;
+ await call('bitacora_corregir',[randomUUID(),null,O,null,cruce+'T23:00:00-03:00',semana+'T02:00:00-03:00','Cruce de semana']);
+ d=await call('bitacora_leer',[semana]);assert.equal(d.personas.find(p=>p.user_id===O).segundos,7200);assert.equal(d.personas.find(p=>p.user_id===M).segundos,18000);
+ await as(M);d=await call('bitacora_leer',[semana]);assert.equal(d.personas.length,1);assert.equal(d.cambios.length,0);assert.ok(d.jornadas.every(j=>j.user_id===M));
+ assert.equal((await db.query("select has_table_privilege('authenticated','bitacora_jornadas','INSERT') as ok")).rows[0].ok,false);
+ assert.equal((await db.query("select has_function_privilege('anon','bitacora_leer(date)','EXECUTE') as ok")).rows[0].ok,false);
+ console.log('OK: bitácora, roles, hora del servidor, idempotencia, superposición, auditoría y corte semanal argentino.');
+ }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
