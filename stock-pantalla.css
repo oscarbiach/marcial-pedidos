@@ -17,3 +17,11 @@
 @media(min-width:1700px){#sp-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.sp-card h2{font-size:26px}.sp-fila b{font-size:23px}.sp-fila{padding:17px 0}.sp-fila strong{font-size:27px}}
 @media(max-height:850px){#stock-pantalla{padding:16px 24px;gap:10px}.sp-cab{margin:-16px -24px 0;padding:12px 24px}.sp-titulo h1{font-size:25px}.sp-card>header{padding:10px 14px}.sp-card h2{font-size:20px}.sp-fila{padding:7px 0}.sp-fila b{font-size:18px}.sp-fila span{font-size:14px}.sp-fila strong{font-size:20px}}
 @media(max-width:899px){.sp-titulo img{display:none}.sp-cab{flex-wrap:wrap}.sp-titulo h1{font-size:24px}#sp-grid{grid-template-columns:1fr;min-height:650px}.sp-pie>span{display:none}.sp-resumen{font-size:15px;flex-wrap:wrap}.sp-controles{flex-wrap:wrap}}
+
+/* Panel fijo: todos los panes, sin tarjetas duplicadas ni paginación. */
+#stock-pantalla #sp-grid{display:block;columns:2;column-gap:18px;column-fill:balance;overflow:visible;--sp-texto:24px}
+#sp-grid .sp-card{display:inline-block;vertical-align:top;width:100%;box-sizing:border-box;margin:0 0 14px;break-inside:avoid;overflow:visible;box-shadow:none}
+#sp-grid .sp-card>header{padding:10px 14px;gap:10px}#sp-grid .sp-card h2{font-size:var(--sp-texto)}#sp-grid .sp-card header strong{font-size:calc(var(--sp-texto) + 4px)}
+#sp-grid .sp-filas{padding:0 14px}#sp-grid .sp-fila{padding:7px 0}#sp-grid .sp-fila b{font-size:var(--sp-texto)}#sp-grid .sp-fila span{font-size:max(16px,calc(var(--sp-texto) - 4px))}#sp-grid .sp-fila strong{font-size:var(--sp-texto)}
+#stock-pantalla #sp-grid.sp-exceso{overflow:auto;column-fill:auto}#sp-capacidad{color:#8a4210;font-weight:700;max-width:700px}#sp-capacidad[hidden]{display:none}
+@media(max-width:899px){#stock-pantalla #sp-grid{min-height:0}}
