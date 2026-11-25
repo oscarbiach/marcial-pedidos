@@ -1600,6 +1600,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="seguimiento-clientes.css">
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
+<link rel="stylesheet" href="bitacora.css?v=140">
 <link rel="stylesheet" href="stock-pantalla.css?v=139">
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=117">
@@ -1675,6 +1676,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="clientes" onclick="goTab('clientes')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg>Clientes</button>
       <button data-tab="whatsapp" onclick="goTab('whatsapp')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg>WhatsApp</button>
       <button data-tab="stock" onclick="goTab('stock')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg>Stock</button>
+      <button data-tab="bitacora" onclick="goTab('bitacora')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-clock"/></svg>Bitácora</button>
       <button data-tab="notas" onclick="goTab('notas')">Notas</button>
       <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo
            aviso (para reactivar alguno, descomentar acá, en el bottomNav
@@ -1830,6 +1832,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- STOCK: recuento, stock actual y movimientos. Solo Oscar y Joaquín (stock.js) -->
     <div id="tab-stock" class="tab-panel"><div id="st-raiz"></div></div>
+    <div id="tab-bitacora" class="tab-panel"><div id="bt-raiz"></div></div>
     <div id="tab-notas" class="tab-panel"><div id="gestion-notas" class="gestion"></div></div>
 
   </main>
@@ -1842,6 +1845,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <button data-tab="clientes" class="bn-item" onclick="goTab('clientes')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-users"/></svg></span>Clientes</button>
     <button data-tab="whatsapp" class="bn-item" onclick="goTab('whatsapp')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-message-circle"/></svg></span>WhatsApp</button>
     <button data-tab="stock" class="bn-item" onclick="goTab('stock')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></span>Stock</button>
+    <button data-tab="bitacora" class="bn-item" onclick="goTab('bitacora')"><span><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-clock"/></svg></span>Bitácora</button>
     <button data-tab="notas" class="bn-item" onclick="goTab('notas')"><span>☷</span>Notas</button>
     <!-- Feteo, Fijos, Muestras y Visitar ocultos hasta nuevo aviso:
     <button data-tab="feteo" class="bn-item" onclick="goTab('feteo')"><span>🔪</span>Feteo</button>
@@ -2755,6 +2759,7 @@ function leerCache() {
 }
 
 function mostrarApp() {
+  window.Bitacora?.iniciar();
   document.body.classList.toggle('usuario-juan-marcos', state.who === 'Juan Marcos');
   if (window.GestionUI) GestionUI.iniciar();
   if (window.RepartoVivo) RepartoVivo.acceso();
@@ -3174,10 +3179,11 @@ window.addEventListener('online', () => refrescarSiCorresponde(20000));
 // ═══════════════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════════════
-const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', notas:'Notas' };
+const TAB_TITLES = { cargar:'Cargar Pedido', pedidos:'Pedidos', reparto:'Reparto', clientes:'Clientes', whatsapp:'WhatsApp', stock:'Stock', notas:'Notas', bitacora:'Bitácora' };
 
 function setTab(tab) {
-  if (state.who === 'Juan Marcos' && !['cargar','pedidos','whatsapp','clientes'].includes(tab)) tab = 'pedidos';
+  if(tab==='bitacora'&&!window.Bitacora?.permitido())tab='pedidos';
+  if (state.who === 'Juan Marcos' && !['cargar','pedidos','whatsapp','clientes','bitacora'].includes(tab)) tab = 'pedidos';
   // Productos ya no es una pestaña: vive en el panel de Administración (admin.js).
   if (tab === 'productos') { if (window.AdminUI && window.GestionUI && GestionUI.admin()) { AdminUI.abrir('productos'); return; } tab = 'pedidos'; }
   if(tab==='notas'&&!window.GestionUI?.oficina())tab='pedidos';
@@ -3226,6 +3232,7 @@ function setTab(tab) {
   if (window.PedidosFijos && tab === 'pedidos') PedidosFijos.refrescar();
   if (tab === 'stock' && window.StockUI) StockUI.abrir();
   if(window.GestionUI&&tab==='notas')GestionUI.abrir(tab);
+  if(tab==='bitacora')Bitacora.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
   // pestañas no pinta nada.
   actualizarBarraRep();
@@ -6605,6 +6612,7 @@ function abrirInstalar() {
 <script src="whatsapp-oportunidades.js"></script>
 <script src="whatsapp-precios.js"></script>
 <script src="stock.js"></script>
+<script src="bitacora.js?v=140"></script>
 <script src="stock-pantalla.js?v=139"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>

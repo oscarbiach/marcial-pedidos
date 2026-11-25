@@ -1027,13 +1027,13 @@ test('PIN de otro usuario no instala sesión y Juan Marcos admite su identidad a
  expect(s.errors).toEqual([]);await s.close();
 });
 
-test('Juan Marcos solo tiene Cargar, Pedidos, WhatsApp y Clientes en PC y móvil',async({browser})=>{
+test('Juan Marcos tiene las interfaces habilitadas y Bitácora en PC y móvil',async({browser})=>{
  const s=await setup(browser);
  for(const mobile of [false,true]){
   const p=await s.open('Juan Marcos',mobile?{width:390,height:844}:undefined,mobile?{hasTouch:true}:{});
   const nav=mobile?'#bottomNav':'#pcNav';
   await expect(p.locator('#notas-bell')).toBeHidden();
-  for(const tab of ['cargar','pedidos','whatsapp','clientes'])await expect(p.locator(`${nav} [data-tab="${tab}"]`)).toBeVisible();
+  for(const tab of ['cargar','pedidos','whatsapp','clientes','bitacora'])await expect(p.locator(`${nav} [data-tab="${tab}"]`)).toBeVisible();
   for(const tab of ['reparto','notas','productos','stock']){
    await expect(p.locator(`${nav} [data-tab="${tab}"]`)).toBeHidden();
    await p.evaluate(t=>goTab(t),tab);await expect(p.locator('#tab-pedidos')).toHaveClass(/active/);
@@ -1103,5 +1103,53 @@ test('monitor conserva medidas distintas, no cuenta cola local y abre desde enla
  expect(d.productos.filter(x=>x.prod==='Aceite').map(x=>x.qty).sort()).toEqual([2,3]);
  await expect(p.locator('#sp-grid')).toContainText('Sin fecha de entrega');await expect(p.locator('#sp-grid')).not.toContainText('999');
  await p.evaluate(()=>{state.who='Mateo';StockPantalla.render();});await expect(p.locator('#stock-pantalla')).toHaveCount(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('bitácora: marcación personal, resumen de Joaquín y corrección con motivo',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{
+  window.btRows=[];window.btCorrecciones=[];const rpc=sb.rpc;
+  sb.rpc=async(n,a)=>{
+   if(n==='bitacora_leer'){
+    const supervisor=state.who==='Joaquin',personas=(supervisor?['Oscar','Juan Marcos']:[state.who]).map(nombre=>({nombre,user_id:nombre,activa:btRows.find(j=>j.user_id===nombre&&!j.salida)||null,segundos:3600,segundos_cerrados:0}));
+    return {data:{ahora:'2026-11-16T15:00:00Z',semana:a.p_semana||'2026-11-16',yo:{nombre:state.who,rol:supervisor?'supervisor':'trabajador'},personas,jornadas:btRows.filter(j=>supervisor||j.user_id===state.who).map(j=>({...j,nombre:j.user_id,segundos_semana:3600})),cambios:[]}};
+   }
+   if(n==='bitacora_marcar'){
+    if(a.p_accion==='entrada')btRows.push({id:'b1',user_id:state.who,entrada:'2026-11-16T11:00:00Z',salida:null,version:1});else btRows.find(j=>j.user_id===state.who&&!j.salida).salida='2026-11-16T15:00:00Z';
+    return {data:{ok:true}};
+   }
+   if(n==='bitacora_corregir'){btCorrecciones.push(a);const j=btRows.find(x=>x.id===a.p_id);j.entrada=a.p_entrada;j.salida=a.p_salida;j.version++;return {data:{ok:true}};}
+   return rpc(n,a);
+  };goTab('bitacora');
+ });
+ await expect(p.getByRole('button',{name:'Marcar entrada',exact:true})).toBeVisible();
+ await p.getByRole('button',{name:'Marcar entrada',exact:true}).click();await expect(p.getByRole('button',{name:'Marcar salida',exact:true})).toBeVisible();
+ await expect(p.locator('.bt-marca')).toContainText('Estás en jornada');
+ await p.evaluate(()=>{state.who='Joaquin';mostrarApp();goTab('bitacora');});
+ await expect(p.locator('.bt-personas article')).toHaveCount(2);await expect(p.locator('.bt-estado.on')).toHaveCount(1);
+ await expect(p.locator('[data-bt="marcar"]')).toHaveCount(0);
+ await p.getByRole('button',{name:'Corregir',exact:true}).click();
+ await p.locator('#bt-modal [name="salida"]').fill('2026-11-16T11:30');await p.locator('#bt-modal [name="motivo"]').fill('Olvidó marcar salida');
+ await p.getByRole('button',{name:'Guardar corrección',exact:true}).click();await expect(p.locator('#bt-modal')).toHaveCount(0);
+ expect(await p.evaluate(()=>btCorrecciones[0].p_salida)).toBe('2026-11-16T14:30:00.000Z');
+ await expect(p.locator('.bt-estado.on')).toHaveCount(0);
+ await p.screenshot({path:'test-results/bitacora-joaquin.png'});
+ await p.evaluate(()=>{state.who='Juan Marcos';mostrarApp();goTab('bitacora');});await expect(p.locator('.bt-personas article')).toHaveCount(1);await expect(p.locator('.bt-personas')).toContainText('Juan Marcos');
+ await p.setViewportSize({width:390,height:844});await p.screenshot({path:'test-results/bitacora-juan-marcos.png'});
+ await p.evaluate(()=>{state.who='Thiago';mostrarApp();goTab('bitacora');});await expect(p.locator('#tab-bitacora')).not.toHaveClass(/active/);await expect(p.locator('#pcNav [data-tab="bitacora"]')).toBeHidden();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('bitácora reintenta una respuesta perdida con la misma operación',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{window.btOps=[];window.btActivo=false;const original=sb.rpc;sb.rpc=async(n,a)=>{
+  if(n==='bitacora_leer')return {data:{ahora:'2026-11-16T15:00:00Z',semana:'2026-11-16',yo:{rol:'trabajador'},personas:[{user_id:'Oscar',nombre:'Oscar',segundos:0,segundos_cerrados:0,activa:btActivo?{id:'x',entrada:'2026-11-16T15:00:00Z'}:null}],jornadas:[],cambios:[]}};
+  if(n==='bitacora_marcar'){btOps.push(a);btActivo=true;if(btOps.length===1)throw Error('Respuesta perdida');return {data:{ok:true}};}
+  return original(n,a);
+ };goTab('bitacora');});
+ await p.getByRole('button',{name:'Marcar entrada',exact:true}).click();await expect(p.getByRole('button',{name:'Reintentar entrada',exact:true})).toBeVisible();
+ await p.getByRole('button',{name:'Reintentar entrada',exact:true}).click();await expect(p.getByRole('button',{name:'Marcar salida',exact:true})).toBeVisible();
+ expect(await p.evaluate(()=>btOps[0].p_op===btOps[1].p_op)).toBe(true);
  expect(s.errors).toEqual([]);await s.close();
 });
