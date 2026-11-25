@@ -12,3 +12,6 @@
 .turno-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}.turno-filtros button{border:1px solid #cad6e4;border-radius:20px;background:#fff;color:#52647a;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer}
 .turno-filtros button[aria-pressed=true]{background:#173453;color:white;border-color:#173453}.usuario-mateo .turno-filtros button{min-height:44px;font-size:16px;flex:1}
 .turno-chip{display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:4px 8px;background:#edf1f5;color:#52647a}
+
+.retiros-grupo{display:flex;flex-direction:column;gap:10px;width:100%;min-width:0}
+.turno-campo[hidden]{display:none!important}
