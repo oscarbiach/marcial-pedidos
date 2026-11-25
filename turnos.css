@@ -1,8 +1,10 @@
-.turno-grupo{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%}
+.turno-grupo{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%;box-sizing:border-box;border:1px solid #bcc8d5;border-left:5px solid #718399;border-radius:10px;background:#f3f5f8;padding:6px;margin:6px 0 12px}
+.turno-grupo[data-turno="manana"]{border-color:#dcae50;border-left-color:#bc820c;background:#fffaf0}
+.turno-grupo[data-turno="tarde"]{border-color:#98a8de;border-left-color:#5269b1;background:#f3f5ff}
 .turno-titulo{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#edf1f5;color:#52647a;font-size:13px;font-weight:800}
-.turno-manana{background:#fff0cd;color:#78500e}.turno-tarde{background:#e6ebff;color:#414f95}
+.turno-manana{background:#ffe2a0;color:#644100}.turno-tarde{background:#d6dffd;color:#30477f}
 .turno-cantidad{font-size:12px;margin-left:auto}.turno-selector{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#52647a;margin:8px 0}
-.turno-plegable{display:block}.turno-plegable>summary{cursor:pointer;list-style:none;min-height:40px;margin:0;user-select:none}
+.turno-plegable{display:block}.turno-plegable>summary{cursor:pointer;list-style:none;min-height:44px;box-sizing:border-box;margin:0;user-select:none;font-size:14px;letter-spacing:.02em}
 .turno-plegable>summary::-webkit-details-marker{display:none}.turno-plegable>summary::after{content:'⌄';font-size:18px;line-height:1;transition:transform .18s ease}
 .turno-plegable[open]>summary::after{transform:rotate(180deg)}.turno-plegable>summary:focus-visible{outline:2px solid #5487c7;outline-offset:2px}
 .turno-contenido{display:flex;flex-direction:column;gap:10px;padding-top:10px}.usuario-mateo .turno-plegable>summary{min-height:46px;font-size:16px}
@@ -13,5 +15,7 @@
 .turno-filtros button[aria-pressed=true]{background:#173453;color:white;border-color:#173453}.usuario-mateo .turno-filtros button{min-height:44px;font-size:16px;flex:1}
 .turno-chip{display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:4px 8px;background:#edf1f5;color:#52647a}
 
-.retiros-grupo{display:flex;flex-direction:column;gap:10px;width:100%;min-width:0}
+.retiros-grupo{display:flex;flex-direction:column;gap:10px;width:100%;min-width:0;box-sizing:border-box;border:1px solid #80b9a9;border-left:5px solid #117a65;border-radius:10px;background:#f0faf6;padding:6px;margin:6px 0 12px}
+.retiros-grupo>.turno-titulo{margin:0;background:#d4eee3;color:#0d604e;min-height:44px;box-sizing:border-box;font-size:14px}
+.turno-cantidad{background:#fff;border-radius:20px;padding:3px 9px;color:inherit}
 .turno-campo[hidden]{display:none!important}
