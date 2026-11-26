@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),C=require('../seguimiento-contexto.js');
+const p=(nombre,extra={})=>({nombre,clave:nombre.toLowerCase(),veces:3,ultima:'2026-11-24',...extra});
+const cliente={nombre:'Prueba',clave:'prueba',nFechas:4,pedidoIds:['1'],productos:[p('Pan clásico')],dejoDeTodos:[]};
+const otros=[1,2,3].map(i=>({clave:'otro'+i,productos:[p('Pan clásico'),p('Papas congeladas')]}));
+const catalogo=[{n:'Pan clásico'},{n:'Papas congeladas'},{n:'Aceite',act:false}];
+const pedido={id:'1',cliente:'Prueba',fecha:'2026-11-20',fechaDespacho:'2026-11-21',estado:'Despachado',items:[{prod:'Pan clásico',qty:2}]};
+const repo={...pedido,id:'r',fecha:'2026-11-25',fechaDespacho:'',estado:'Pendiente',notas:'🔁 REPOSICIÓN — falta pan'};
+const base={cliente,clientes:otros,pedidos:[pedido],catalogo,hoy:'2026-11-26'};
+let d=C.analizar(base);assert.equal(d.ultimo.id,'1');assert.equal(d.matriz[0].estado,'Habitual');assert.deepEqual(d.sugerencias,[{nombre:'Papas',clientes:3}]);
+d=C.analizar({...base,pedidos:[pedido,repo]});assert.equal(d.pendientes.length,1);assert.equal(d.sugerencias.length,0);assert.equal(d.ultimo.id,'1');
+assert.equal(C.analizar({...base,pedidos:[pedido,{...repo,estado:'Cancelado'}]}).pendientes.length,0);
+assert.equal(C.analizar({...base,pedidos:[pedido,{...repo,eliminado_en:'2026-11-26'}]}).pendientes.length,0);
+assert.equal(C.analizar({...base,clientes:otros.slice(0,2)}).sugerencias.length,0);
+assert.equal(C.analizar({...base,cliente:{...cliente,nFechas:1}}).sugerencias.length,0);
+assert.equal(C.analizar({...base,catalogo:[catalogo[0]]}).sugerencias.length,0);
+assert.equal(C.analizar({...base,reglas:[{tipo:'retirado',producto:'papas congeladas'}]}).sugerencias.length,0);
+assert.equal(C.analizar({...base,clientes:otros.map(c=>({...c,productos:c.productos.map(p=>({...p,ultima:'2025-01-01'}))}))}).sugerencias.length,0);
+d=C.analizar({...base,cliente:{...cliente,productos:[p('Pan clásico'),p('Pasar a visitar')],dejoDeTodos:[p('Pan clásico')]}});assert.equal(d.sinClasificar,1);assert.equal(d.matriz[0].estado,'Dejó de pedir');
+d=C.analizar({...base,contactos:[{resultado:'tiene_stock',nota:'Volver el lunes',creado_en:'2026-11-26T15:00:00Z'}]});assert.equal(d.ultimoContacto.nota,'Volver el lunes');assert.equal(d.eventos[0].tipo,'Tiene stock');
+console.log('OK: contexto, reposiciones, catálogo, evidencia mínima, privacidad por cartera, reglas y antigüedad.');
+
+d=C.analizar({...base,contactos:[{resultado:'otro',creado_en:'2026-11-26T01:00:00Z'}]});assert.equal(d.eventos[0].fecha,'2026-11-25');

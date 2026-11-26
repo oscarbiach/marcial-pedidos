@@ -92,7 +92,7 @@
   }
   function recalcular() {
     const todos = mezclar();
-    const huella = todos.length + '|' + hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + todos.reduce((h, p) => h + String(p.id).length + String(p.estado).length + String(p.fechaDespacho || '').length + String(p.notas || '').length + (p.fechaPedido ? Number(String(p.fechaPedido).replace(/\D/g, '')) % 100000 : 0), 0) + '|' + JSON.stringify(todos.map(p=>p.cliente)) + '|' + JSON.stringify((estadoApp() && estadoApp().clientesBaja) || []);
+    const huella = hoy() + '|' + E.datos.ts + '|' + E.datos.estado + '|' + E.ver + '|' + JSON.stringify(todos.map(p=>[p.id,p.cliente,p.estado,p.fecha,p.fechaPedido,p.fechaDespacho,p.fechaEntrega,p.notas,p.items,p.eliminado_en])) + '|' + JSON.stringify((estadoApp() && estadoApp().clientesBaja) || []);
     if (E.calc && E.huella === huella) return E.calc;
     E.huella = huella; E.calc = S.calcular(todos, hoy(), datosOk() ? { decisiones: decisionesVista(), reglas: E.datos.reglas, usuario: usuarioMotor(), meta: metaMapa() } : undefined);
     return E.calc;
@@ -380,7 +380,7 @@
   const nombreCelda = c => `<button type="button" class="sv-linkname" data-sc="fila" data-k="${at(c.clave)}"${E.sel === c.clave ? ' aria-current="true"' : ''}>${esc(c.nombre)}</button>${dirCorta(c) ? `<div class="sv-sub sv-dir">${ico('map-pin', 'ico-sm')}${esc(dirCorta(c))}</div>` : ''}`;
 
   // Navegación secundaria (chips) + buscador de clientes a la derecha
-  const navSecundaria = () => `<div class="sv-nav"><div class="sv-nav-c" role="group" aria-label="Secciones">${VISTAS.map(([v, t, i]) => `<button type="button" class="sv-chip" data-sc="vista" data-v="${v}" aria-pressed="${E.vista === v}">${ico(i, 'ico-sm')}${t}</button>`).join('')}</div>${buscador()}</div>`;
+  const navSecundaria = () => `<div class="sv-nav"><div class="sv-nav-c" role="group" aria-label="Secciones">${VISTAS.map(([v, t, i]) => `<button type="button" class="sv-chip" data-sc="vista" data-v="${v}" aria-pressed="${E.vista === v}">${ico(i, 'ico-sm')}${t}</button>`).join('')}</div>${buscador()}<a class="sc-guia" href="guia-seguimiento.html" target="_blank" rel="noopener">ⓘ Guía rápida</a></div>`;
   const cabecera = (icono, titulo, sub, derecha) => `<div class="sv-head"><div><h1>${icono ? ico(icono) : ''}${esc(titulo)}</h1><p>${sub}</p></div>${derecha || ''}</div>`;
   const etiquetasEnUso = calc => { const m = new Map(); calc.clientes.forEach(c => (c.etiquetas || []).forEach(e => m.set(e.id, e))); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
   // «Filtrar:» Todos · Hablarles · Seguimiento · Atrasados · una por etiqueta
@@ -647,6 +647,19 @@
       ${c.lleva.length ? `<p class="sc-lbl">Suele llevar</p>${lista(c.lleva, 'package')}` : '<p class="sc-vacio">Todavía sin productos registrados.</p>'}
       ${cambiosProductos(c)}</section>`;
   }
+  function contextoComercial(c) {
+    const d = SegContexto.analizar({cliente:c,clientes:E.calc.clientes,pedidos:mezclar(),catalogo:estadoApp().products||[],contactos:(E.contactos.get(c.clave)||{}).lista||[],hoy:hoy(),reglas:E.datos.reglas||[]});
+    const items = p => (p.items||[]).map(i=>`<li><b>${typeof itemLabelCorto==='function'?itemLabelCorto(i):esc(i.qty)}</b> ${esc(i.prod)}</li>`).join('');
+    const ct=d.ultimoContacto, r=ct&&(RES[ct.resultado]||['Contacto']);
+    return `<section class="sc-f-sec sc-contexto"><h4>Antes de hablarle</h4>
+      ${d.pendientes.length?`<div class="sc-pendiente-repo"><b>Primero revisar · ${d.pendientes.length} reposición${d.pendientes.length===1?'':'es'} pendiente${d.pendientes.length===1?'':'s'}</b>${d.pendientes.map(p=>`<ul>${items(p)}</ul><span>${p.fechaEntrega?'Prevista: '+esc(F.fechaLarga(p.fechaEntrega)):'Sin fecha de entrega'}</span>`).join('')}</div>`:''}
+      <div class="sc-contexto-grid"><div><h5>Último pedido${d.ultimo?' · '+esc(corta(d.ultimo.fechaPedido||d.ultimo.fecha)):''}</h5>${d.ultimo?`<ul>${items(d.ultimo)}</ul>${d.ultimo.notas?`<p>${esc(d.ultimo.notas)}</p>`:''}`:'Sin pedido registrado'}</div>
+      <div><h5>Último contacto</h5>${ct?`<b>${esc(r[0])}</b>${ct.nota?`<p>${esc(ct.nota)}</p>`:''}${ct.volver_el?`<p>Volver: ${esc(F.fechaLarga(ct.volver_el))}</p>`:''}`:'Sin resultado registrado'}</div></div>
+      <details class="sc-hist sc-resumen-eventos"><summary>Movimientos recientes</summary><ol class="sc-eventos">${d.eventos.map(e=>`<li><div><b>${esc(e.tipo)}</b> · ${esc(corta(e.fecha))}<p>${esc(e.texto)}</p></div></li>`).join('')}</ol></details></section>
+      <section class="sc-f-sec sc-oportunidades"><h4>Qué puede volver a pedir</h4><div class="sc-familias">${d.matriz.map(f=>`<div class="sc-familia"><b>${esc(f.nombre)}</b><span class="${f.estado==='Dejó de pedir'?'sc-warn':''}">${esc(f.estado)}</span></div>`).join('')||'<p>Faltan productos del catálogo para comparar.</p>'}</div>
+      ${d.pendientes.length?'<p>Revisá los faltantes antes de ofrecer algo nuevo.</p>':d.sugerencias.length?`<div class="sc-sugerencias">${d.sugerencias.map(s=>`<p><b>Consultar por ${esc(s.nombre)}</b><br>${s.clientes} clientes con familias de compra en común también lo pidieron. Sin compras registradas de esta familia para este cliente.</p>`).join('')}</div>`:'<p class="sc-muted">Todavía no hay suficiente evidencia para sugerir otra familia.</p>'}
+      <details class="sc-criterio"><summary>Cómo se interpreta</summary><p>Familias orientativas según el nombre de productos del catálogo. Habitual: un producto pedido en al menos dos fechas. Dejó de pedir: todos los productos de esa familia tienen un aviso vigente. Las sugerencias usan compras de los últimos 180 días de clientes visibles para vos; no confirman interés ni stock.</p>${d.sinClasificar?`<p>${d.sinClasificar} producto${d.sinClasificar===1?'':'s'} sin catálogo o sin clasificación útil. No se usa${d.sinClasificar===1?'':'n'} para sugerencias.</p>`:''}</details></section>`;
+  }
   // Lo que ya se explicó: producto retirado, otro producto parecido, excepción. Es contexto y se puede deshacer.
   // «Hay otro producto parecido» NO dice que sean lo mismo: se anota si el cliente ya pasó al otro y, si todavía no lo compró, se deja una nota visible para ofrecérselo.
   function cambiosProductos(c) {
@@ -736,6 +749,7 @@
       ${minisFicha(c)}
       ${obs ? `<p class="sc-f-obs sc-muted">${ico('info', 'ico-sm')}<span>${esc(obs)}</span></p>` : ''}
       ${accionesFicha(c)}
+      ${contextoComercial(c)}
       ${metaFicha(c)}
       ${dejoSec(c)}
       ${panelSeguimiento(c)}

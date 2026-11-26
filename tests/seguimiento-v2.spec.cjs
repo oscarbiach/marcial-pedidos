@@ -493,3 +493,29 @@ test('Etapa 2: motivos concretos, programados y espera separados sin escribir da
  await expect(page.locator('#scModal')).not.toContainText('Invalid Date');
  expect(s.db.llamadas).toEqual([]);sinErrores(page);await page.context().close();
 });
+
+
+test('Etapas 3 y 4: contexto, reposición pendiente y guía interactiva',async({browser})=>{
+ const s=setup();s.db.pedidos.push(pedidoDb('repo-contexto','Sauce Mercado',HOY,{estado:'Pendiente',fecha_despacho:null,notas:'🔁 REPOSICIÓN — Falta mercadería'}));
+ const page=await entrar(browser,s,'Juan Marcos');
+ await fila(page,'sauce mercado').locator('[data-sc="fila"]').click();
+ await expect(page.locator('.sc-contexto')).toContainText('1 reposición pendiente');
+ await expect(page.locator('.sc-contexto')).toContainText('Último pedido');
+ await expect(page.locator('.sc-oportunidades')).toContainText('Revisá los faltantes antes de ofrecer algo nuevo');
+ await expect(page.locator('.sc-familias')).toContainText('Quesos');
+ await page.addStyleTag({content:'#installBar{display:none!important}'});
+ await page.locator('.sc-contexto').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'test-results/seguimiento-contexto.png'});
+ expect(s.db.llamadas).toEqual([]);sinErrores(page);
+ await page.goto('http://127.0.0.1:4173/guia-seguimiento.html');
+ await page.getByRole('button',{name:'✓ Le escribí',exact:true}).click();
+ await expect(page.locator('#estado')).toHaveText('Ya contactados · en espera');
+ await page.getByRole('button',{name:'Anotar respuesta'}).click();await page.getByRole('button',{name:'Tiene stock',exact:true}).click();
+ await expect(page.locator('#estado')).toHaveText('Contacto programado');
+ await page.getByRole('button',{name:'Volver al ejemplo'}).click();
+ await page.screenshot({path:'test-results/guia-seguimiento.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/guia-seguimiento-movil.png',fullPage:true});
+ await page.context().close();
+});
