@@ -25,3 +25,26 @@
 #sp-grid .sp-filas{padding:0 14px}#sp-grid .sp-fila{padding:7px 0}#sp-grid .sp-fila b{font-size:var(--sp-texto)}#sp-grid .sp-fila span{font-size:max(16px,calc(var(--sp-texto) - 4px))}#sp-grid .sp-fila strong{font-size:var(--sp-texto)}
 #stock-pantalla #sp-grid.sp-exceso{overflow:auto;column-fill:auto}#sp-capacidad{color:#8a4210;font-weight:700;max-width:700px}#sp-capacidad[hidden]{display:none}
 @media(max-width:899px){#stock-pantalla #sp-grid{min-height:0}}
+
+/* La fecha manda: cada tarjeta corresponde a un producto y una entrega. */
+#stock-pantalla:not(.sp-normal) #sp-grid{display:grid;grid-template-rows:none;align-content:start;align-items:start;gap:12px;overflow:auto;columns:auto}
+#stock-pantalla:not(.sp-normal) #sp-grid .sp-card{margin:0}
+#stock-pantalla{background:#f2f5f5;color:#193d40}
+.sp-cab{background:#214c50}.sp-titulo p{color:#d3e5e4}
+#sp-grid .sp-card{border:1px solid #d3e0df;border-radius:16px;background:white}
+.sp-fecha{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;background:#e5eeee;color:#214c50;border-bottom:1px solid #cddedc}
+.sp-fecha b{font-size:var(--sp-texto);line-height:1.15}.sp-fecha span{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.sp-hoy .sp-fecha{background:#226b5f;color:#fff}.sp-atrasado .sp-fecha{background:#f9e4d9;color:#8a3a17}.sp-sin-fecha .sp-fecha{background:#ede9f3;color:#69517c}
+#sp-grid .sp-card>header{background:white;align-items:flex-start;border-bottom:1px solid #e2ebe9;padding:12px 14px}
+#sp-grid .sp-card h2{font-weight:800;color:#193d40}
+#sp-grid .sp-card header strong{color:#246b60;background:#edf5f2;padding:4px 9px;border-radius:9px;font-size:var(--sp-texto)}
+#sp-grid .sp-fila b{font-size:var(--sp-texto);font-weight:650}#sp-grid .sp-fila strong{color:#193d40}
+#stock-pantalla.sp-normal{position:relative;inset:auto;z-index:auto;overflow:visible;min-height:60vh;padding:0;background:transparent;gap:20px}
+.sp-normal .sp-cab{margin:0;padding:24px;border-radius:18px}.sp-normal .sp-titulo img{display:none}
+#stock-pantalla.sp-normal #sp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));grid-template-rows:none;gap:20px;align-items:start;flex:none}
+.sp-normal #sp-grid .sp-card{margin:0}.sp-normal .sp-pie{padding:10px 0}.sp-normal .sp-resumen{padding:0 4px}
+#stock-pantalla button[hidden]{display:none}
+body:has(#tab-stock.active) main{max-width:1600px}
+#tab-stock #st-raiz{max-width:none;padding-bottom:30px}
+.sp-normal .sp-controles{flex-shrink:0}.sp-normal .sp-titulo{min-width:0}
+@media(max-width:700px){.sp-normal .sp-cab{padding:18px}.sp-normal .sp-controles{gap:8px;flex-shrink:1;width:100%;flex-wrap:wrap}.sp-normal .sp-titulo h1{font-size:26px}.sp-fecha{flex-wrap:wrap;gap:5px}}
