@@ -144,7 +144,7 @@ test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vis
  // alertas comerciales: cada una abre la ficha
  const al=page.locator('#sc-raiz .sv-alert');
  await expect(al).toHaveCount(2);await expect(al.nth(0)).toContainText('Dejó Hace Rato');await expect(al.nth(1)).toContainText('Una compra');
- expect((await al.allTextContents()).join(' ')).not.toContain('Compra menos');   // sin datos para decirlo honestamente
+ expect((await al.allTextContents()).join(' ')).not.toContain('Pidió menos variedad');   // sin datos para decirlo honestamente
  await al.filter({hasText:'Única Compra Vieja'}).click();
  await expect(page.locator('#scModal')).toHaveClass(/open/);await expect(page.locator('#sc-f-nom')).toHaveText('Única Compra Vieja');
  await page.keyboard.press('Escape');await expect(page.locator('#scModal')).not.toHaveClass(/open/);
@@ -446,4 +446,26 @@ for(const caso of ['espera vencida','no contestó'])test('Reprogramar alerta roj
  const nueva=await entrar(browser,s,'Juan Marcos');await vista(nueva,'agenda');await nueva.locator('#sc-raiz [data-sc="semana"][data-s="1"]').click();
  await expect(nueva.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
  sinErrores(page);sinErrores(nueva);
+});
+
+
+test('Etapa 1: ficha distingue compra y despacho, sin reiniciar por una reposición',async({browser})=>{
+ const s=setup();
+ s.db.pedidos=s.db.pedidos.filter(p=>p.cliente!=='Sauce Mercado').concat([
+  pedidoDb('et1','Sauce Mercado','2026-11-05',{fecha_despacho:'2026-11-07'}),
+  pedidoDb('et2','Sauce Mercado','2026-11-12',{fecha_despacho:'2026-11-18'}),
+  pedidoDb('et3','Sauce Mercado','2026-11-23',{notas:'🔁 REPOSICIÓN — Faltó pan',fecha_despacho:'2026-11-24'})
+ ]);
+ const page=await entrar(browser,s,'Juan Marcos');
+ await expect(fila(page,'sauce mercado')).toBeVisible();
+ await fila(page,'sauce mercado').locator('[data-sc="fila"]').first().click();
+ await expect(page.locator('#scModal .sv-mini').filter({hasText:'Último pedido'})).toContainText('Hace 12 días');
+ await expect(page.locator('#scModal .sv-mini').filter({hasText:'Frecuencia'})).toContainText('cada 7 días');
+ await expect(page.locator('#scModal .sv-fact').filter({hasText:'Último despacho'})).toContainText('24');
+ await page.getByText('Ver historial y cálculo',{exact:false}).click();
+ await expect(page.locator('#scModal .sc-tit-mini').filter({hasText:'fecha del pedido'})).toBeVisible();
+ await expect(page.locator('#scModal .sc-fechas')).not.toContainText('24 nov');
+ await page.locator('#scModal .sv-facts').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'test-results/seguimiento-etapa1.png',animations:'disabled'});
+ sinErrores(page);await page.context().close();
 });
