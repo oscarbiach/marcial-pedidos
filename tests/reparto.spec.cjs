@@ -992,7 +992,7 @@ test('Productos detecta, vincula, crea y descarta sin modificar pedidos',async({
 
 test('Notas compartidas: campana por fecha, resolver, archivar y reabrir sin pedidos',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar'),j=await s.open('Thiago');const total=s.db.pedidos.length;
- await p.evaluate(()=>goTab('notas'));await p.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await p.locator('#gestion-modal [name="cliente"]').fill('Cliente A');await p.locator('#gestion-modal [name="texto"]').fill('Pasar a cobrar');await p.locator('#gestion-modal [name="fecha"]').fill('2026-11-16');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(j.locator('#notas-bell b')).toHaveText('1');await j.locator('#notas-bell').click();await expect(j.locator('.g-note')).toContainText('Pasar a cobrar');
+ await p.evaluate(()=>goTab('notas'));await p.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await p.locator('#gestion-modal [name="cliente"]').fill('Cliente A');await p.locator('#gestion-modal [name="texto"]').fill('Pasar a cobrar');await p.locator('#gestion-modal [name="fecha"]').fill('2026-11-16');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(j.locator('#notas-bell b')).toHaveText('1');await j.locator('#notas-bell').click();await expect(j.locator('#notas-popover .g-note')).toContainText('Pasar a cobrar');await expect(j.locator('#tab-reparto')).toHaveClass(/active/);
  await j.getByRole('button',{name:'✓ Resolver',exact:true}).click();await expect(p.locator('#notas-bell b')).toHaveText('');await p.locator('[data-g="nota-modo"][data-mode="resuelta"]').click();await expect(p.locator('.g-note')).toHaveCount(1);await p.getByRole('button',{name:'Reabrir',exact:true}).click();await expect(j.locator('#notas-bell b')).toHaveText('1');
  await j.getByRole('button',{name:'Archivar',exact:true}).click();await expect(p.locator('#notas-bell b')).toHaveText('');await p.locator('[data-g="nota-modo"][data-mode="archivada"]').click();await expect(p.locator('.g-note')).toHaveCount(1);
  await p.getByRole('button',{name:'+ Nueva nota',exact:true}).click();await p.locator('#gestion-modal [name="texto"]').fill('Visitar la semana próxima');await p.locator('#gestion-modal [name="fecha"]').fill('2026-11-25');await p.locator('#gestion-modal [type="submit"]').click();await expect(p.locator('#gestion-modal')).toHaveCount(0);await expect(p.locator('#notas-bell b')).toHaveText('');expect(s.db.pedidos.length).toBe(total);expect(s.errors).toEqual([]);await s.close();
@@ -1334,3 +1334,14 @@ test('Mover entrega conserva remito hecho y no reescribe productos ni preparaci�
  await p.evaluate(()=>moverEntregaPorArrastre('p1','sinfecha'));await expect.poll(()=>s.db.pedidos[0].fecha_entrega).toBe(null);
  expect(s.db.pedidos[0].remito_hecho).toBe(true);expect(s.errors).toEqual([]);await s.close();
 });
+
+ test('Campanita despliega sin navegar, cierra afuera y Escape, y cabe en móvil',async({browser})=>{
+  const s=await setup(browser);s.db.app_notas=[{id:'n1',cliente:'Cliente de prueba',texto:'Pasar a retirar el pago',fecha:'2026-11-16',estado:'pendiente',autor:'Oscar',version:1}];
+  const p=await s.open('Oscar');await p.locator('#notas-bell').click();await expect(p.locator('#notas-popover')).toBeVisible();await expect(p.locator('#tab-reparto')).toHaveClass(/active/);
+  await p.screenshot({path:'test-results/notificaciones-desplegable.png',animations:'disabled'});
+  await p.keyboard.press('Escape');await expect(p.locator('#notas-popover')).toHaveCount(0);await expect(p.locator('#notas-bell')).toBeFocused();
+  await p.locator('#notas-bell').click();await p.locator('#notas-bell').click();await expect(p.locator('#notas-popover')).toHaveCount(0);
+  await p.setViewportSize({width:390,height:844});await p.locator('#notas-bell').click();
+  const r=await p.locator('#notas-popover').boundingBox();expect(r.x).toBeGreaterThanOrEqual(0);expect(r.x+r.width).toBeLessThanOrEqual(390);expect(r.y+r.height).toBeLessThanOrEqual(844);
+  await p.screenshot({path:'test-results/notificaciones-movil.png',animations:'disabled'});await p.mouse.click(5,800);await expect(p.locator('#notas-popover')).toHaveCount(0);expect(s.errors).toEqual([]);await s.close();
+ });
