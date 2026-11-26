@@ -12,7 +12,7 @@
   document.body.classList.toggle('gestion-admin',admin());document.body.classList.toggle('gestion-oficina',oficina());
   if(S.who===state.who)return;
   S.who=state.who;S.epoch++;S.cat=null;S.notes=[];S.aliases={};S.catError=S.nError='';S.busy=false;S.catLoading=S.nLoading=false;
-  $('gestion-modal')?.remove();window.AdminUI?.reiniciar();if(S.channel)sb.removeChannel(S.channel);S.channel=null;
+  closeBell();$('gestion-modal')?.remove();window.AdminUI?.reiniciar();if(S.channel)sb.removeChannel(S.channel);S.channel=null;
   badge();aliases();
   if(oficina()){loadNotes();S.channel=sb.channel('notas-oficina').on('postgres_changes',{event:'*',schema:'public',table:'app_notas'},()=>loadNotes()).subscribe();}
  }
@@ -38,13 +38,31 @@
   root.querySelector('.g-list').innerHTML=list.filter(p=>key(p.nombre||p.texto).includes(key(S.q))).map(p=>['catalogo','eliminados'].includes(S.mode)?`<article class="g-row"><div><b>${esc(p.nombre)}</b><span>${esc(p.unidad||'Sin medida')} ${p.se_pesa?'· Se pesa':''} ${p.activo===false?'· Inactivo':''}</span></div><div class="g-actions">${p.eliminado_en?`<button data-g="restaurar-producto" data-id="${esc(p.id)}">Restaurar</button>`:`<button data-g="editar-producto" data-id="${esc(p.id)}">Editar</button><button class="g-danger" data-g="eliminar-producto" data-id="${esc(p.id)}">Eliminar</button>`}</div></article>`:`<article class="g-row"><div><b>${esc(p.texto)}</b><span>${S.mode==='pendientes'?`${p.usos} pedido${p.usos===1?'':'s'}${p.cliente?' · '+esc(p.cliente):''}`:p.producto?'→ '+esc(p.producto):'Descartado de pendientes'}</span></div><div class="g-actions">${S.mode==='pendientes'?`<button data-g="crear-pendiente" data-key="${esc(p.clave)}">Agregar</button><button data-g="vincular" data-key="${esc(p.clave)}">Vincular</button><button data-g="descartar" data-key="${esc(p.clave)}">Descartar</button>`:`<button data-g="restaurar" data-key="${esc(p.clave)}">Volver a pendientes</button>`}</div></article>`).join('')||`<p class="g-empty">${S.catLoading&&!S.cat?'Cargando catálogo…':S.catError&&!S.cat?'No se pudo cargar el catálogo.':'No hay productos en esta vista.'}</p>`;
   root.querySelector('[data-g="detectar"]').textContent=S.catLoading?'Buscando…':'Detectar pendientes';root.querySelectorAll('button').forEach(b=>b.disabled=S.busy||S.catLoading);
  }
+ function noteCards(list){return list.map(n=>`<article class="g-note"><div class="g-note-top"><b>${esc(n.cliente||'Nota general')}</b>${n.fecha?`<span class="${n.fecha<hoyArg()&&n.estado==='pendiente'?'g-due':''}">${esc(fmtDate(n.fecha))}</span>`:''}</div><p>${esc(n.texto)}</p><div class="g-note-bottom"><span>${esc(n.autor)}</span><div class="g-actions"><button data-g="editar-nota" data-id="${n.id}">Editar</button><button data-g="estado-nota" data-id="${n.id}" data-state="${n.estado==='pendiente'?'resuelta':'pendiente'}">${n.estado==='pendiente'?'✓ Resolver':'Reabrir'}</button>${n.estado!=='archivada'?`<button data-g="estado-nota" data-id="${n.id}" data-state="archivada">Archivar</button>`:''}</div></div></article>`).join('');}
+ function closeBell(focus=false){$('notas-popover')?.remove();$('notas-bell')?.setAttribute('aria-expanded','false');if(focus)$('notas-bell')?.focus();}
+ function positionBell(){const panel=$('notas-popover'),bell=$('notas-bell');if(!panel||!bell)return;const r=bell.getBoundingClientRect();panel.style.top=Math.max(8,r.bottom+8)+'px';panel.style.right=Math.min(Math.max(8,innerWidth-r.right),Math.max(8,innerWidth-panel.offsetWidth-8))+'px';panel.style.maxHeight=Math.max(120,innerHeight-r.bottom-24)+'px';}
+ function renderBell(){
+  const panel=$('notas-popover');if(!panel)return;if(!oficina()){closeBell();return;}
+  const list=S.notes.filter(n=>n.estado==='pendiente').sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  panel.innerHTML=`<div class="g-bell-head"><h2 id="g-bell-title">Notificaciones</h2><button data-g="cerrar-bell" aria-label="Cerrar notificaciones">✕</button></div><div class="g-bell-list">${S.nError?`<p role="alert" class="g-error">${esc(S.nError)}</p><button data-g="actualizar-notas">Reintentar</button>`:''}${noteCards(list)||`<p class="g-empty">${S.nLoading?'Cargando…':S.nError?'':'No tenés notas pendientes.'}</p>`}</div><div class="g-bell-footer"><button data-g="nueva-nota">+ Nueva nota</button></div>`;
+  panel.querySelectorAll('[data-g="estado-nota"],[data-g="editar-nota"],[data-g="nueva-nota"]').forEach(b=>b.disabled=S.busy);positionBell();
+ }
+ function toggleBell(){
+  if(!oficina())return;if($('notas-popover')){closeBell();return;}
+  const panel=document.createElement('section');panel.id='notas-popover';panel.className='gestion g-bell-popover';panel.setAttribute('role','dialog');panel.setAttribute('aria-labelledby','g-bell-title');
+  document.body.appendChild(panel);$('notas-bell').setAttribute('aria-expanded','true');renderBell();panel.querySelector('button').focus();loadNotes();
+ }
+ document.addEventListener('pointerdown',e=>{if(!e.target.closest('#notas-popover,#notas-bell,#gestion-modal'))closeBell();});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('notas-popover')&&!$('gestion-modal')){closeBell(true);e.stopPropagation();}});
+ window.addEventListener('resize',positionBell);window.addEventListener('scroll',positionBell,true);
  function renderNotes(){
+  renderBell();
   const root=$('gestion-notas');if(!root||!oficina())return;
   if(!root.querySelector('.g-tools'))root.innerHTML=`<div class="g-head"><h2>Notas</h2><button data-g="nueva-nota" class="g-primary">+ Nueva nota</button></div><div class="g-tools"><input id="g-notas-buscar" type="search" placeholder="Buscar cliente o nota…" aria-label="Buscar notas"><button data-g="actualizar-notas" aria-label="Actualizar notas">↻</button></div><div class="g-tabs"></div><div class="g-error" role="alert"></div><div class="g-list"></div>`;
   root.querySelector('.g-tabs').innerHTML=[['pendiente','Pendientes'],['resuelta','Resueltas'],['archivada','Archivadas']].map(([m,t])=>`<button data-g="nota-modo" data-mode="${m}" aria-pressed="${S.noteMode===m}">${t} <b>${S.notes.filter(n=>n.estado===m).length}</b></button>`).join('');
   root.querySelector('.g-error').textContent=S.nError;
   const list=S.notes.filter(n=>n.estado===S.noteMode&&key(n.cliente+' '+n.texto).includes(key(S.nq)));
-  root.querySelector('.g-list').innerHTML=list.map(n=>`<article class="g-note"><div class="g-note-top"><b>${esc(n.cliente||'Nota general')}</b>${n.fecha?`<span class="${n.fecha<hoyArg()&&n.estado==='pendiente'?'g-due':''}">${esc(fmtDate(n.fecha))}</span>`:''}</div><p>${esc(n.texto)}</p><div class="g-note-bottom"><span>${esc(n.autor)}</span><div class="g-actions"><button data-g="editar-nota" data-id="${n.id}">Editar</button><button data-g="estado-nota" data-id="${n.id}" data-state="${n.estado==='pendiente'?'resuelta':'pendiente'}">${n.estado==='pendiente'?'✓ Resolver':'Reabrir'}</button>${n.estado!=='archivada'?`<button data-g="estado-nota" data-id="${n.id}" data-state="archivada">Archivar</button>`:''}</div></div></article>`).join('')||'<p class="g-empty">No hay notas en esta vista.</p>';
+  root.querySelector('.g-list').innerHTML=noteCards(list)||'<p class="g-empty">No hay notas en esta vista.</p>';
   root.querySelectorAll('button').forEach(b=>b.disabled=S.busy);
  }
  function modal(title,html,save){
@@ -71,7 +89,8 @@
  document.addEventListener('input',e=>{if(e.target.id==='g-buscar'){S.q=e.target.value;renderCat();}if(e.target.id==='g-notas-buscar'){S.nq=e.target.value;renderNotes();}});
  document.addEventListener('click',e=>{
   const b=e.target.closest('[data-g]');if(!b||b.disabled)return;const a=b.dataset.g;
-  if(a==='bell'){S.noteMode='pendiente';goTab('notas');return;}
+  if(a==='bell'){toggleBell();return;}
+  if(a==='cerrar-bell'){closeBell(true);return;}
   if(a==='nuevo-producto'&&admin())productForm();
   if(a==='editar-producto'&&admin()){const p=S.cat?.productos.find(p=>p.id===b.dataset.id);if(p)productForm(p);}
   if(a==='eliminar-producto'&&admin()){

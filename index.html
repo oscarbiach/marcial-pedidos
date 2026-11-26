@@ -1607,7 +1607,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="turnos.css?v=157">
 <link rel="stylesheet" href="armado-pedido.css?v=144">
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
-<link rel="stylesheet" href="gestion.css?v=136">
+<link rel="stylesheet" href="gestion.css?v=159">
 <link rel="stylesheet" href="admin.css?v=130">
 <link rel="stylesheet" href="auditoria.css?v=149">
 <link rel="stylesheet" href="reparto-control.css?v=117">
@@ -1688,7 +1688,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <button data-tab="visitar" onclick="goTab('visitar')">📍 Visitar</button>
       -->
     </nav>
-    <button id="notas-bell" data-g="bell" aria-label="Notas pendientes"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b></b></button>
+    <button id="notas-bell" data-g="bell" aria-haspopup="dialog" aria-expanded="false" aria-controls="notas-popover" aria-label="Notas pendientes"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b></b></button>
     <button id="adminBtn" type="button" data-adm="abrir" aria-label="Administración" aria-haspopup="dialog" title="Administración"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-settings"/></svg></button>
     <button id="whoBtn" onclick="openWhoModal()" aria-label="Cambiar usuario"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-user"/></svg><span>—</span></button>
   </header>
@@ -6625,7 +6625,7 @@ function abrirInstalar() {
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
 <script src="turnos.js?v=156"></script>
-<script src="gestion.js?v=136"></script>
+<script src="gestion.js?v=159"></script>
 <script src="auditoria.js?v=149"></script>
 <script src="admin.js?v=149"></script>
 <script src="reparto-fotos.js?v=117"></script>
