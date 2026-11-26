@@ -1099,6 +1099,31 @@ test('monitor de comprometido: clientes, fechas, retiros, actualización y panta
  expect(s.errors).toEqual([]);await s.close();
 });
 
+test('Stock abre comprometido normal, separa fechas y permite volver del kiosco',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar',{width:1366,height:900});
+ await p.evaluate(()=>{
+  document.body.classList.add('stock-visible');
+  state.pedidos=[['a','Hifry','2026-11-16',2],['b','La Morena','2026-11-17',10],['c','Kansas','',3],['d','Centro','2026-11-15',1]].map(([id,cliente,fechaEntrega,qty])=>({id,cliente,fechaEntrega,estado:'Pendiente',turno:'manana',items:[{prod:'Pan clásico - Kalis',qty}]}));
+  state.products.push({n:'Pan clásico - Kalis',u:'caja',box:48});goTab('stock');
+ });
+ await expect(p.locator('#tab-stock #stock-pantalla.sp-normal')).toBeVisible();
+ await expect(p.locator('#comp-monitor')).toHaveCount(0);
+ await expect(p.getByText('Recuento',{exact:true})).toHaveCount(0);
+ await expect(p.locator('.sp-card')).toHaveCount(4);
+ await expect(p.locator('.sp-hoy')).toContainText('Hifry');await expect(p.locator('.sp-hoy')).not.toContainText('La Morena');
+ await expect(p.locator('.sp-futuro')).toContainText('Mañana · 17/11/2026');
+ await expect(p.locator('.sp-atrasado')).toContainText('ATRASADO');
+ await expect(p.locator('.sp-sin-fecha')).toContainText('Sin fecha de entrega');
+ expect(await p.evaluate(()=>document.getElementById('appShell').inert)).toBe(false);
+ await p.screenshot({path:'test-results/stock-normal.png'});
+ await p.locator('[data-sp="completa"]').click();await expect(p.locator('body.stock-monitor')).toHaveCount(1);
+ await p.locator('[data-sp="cerrar"]').click();await expect(p.locator('#tab-stock #stock-pantalla.sp-normal')).toBeVisible();
+ await p.setViewportSize({width:390,height:844});await p.screenshot({path:'test-results/stock-normal-movil.png'});
+ expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await p.evaluate(()=>goTab('pedidos'));await expect(p.locator('#stock-pantalla')).toHaveCount(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('monitor conserva medidas distintas, no cuenta cola local y abre desde enlace',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar');
  await p.evaluate(()=>{state.pedidos=[{id:'a',cliente:'A',estado:'Pendiente',fechaEntrega:'',items:[{prod:'Pan clásico',qty:2},{prod:'Pan clásico',qty:3,unidades:true},{prod:'Pan integral',qty:1,fetear:true},{prod:'Pan integral',qty:2},{prod:'Panceta',qty:500},{prod:'Papas',qty:500}]},{id:'b',cliente:'No confirmado',estado:'Pendiente',enCola:true,items:[{prod:'Pan clásico',qty:999}]}];history.replaceState(null,'','?pantalla=comprometido');StockPantalla.iniciar();});

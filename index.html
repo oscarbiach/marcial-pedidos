@@ -1601,7 +1601,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="whatsapp-inbox.css">
 <link rel="stylesheet" href="stock.css">
 <link rel="stylesheet" href="bitacora.css?v=147">
-<link rel="stylesheet" href="stock-pantalla.css?v=142">
+<link rel="stylesheet" href="stock-pantalla.css?v=148">
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=144">
 <link rel="stylesheet" href="turnos.css?v=137">
@@ -1791,7 +1791,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
       <aside id="compPanel">
         <h4><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg> Stock comprometido</h4>
         <p class="comp-note">Cantidades ya comprometidas en pedidos pendientes: esto NO se puede seguir ofreciendo.</p>
-        <button id="comp-monitor" type="button" onclick="StockPantalla.abrir()">Abrir pantalla de stock ⛶</button>
+
         <div id="compList"></div>
       </aside>
       <button id="compFab" class="pc-only" title="Stock comprometido" aria-label="Stock comprometido" onclick="toggleCompPanel()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></button>
@@ -3230,7 +3230,8 @@ function setTab(tab) {
   // Cargar: trae al día los «Pedidos para cargar» (pedidos-a-cargar.js).
   if (window.PedidosACargar) { if (tab === 'cargar') PedidosACargar.alMostrar(); else PedidosACargar.alSalir(); }
   if (window.PedidosFijos && tab === 'pedidos') PedidosFijos.refrescar();
-  if (tab === 'stock' && window.StockUI) StockUI.abrir();
+  if (tab === 'stock') window.StockPantalla?.mostrar();
+  else window.StockPantalla?.cerrar();
   if(window.GestionUI&&tab==='notas')GestionUI.abrir(tab);
   if(tab==='bitacora')Bitacora.abrir();
   // La barra verde flotante es de la hoja de reparto: en las otras
@@ -6613,7 +6614,7 @@ function abrirInstalar() {
 <script src="whatsapp-precios.js"></script>
 <script src="stock.js"></script>
 <script src="bitacora.js?v=147"></script>
-<script src="stock-pantalla.js?v=142"></script>
+<script src="stock-pantalla.js?v=148"></script>
 <script src="pedidos-a-cargar.js"></script>
 <script src="pedidos-fijos.js"></script>
 <script src="preparacion.js?v=117"></script>
