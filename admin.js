@@ -48,7 +48,7 @@
   // Cualquier cierre (X, Escape, fondo —lo hace el código general de los .overlay—, cambio de usuario) pasa por acá.
   function alCerrar() {
     if (!E.abierto) return;
-    E.abierto = false; limpiarBorr(); cancelarConfirmacion(); if (E.fu) cerrarFusion();
+    E.abierto = false; window.Auditoria?.cerrar(); limpiarBorr(); cancelarConfirmacion(); if (E.fu) cerrarFusion();
     SEG.estado = 'nuevo'; SEG.guardando = false; SEG.error = '';   // el seguimiento se vuelve a leer la próxima vez que se abra el panel
     ['cli', 'his'].forEach(k => { E[k].F = null; E[k].tok++; E[k].cargada = false; E[k].cargando = false; clearTimeout(E[k].timer); const s = $(k === 'cli' ? 'adm-clientes' : 'adm-historial'); if (s) { s.innerHTML = ''; } E[k].montado = false; });
     const o = E.origen; E.origen = null;
@@ -62,11 +62,13 @@
   })();
 
   function irA(sec, foco) {
+    if(E.sec==='auditoria'&&sec!=='auditoria')window.Auditoria?.cerrar();
     E.sec = sec;
-    ['productos', 'clientes', 'historial'].forEach(s => {
+    ['productos', 'clientes', 'historial', 'auditoria'].forEach(s => {
       const t = $('adm-tab-' + s), p = $('adm-' + s), on = s === sec;
       t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; p.hidden = !on;
     });
+    if (sec === 'auditoria') window.Auditoria?.abrir();
     if (sec === 'productos' && window.GestionUI) GestionUI.abrir('productos');
     if (sec === 'clientes') { montarClientes(); if (!E.cli.cargada) cargarClientes(); }
     if (sec === 'historial') { montarHistorial(); if (!E.his.cargada) buscarHistorial(false); }

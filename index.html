@@ -1609,6 +1609,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="reparto-fotos.css?v=117">
 <link rel="stylesheet" href="gestion.css?v=136">
 <link rel="stylesheet" href="admin.css?v=130">
+<link rel="stylesheet" href="auditoria.css?v=149">
 <link rel="stylesheet" href="reparto-control.css?v=117">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
@@ -1867,11 +1868,13 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
     <div class="adm-tabs" role="tablist" aria-label="Secciones de administración">
       <button type="button" role="tab" id="adm-tab-productos" data-adm="pestana" data-s="productos" aria-controls="adm-productos">Productos</button>
       <button type="button" role="tab" id="adm-tab-clientes" data-adm="pestana" data-s="clientes" aria-controls="adm-clientes">Clientes</button>
+      <button type="button" role="tab" id="adm-tab-auditoria" data-adm="pestana" data-s="auditoria" aria-controls="adm-auditoria">Auditoría</button>
       <button type="button" role="tab" id="adm-tab-historial" data-adm="pestana" data-s="historial" aria-controls="adm-historial">Historial de pedidos</button>
     </div>
     <div class="adm-cuerpo">
       <section id="adm-productos" role="tabpanel" aria-labelledby="adm-tab-productos"><div id="gestion-productos" class="gestion"></div></section>
       <section id="adm-clientes" role="tabpanel" aria-labelledby="adm-tab-clientes" hidden></section>
+      <section id="adm-auditoria" role="tabpanel" aria-labelledby="adm-tab-auditoria" hidden></section>
       <section id="adm-historial" role="tabpanel" aria-labelledby="adm-tab-historial" hidden></section>
     </div>
   </div>
@@ -6624,7 +6627,8 @@ function abrirInstalar() {
 <script src="reparto-red.js?v=117"></script>
 <script src="turnos.js?v=144"></script>
 <script src="gestion.js?v=136"></script>
-<script src="admin.js?v=130"></script>
+<script src="auditoria.js?v=149"></script>
+<script src="admin.js?v=149"></script>
 <script src="reparto-fotos.js?v=117"></script>
 <script src="armado-pedido.js?v=144"></script>
 <script src="reparto-control.js?v=134"></script>

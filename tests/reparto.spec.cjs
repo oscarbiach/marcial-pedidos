@@ -1099,6 +1099,21 @@ test('monitor de comprometido: clientes, fechas, retiros, actualización y panta
  expect(s.errors).toEqual([]);await s.close();
 });
 
+test('Auditoría: administradores, filtros, detalle seguro y paginación',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{const original=sb.rpc;window.auCalls=[];sb.rpc=async(n,a)=>{if(n!=='admin_auditoria_leer')return original(n,a);auCalls.push(a);return {data:{usuarios:['Mateo','Oscar'],filas:Array.from({length:a.p_usuario?1:a.p_cursor?2:51},(_,i)=>({id:a.p_cursor?100+i:i,en:'2026-11-16T15:00:00Z',usuario:'Mateo',tabla:'prep_items',titulo:'Hifry <img src=x onerror=alert(1)>',accion:'Modificó',antes:{peso:5},despues:{peso:6},origen:'app'}))}};};});
+ await p.locator('#adminBtn').click();await p.locator('#adm-tab-auditoria').click();
+ await expect(p.locator('.au-evento')).toHaveCount(50);await expect(p.locator('#au-lista img')).toHaveCount(0);
+ await p.locator('.au-evento summary').first().click();await expect(p.locator('.au-datos').first()).toContainText('peso');
+ await expect(p.locator('.au-antes').first()).toHaveText('5');await expect(p.locator('.au-despues').first()).toHaveText('6');
+ await p.locator('#au-mas').click();await expect(p.locator('.au-evento')).toHaveCount(52);await expect(p.locator('#au-mas')).toBeHidden();
+ await p.locator('#au-usuario').selectOption('Mateo');await p.locator('#au-desde').fill('2026-11-16');await p.locator('#au-form button').click();await expect(p.locator('.au-evento')).toHaveCount(1);
+ expect(await p.evaluate(()=>auCalls.at(-1).p_cursor)).toBe(null);expect(await p.evaluate(()=>auCalls.at(-1).p_usuario)).toBe('Mateo');
+ await p.screenshot({path:'test-results/auditoria-pc.png'});
+ await p.evaluate(()=>{state.who='Juan Marcos';mostrarApp();});await expect(p.locator('#adminBtn')).toBeHidden();await expect(p.locator('#adminPanel')).not.toHaveClass(/open/);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('Stock abre comprometido normal, separa fechas y permite volver del kiosco',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar',{width:1366,height:900});
  await p.evaluate(()=>{
