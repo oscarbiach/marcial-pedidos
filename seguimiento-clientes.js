@@ -443,7 +443,7 @@
       const ct = c.contacto || null, noContesto = !escribi && !!ct && ct.resultado === 'no_contesto' && dia10(ct.creado_en) >= c.ultimo;
       let dia = base, atrasado = false;
       if (espera) dia = base >= lunes ? base : hoyEf;                              // esperando: la tarjeta se queda donde estaba
-      else if (reescribir || noContesto) dia = hoyEf;                              // no pidió en los días que se esperaba (o no contestó): vuelve a hoy
+      else if (reescribir || noContesto) dia = movido && base >= hoyEf ? base : hoyEf;                              // no pidió en los días que se esperaba (o no contestó): vuelve a hoy
       else if (base < hoyEf) { dia = hoyEf; atrasado = !movido && atraso >= 2 && tipo === 'habitual'; }   // vencido: se corre a hoy; «atrasado» solo un habitual con 2 días o más pasados de su día
       const t = { clave: c.clave, nombre: c.nombre, c, estado: espera ? 'escribi' : 'pendiente', reescribir: reescribir || noContesto, noContesto, contacto: ct, tipo, dia, calculado, movido, escrito: escritoF, vuelveEl, atraso, atrasado, recuperacion: tipo === 'recupero', fuera: dia > ultimoDia };
       porCliente.set(c.clave, t);

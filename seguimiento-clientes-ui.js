@@ -944,10 +944,10 @@
   }
   const toastCorto = txt => { E.aviso = { tono: 'ok', html: esc(txt) }; render(); };
   const filaDe = k => E.agendaMapa.get(k) || { fecha: null, ciclo: null, escrito: null };
-  // Mueve a un día de la ventana (fecha) o lo vuelve a su día calculado (fecha null, o la misma fecha que el cálculo).
+  // Mueve a un día de la ventana (fecha) o lo vuelve a su día calculado (fecha null, solo mediante «Volver a su día»).
   function moverA(k, fecha) {
     const c = clienteDe(k), t = E.ag && E.ag.porCliente.get(k); if (!c || !t || !puedeAgendar() || E.guardando.has(k)) return false;
-    const vuelve = fecha === null || fecha === t.calculado;
+    const vuelve = fecha === null;
     if (vuelve ? !t.movido : (t.dia === fecha || !(fecha >= hoy() && fecha <= E.ag.hasta))) return false;
     const f = vuelve ? null : fecha, nueva = { fecha: f, ciclo: c.ultimo, escrito: filaDe(k).escrito };
     const texto = vuelve ? `${c.nombre}: vuelve a su día (${F.fechaLarga(t.calculado)}).` : `${c.nombre}: ahora le toca ${diaLargo(fecha)}.`;

@@ -116,3 +116,16 @@ assert.ok(tipos('Unica Vieja').includes('unica'));   // única compra de hace 23
 assert.ok(tipos('Almacén Norte').includes('esperando'));   // le escribió el sábado 21: el lunes lleva 2 días corridos y sigue esperando (vuelve el martes)
 for(const a of al)assert.ok(S.ALERTAS[a.tipo]&&a.nombre&&a.clave);
 console.log('OK: alertas del panel (compra menos solo con datos).');
+
+// Una reprogramación explícita manda sobre la alerta roja, incluso después de recargar.
+for(const escenario of [noCont,todos]){
+ const c=escenario.clientes.find(c=>c.clave==='almacen norte');
+ for(const fecha of ['2026-11-25','2026-12-01']){
+  const fila={fecha,ciclo:c.ultimo,escrito:escenario===todos?'2026-11-20':null};
+  const t=S.agenda(escenario,{agenda:new Map([[c.clave,fila]])}).porCliente.get(c.clave);
+  assert.equal(t.dia,fecha);assert.equal(t.reescribir,true);assert.equal(t.movido,true);
+ }
+ const vencido=S.agenda(escenario,{agenda:new Map([[c.clave,{fecha:'2026-11-23',ciclo:c.ultimo,escrito:escenario===todos?'2026-11-20':null}]])}).porCliente.get(c.clave);
+ assert.equal(vencido.dia,hoy2);
+}
+console.log('OK: reprogramar alertas rojas respeta día/semana manual; vencidos regresan a hoy.');
