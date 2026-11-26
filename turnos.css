@@ -19,3 +19,12 @@
 .retiros-grupo>.turno-titulo{margin:0;background:#d4eee3;color:#0d604e;min-height:44px;box-sizing:border-box;font-size:14px}
 .turno-cantidad{background:#fff;border-radius:20px;padding:3px 9px;color:inherit}
 .turno-campo[hidden]{display:none!important}
+
+/* El acento de la tarjeta identifica su grupo; el estado conserva su etiqueta. */
+.turno-grupo{--turno-acento:#718399}
+.turno-grupo[data-turno="manana"]{--turno-acento:#bc820c}
+.turno-grupo[data-turno="tarde"]{--turno-acento:#5269b1}
+.retiros-grupo{--turno-acento:#117a65}
+:is(.turno-grupo,.retiros-grupo) .order-card .oc-edge,
+:is(.turno-grupo,.retiros-grupo) .pedido-blk .blk-edge{background:var(--turno-acento)}
+:is(.turno-grupo,.retiros-grupo) :is(.rv-card,.rc-order){border-left:4px solid var(--turno-acento)}
