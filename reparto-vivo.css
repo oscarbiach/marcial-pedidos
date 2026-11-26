@@ -158,3 +158,5 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-card [data-rv="editar"] {display:block;width:100%;margin-top:12px}
 
 .rv-search {display:block;width:calc(100% - 24px);margin:0 12px 10px;padding:9px 12px;border:1px solid #d4dfec;border-radius:10px;background:#fff;font:inherit;font-size:14px;min-width:0;box-sizing:border-box}
+
+.rv-card li.rv-product-alert{color:#69428c}.rv-product-status{display:block;margin-top:4px;font-weight:700;font-size:.95em}.rv-product-unavailable{text-decoration:line-through;color:#785d87}

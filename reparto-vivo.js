@@ -145,6 +145,17 @@
     if (root.hidden || activeTab !== 'reparto') cancel();
     if (activeTab === 'reparto') { iniciar(); pintar(); }
   }
+  function productoTarjeta(it,e) {
+    const x=['preparando','listo'].includes(e)?S.items.get(it.id)||{}:{};
+    const enviado=x.enviado==null?null:Number(x.enviado),faltan=x.falta&&enviado!==null?Math.max(0,Number(it.qty)-enviado-(Number(x.sustituye)||0)):0;
+    const sinStock=x.falta&&enviado===0&&!x.sustituto;
+    const avisos=[];
+    if(sinStock)avisos.push('Sin disponibilidad');
+    else if(faltan>0)avisos.push('Faltan '+cantidadTarjeta({...it,qty:faltan}));
+    else if(x.falta&&enviado===null)avisos.push('Faltante por detallar');
+    if(x.sustituto)avisos.push('Sustituto: '+x.sustituto+' · '+x.sustituto_cantidad+' '+(x.sustituto_medida||'un.'));
+    return `<li class="${avisos.length?'rv-product-alert':x.separado?'rv-product-done':''}"><span class="${sinStock?'rv-product-unavailable':''}"><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</span>${avisos.map(t=>`<span class="rv-product-status">${esc(t)}</span>`).join('')}</li>`;
+  }
   function tarjeta(p) {
     const e = etapa(p.id), busy = S.busy.has(p.id), next = siguiente[e];
     const fecha = etiquetaFecha(p.fechaEntrega);
@@ -154,7 +165,7 @@
       <h3>${esc(p.cliente)}</h3>${e==='listo'&&p.remitoHecho?'<div class="rv-remito-done">✓ Remito hecho</div>':''}
       ${mateo()?`<span class="turno-chip">${Turnos.nombre(p.turno)}</span>`:Turnos.selector(p,busy||!S.ready||!!S.error)}
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
-      <ul>${p.items.map(it => `<li class="${S.items.get(it.id)?.separado?'rv-product-done':''}"><b>${esc(cantidadTarjeta(it))}</b> ${esc(it.prod)}${repTagsTexto(it)?` <em>${esc(repTagsTexto(it))}</em>`:''}</li>`).join('')}</ul>
+      <ul>${p.items.map(it=>productoTarjeta(it,e)).join('')}</ul>
       ${p.notas ? `<p class="rv-note ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>` : ''}
       ${envia()&&e==='por_preparar'?`<button data-rv="editar" data-id="${esc(p.id)}">Editar pedido</button>`:''}
       ${e==='preparando'&&['Oscar','Joaquin'].includes(state.who)?`<button data-rv="marcar-remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" class="${p.remitoHecho?'rv-remito-done':''}" ${busy||!S.ready||S.error?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}

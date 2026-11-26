@@ -116,7 +116,10 @@
   function estadoItem(it) {
     const x=row(it);
     if(S.drafts.has(it.id))return 'Sin guardar';
-    if(listo(it))return x.falta&&Number(x.enviado)+(Number(x.sustituye)||0)<Number(it.qty)?'Con faltante':x.sustituto?'Con sustituto':'Preparado';
+    if(x.falta&&x.enviado!=null&&Number(x.enviado)===0&&!x.sustituto)return 'Sin disponibilidad';
+    if(x.falta&&x.enviado!=null&&Number(x.enviado)+(Number(x.sustituye)||0)<Number(it.qty))return x.sustituto?'Sustituto · Con faltante':'Con faltante';
+    if(x.sustituto)return 'Con sustituto';
+    if(listo(it))return 'Preparado';
     if(x.falta && x.enviado==null)return 'Indicá cuánto falta';
     return 'Por preparar';
   }
@@ -125,7 +128,7 @@
     const x=row(it),d=borrador(it),open=S.active===it.id,ok=listo(it),zero=d.falta && numero(d.enviado)===0;
     const medida=it.fetear?'kg':typeof it.unidades==='string'?it.unidades:medidaDe(prodInfo(it.prod),false,it.unidades);
     const url=x.foto && S.fotos.get(x.foto)?.url,dirty=S.drafts.has(it.id);
-    return `<article class="ap-item ${ok&&!dirty?'ap-done':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
+    return `<article class="ap-item ${ok&&!dirty?'ap-done':''} ${x.falta||x.sustituto?'ap-incidencia':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
       <button class="ap-item-head" data-ap="abrir" data-i="${it.id}" aria-expanded="${open}" aria-controls="ap-editor-${it.id}">
         <span class="ap-number">${ok?'✓':index+1}</span><span class="ap-item-name"><b>${esc(it.prod)}</b><small>${esc(cantidad(it))}${repTagsTexto(it)?' · '+esc(repTagsTexto(it)):''}</small></span>
         <span class="ap-item-status">${esc(estadoItem(it))}</span><span aria-hidden="true">${open?'−':'+'}</span>

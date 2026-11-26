@@ -4,12 +4,6 @@
  const opciones=[['manana','Mañana'],['tarde','Tarde'],['','Sin turno']];
  const clave=p=>!p.retiro&&['manana','tarde'].includes(p.turno)?p.turno:'';
  const nombre=t=>opciones.find(([k])=>k===t)?.[1]||'Sin turno';
- const abiertos=new Map();
- const llave=(contexto,t)=>`${state.who}:${contexto}:${t}`;
- function plegar(summary){
-  const grupo=summary.parentElement;
-  abiertos.set(grupo.dataset.turnoClave,!grupo.open);
- }
  function grupos(lista,render,contexto){
   const retiros=lista.filter(p=>p.retiro);
   const entregas=lista.filter(p=>!p.retiro);
@@ -17,9 +11,7 @@
   const pedidos=entregas.filter(p=>clave(p)===t);
   if(!pedidos.length)return '';
   const titulo=`<span class="turno-nombre">${n}</span><span class="turno-cantidad">${pedidos.length}</span>`;
-  if(!contexto)return `<section class="turno-grupo" data-turno="${t}"><h4 class="turno-titulo turno-${t||'sin'}">${titulo}</h4>${pedidos.map(render).join('')}</section>`;
-  const key=llave(contexto,t);
-  return `<details class="turno-grupo turno-plegable" data-turno="${t}" data-turno-clave="${esc(key)}" ${abiertos.get(key)?'open':''}><summary class="turno-titulo turno-${t||'sin'}" onclick="Turnos.plegar(this)">${titulo}</summary><div class="turno-contenido">${pedidos.map(render).join('')}</div></details>`;
+  return `<section class="turno-grupo" data-turno="${t}"><h4 class="turno-titulo turno-${t||'sin'}">${titulo}</h4><div class="turno-contenido">${pedidos.map(render).join('')}</div></section>`;
  }).join('');}
  function selector(p,disabled=false){
   if(p.retiro)return '';
@@ -46,5 +38,5 @@
   campo.closest('.turno-campo').hidden=activo;campo.disabled=activo;
   if(activo)campo.value='';
  }
- window.Turnos={retiro,clave,nombre,grupos,selector,cambiar,filtros,plegar};
+ window.Turnos={retiro,clave,nombre,grupos,selector,cambiar,filtros};
 })();
