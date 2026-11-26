@@ -400,7 +400,7 @@ test('toque en móvil abre el armado, sin desbordamiento y con faltante total in
  await page.locator('[data-ap="nada"]').tap();
  await expect(page.locator('[data-ap="foto"]')).toBeDisabled();
  await page.locator('[data-ap="guardar"]').tap();
- await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
+ await expect(page.locator('.ap-item-status')).toHaveText('Sin disponibilidad');
  expect(s.db.prep_items[0]).toMatchObject({falta:true,enviado:0,peso:null,foto:null,separado:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.querySelector('#ap-content').scrollWidth<=innerWidth)).toBe(true);
  expect(s.errors).toEqual([]);await s.close();
@@ -448,7 +448,7 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
  await expect(page.locator('.ap-progress-head b')).toHaveText('0 de 1 productos preparados');
  await expect(page.locator('#ap-finalizar')).toBeDisabled();
  s.failItem(false);await page.locator('[data-ap="guardar"]').click();
- await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
+ await expect(page.locator('.ap-item-status')).toHaveText('Sin disponibilidad');
  expect(s.db.prep_items[0]).toMatchObject({falta:true,enviado:1,separado:true});
  await abrirProducto(page);await page.locator('[data-ap="falta"]').click();await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
@@ -465,7 +465,7 @@ test('novedades remotas preservan borradores; pedido despachado deja de ser edit
  s.db.prep_items=[{item_id:1,falta:true,enviado:1}];await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(peso).toBeFocused();await expect(peso).toHaveValue('4,5');
  await page.locator('[data-ap="guardar"]').click();
- await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
+ await expect(page.locator('.ap-item-status')).toHaveText('Sin disponibilidad');
  expect(s.db.prep_items[0]).toMatchObject({peso:4.5,falta:true,enviado:1,separado:true});
  await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(page.locator('.ap-editor')).toHaveCount(0);
@@ -514,7 +514,7 @@ test('sustituto parcial, remito compartido y carga crean solo el faltante pendie
  await mateo.getByRole('textbox',{name:'Buscar producto sustituto'}).fill('Mozzarella alternativa');await mateo.locator('[data-product="Mozzarella alternativa"]').click();
  await mateo.locator('[data-ap="sustituto_cantidad"]').fill('2');await mateo.locator('[data-ap="sustituye"]').fill('2');
  await expect(mateo.locator('.ap-pending')).toContainText('Queda pendiente: 2');
- await mateo.locator('[data-ap="guardar"]').click();await expect(mateo.locator('.ap-item-status')).toHaveText('Con faltante');
+ await mateo.locator('[data-ap="guardar"]').click();await expect(mateo.locator('.ap-item-status')).toHaveText('Sustituto · Con faltante');
  await mateo.locator('#ap-finalizar').click();await expect(mateo.locator('#ap-raiz')).toBeHidden();
  await expect(mateo.locator('[data-rv="camioneta"]')).toBeEnabled();
  await oscar.locator('.rv-listo .rv-card h3').click();await expect(oscar.locator('#rc-title')).toHaveText('Resumen para remito');await expect(oscar.locator('table')).toHaveCount(0);await oscar.locator('[data-rc="expandir"]').click();
