@@ -448,7 +448,7 @@ test('guardado fallido retiene cambios y los faltantes parciales se pueden corre
  await expect(page.locator('.ap-progress-head b')).toHaveText('0 de 1 productos preparados');
  await expect(page.locator('#ap-finalizar')).toBeDisabled();
  s.failItem(false);await page.locator('[data-ap="guardar"]').click();
- await expect(page.locator('.ap-item-status')).toHaveText('Sin disponibilidad');
+ await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
  expect(s.db.prep_items[0]).toMatchObject({falta:true,enviado:1,separado:true});
  await abrirProducto(page);await page.locator('[data-ap="falta"]').click();await page.locator('[data-ap="guardar"]').click();
  await expect(page.locator('.ap-item-status')).toHaveText('Preparado');
@@ -465,7 +465,7 @@ test('novedades remotas preservan borradores; pedido despachado deja de ser edit
  s.db.prep_items=[{item_id:1,falta:true,enviado:1}];await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(peso).toBeFocused();await expect(peso).toHaveValue('4,5');
  await page.locator('[data-ap="guardar"]').click();
- await expect(page.locator('.ap-item-status')).toHaveText('Sin disponibilidad');
+ await expect(page.locator('.ap-item-status')).toHaveText('Con faltante');
  expect(s.db.prep_items[0]).toMatchObject({peso:4.5,falta:true,enviado:1,separado:true});
  await s.emit('prep_items');await page.waitForTimeout(300);
  await expect(page.locator('.ap-editor')).toHaveCount(0);
