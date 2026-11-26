@@ -130,24 +130,25 @@ async function setup(browser,{turnosPlegados=false}={}){
  }
  return {db,open,emit,moves,errors,writes,uploads,fail:()=>{fail=true},failItem:v=>{failItem=v},failPhoto:v=>{failPhoto=v},failLoad:v=>{failLoad=v},changeOnLoad:()=>{changeOnLoad=true},close:async()=>Promise.all(pages.map(p=>p.close()))};
 }
-test('turnos plegables en Pedidos y Reparto conservan apertura al actualizar',async({browser})=>{
+test('turnos siempre desplegados y preparación muestra incidencias en vivo',async({browser})=>{
  const s=await setup(browser,{turnosPlegados:true});s.db.pedidos[0].turno='manana';s.db.pedidos[1].turno='tarde';
- s.db.prep_cola=[{pedido_id:'p1',etapa:'por_preparar',version:1},{pedido_id:'p2',etapa:'preparando',version:1}];
- const m=await s.open('Mateo',{width:820,height:1180},{hasTouch:true});
- const gm=m.locator('.rv-por_preparar details[data-turno="manana"]');
- await expect(gm.locator('summary')).toContainText('Mañana');await expect(gm.locator('.rv-card')).toBeHidden();
- await gm.locator('summary').click();await expect(gm.locator('.rv-card')).toBeVisible();
- s.db.pedidos[0].direccion='Nueva dirección';await s.emit('pedidos');
- await expect(gm.locator('.rv-card')).toContainText('Nueva dirección');await expect(gm).toHaveAttribute('open','');
- await expect(m.locator('.rv-preparando .rv-card')).toBeHidden();
- await gm.locator('summary').click();await s.emit('pedidos');await expect(gm.locator('.rv-card')).toBeHidden();
- const o=await s.open('Oscar');await o.evaluate(rows=>{state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
- const pg=o.locator('#tab-pedidos details[data-turno="manana"]');
- await expect(pg.locator('.order-card')).toBeHidden();
- await pg.locator('summary').focus();await o.keyboard.press('Enter');await expect(pg.locator('.order-card')).toBeVisible();
- await o.evaluate(()=>renderPedidos());await expect(pg.locator('.order-card')).toBeVisible();
- await expect(o.locator('#tab-pedidos details[data-turno="tarde"] .order-card')).toBeHidden();
- await pg.locator('summary').click();await o.evaluate(()=>renderPedidos());await expect(pg.locator('.order-card')).toBeHidden();
+ s.db.prep_cola=[{pedido_id:'p1',etapa:'preparando',version:1},{pedido_id:'p2',etapa:'preparando',version:1}];
+ s.db.prep_items=[{item_id:1,falta:true,enviado:1,separado:true},{item_id:2,falta:true,enviado:0,separado:true,sustituto:'Tybo',sustituto_cantidad:2,sustituto_medida:'unidad',sustituye:2}];
+ const o=await s.open('Oscar');
+ await expect(o.locator('.rv-preparando [data-turno="manana"] .rv-card')).toBeVisible();
+ await expect(o.locator('.rv-preparando [data-turno="tarde"] .rv-card')).toBeVisible();
+ await expect(o.locator('.rv-card[data-id="p1"]')).toContainText('Faltan');
+ await expect(o.locator('.rv-card[data-id="p2"]')).toContainText('Sustituto: Tybo');
+ await expect(o.locator('.rv-card[data-id="p2"] .rv-product-done')).toHaveCount(0);
+ s.db.prep_items[0].enviado=0;await s.emit('prep_items');
+ await expect(o.locator('.rv-card[data-id="p1"]')).toContainText('Sin disponibilidad');
+ await expect(o.locator('.rv-card[data-id="p1"] .rv-product-unavailable')).toBeVisible();
+ await o.locator('.rv-card[data-id="p1"] h3').click();
+ await expect(o.locator('.ap-item-status')).toContainText('Sin disponibilidad');
+ await o.evaluate(rows=>{state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+ await expect(o.locator('#tab-pedidos [data-turno="manana"] .order-card')).toBeVisible();
+ await expect(o.locator('#tab-pedidos [data-turno="tarde"] .order-card')).toBeVisible();
+ await expect(o.locator('details.turno-plegable')).toHaveCount(0);
  expect(s.errors).toEqual([]);await s.close();
 });
 

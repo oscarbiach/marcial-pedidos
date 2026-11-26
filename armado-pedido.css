@@ -180,3 +180,5 @@ body.ap-abierto { overflow:hidden; }
 .ap-photo-tile{position:relative;padding:8px 8px 0 0}
 .ap .ap-photo-tile .ap-photo-remove{position:absolute;right:0;top:0;width:30px;height:30px;min-height:30px;padding:0;border-radius:50%;background:white;display:grid;place-items:center}
 .ap-photo-gallery:empty{display:none}
+
+.ap-item.ap-incidencia{border-color:#cbb7df}.ap-incidencia .ap-item-head{background:#f5effa}.ap-incidencia .ap-item-name,.ap-incidencia .ap-item-status{color:#69428c}.ap-incidencia .ap-number{background:#805ca0;color:white}
