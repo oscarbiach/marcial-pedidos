@@ -2,8 +2,8 @@
    Objetivo: cada mañana, definir a quién escribirle comparando a cada cliente contra SU PROPIO ritmo de pedido, no contra una regla fija.
 
    Método (el del usuario, de su sesión de seguimiento; lo no confirmado está marcado [INFERIDO]):
-   · Un pedido cuenta salvo que esté eliminado (papelera) o Cancelado. Los Pendientes cuentan como pedido hecho.
-   · Fecha de referencia del pedido = fecha de despacho si existe; si no, la de carga. El reloj de recompra arranca en el despacho.
+   · Un pedido comercial cuenta salvo que esté eliminado o Cancelado. Las reposiciones no son compras nuevas. Los Pendientes sí cuentan.
+   · El ritmo usa la fecha real del pedido (o la de carga si no se corrigió). El despacho se muestra por separado.
    · Se excluyen cuentas de prueba o muestra (CONFIG.excluir) y se unifican nombres (sin mayúsculas/tildes + CONFIG.unificar).
    · Por cliente: n (pedidos), intervalo mediano entre fechas distintas, días sin pedir = hoy − último pedido,
      atraso = días sin pedir ÷ intervalo (1 o más = vencido; 3 = ya pasó el triple de lo que suele tardar).
@@ -71,11 +71,11 @@
     fechasFicha: 12,          // cuántas fechas de pedido se muestran en la línea de tiempo de la ficha
     unicaSinVolverDias: 14,   // alerta «Única compra sin volver»: pasaron más de estos días desde su único pedido
     esperandoAlertaDias: 2,   // alerta «Esperando hace 2+ días»: días corridos desde que se le escribió y sigue sin pedir
-    menosUltimos: 2,          // «Compra menos»: renglones por pedido de los últimos N pedidos…
+    menosUltimos: 2,          // «Pidió menos variedad»: renglones por pedido de los últimos N pedidos…
     menosPrevios: 6,          // …contra el promedio de los N anteriores
     menosMinPrevios: 3,       // hacen falta al menos estos pedidos anteriores (todos con renglones cargados)
     menosMinRenglones: 4,     // y que antes llevara al menos tantos renglones por pedido (si no, la diferencia no dice nada)
-    menosRatio: 0.6,          // «compra menos» = los últimos pedidos tienen el 60 % o menos de los renglones de antes
+    menosRatio: 0.6,          // «pidió menos variedad» = los últimos pedidos tienen el 60 % o menos de los renglones de antes
   };
 
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -105,10 +105,15 @@
 
   const termina = (clave, sufijos) => (sufijos || []).some(x => { const k = norm(x); return clave === k || clave.endsWith(' ' + k); });
   const coincide = (clave, patrones) => (patrones || []).some(p => { const k = norm(p); return clave === k || clave.startsWith(k + ' '); });
-  const cuenta = p => p && !p.eliminado_en && p.estado !== 'Cancelado' && p.cliente && String(p.cliente).trim() && p.fecha;
+  const valido = p => p && !p.eliminado_en && p.estado !== 'Cancelado' && p.cliente && String(p.cliente).trim() && p.fecha;
+  // Misma marca que esReposicion() en Pedidos; una entrega de faltantes no reinicia la compra.
+  const reposicion = p => String(p.notas || '').startsWith('🔁 REPOSICIÓN');
+  const cuenta = p => valido(p) && !reposicion(p);
   // La fecha real en que el cliente hizo el pedido (fechaPedido, corregida desde Administración) manda sobre el día de carga.
   const diaCarga = p => String(p.fechaPedido || p.fecha).slice(0, 10);
-  const diaRef = (p, hoy) => { const d = p.fechaDespacho ? String(p.fechaDespacho).slice(0, 10) : ''; return d && d <= hoy ? d : diaCarga(p); };
+  const diaRef = p => diaCarga(p);
+  // Compatibilidad de agendas ya guardadas antes de separar pedido y despacho.
+  const referenciaAnterior = (p, hoy) => { const d = p.fechaDespacho ? String(p.fechaDespacho).slice(0, 10) : ''; return d && d <= hoy ? d : diaCarga(p); };
 
   // ── Reglas de producto (IDEA-12) ──
   // Cada regla: { id, tipo: 'retirado' | 'reemplazo' | 'excepcion', producto, sustituto?, clave? (cliente, solo excepción), desde, revision?, motivo?, nota?,
@@ -204,20 +209,24 @@
     // 1. Limpieza y unión por cliente
     const mapa = new Map(); let excluidos = 0;
     (pedidos || []).forEach(p => {
-      if (!cuenta(p)) return;
+      if (!valido(p)) return;
       let nombre = String(p.cliente).trim(), k = norm(nombre);
       if (coincide(k, C.excluir) || termina(k, C.excluirTerminaEn)) { excluidos++; return; }
       const unificado = !!alias[k];
       if (unificado) { nombre = alias[k]; k = norm(nombre); }
       if (diaRef(p, hoy) > hoy || diaCarga(p) > hoy) return;   // pedidos con fecha futura no cuentan
-      if (!mapa.has(k)) mapa.set(k, { clave: k, nombre, pedidos: [], canon: false });
+      if (!mapa.has(k)) mapa.set(k, { clave: k, nombre, pedidos: [], entregas: [], ciclosAnteriores: [], canon: false });
       if (unificado) mapa.get(k).canon = true;
-      mapa.get(k).pedidos.push(p);
+      const grupo = mapa.get(k);
+      grupo.entregas.push(p);
+      grupo.ciclosAnteriores.push(referenciaAnterior(p, hoy));
+      if (cuenta(p)) grupo.pedidos.push(p);
     });
 
     // 2. Fechas, intervalo propio y mediana de la cartera
     const base = [], brechas = [];
     mapa.forEach(x => {
+      if (!x.pedidos.length) return;
       x.pedidos.forEach(p => { p._ref = diaRef(p, hoy); });
       x.pedidos.sort((a, b) => a._ref.localeCompare(b._ref) || diaCarga(a).localeCompare(diaCarga(b)));
       const ult = x.pedidos[x.pedidos.length - 1];
@@ -269,7 +278,7 @@
       const av = avisosProductos(productos, prods, x.clave, R, hoy, U);
       const dejoDeTodos = av.avisos, dejoDe = dejoDeTodos.slice(0, U.dejoMax), cambiosProductos = av.contexto;
 
-      // «Compra menos»: renglones (productos distintos) por pedido de los últimos pedidos contra el promedio de los anteriores. Solo si TODOS esos pedidos
+      // «Pidió menos variedad»: renglones (productos distintos) por pedido de los últimos pedidos contra el promedio de los anteriores. Solo si TODOS esos pedidos
       // tienen renglones cargados; si no, no se dice nada (no se inventa). Las cantidades no se comparan: mezclan cajas, unidades y kilos.
       const nMenos = U.menosUltimos + U.menosPrevios, colaMenos = x.pedidos.slice(-nMenos);
       let compraMenos = null;
@@ -338,12 +347,13 @@
       const despachoDe = new Set(x.pedidos.filter(p => p.fechaDespacho && String(p.fechaDespacho).slice(0, 10) === p._ref).map(p => p._ref));
       const ultimaCarga = x.pedidos.map(diaCarga).sort().at(-1) || '';
       // La app registra despacho, no una confirmación independiente de recepción.
-      const ultimaEntrega = x.pedidos.filter(p => p.estado === 'Despachado' && p.fechaDespacho)
+      const ultimaEntrega = x.entregas.filter(p => p.estado === 'Despachado' && p.fechaDespacho)
         .map(p => String(p.fechaDespacho).slice(0, 10)).filter(d => d <= hoy).sort().at(-1) || '';
       const fechasRecientes = x.fechas.slice(-U.fechasFicha).map(d => ({ fecha: d, despacho: despachoDe.has(d) }));
 
       return {
         clave: x.clave, nombre: x.nombre, n, poco, ultimo, dias, intervalo, intervaloPropio, atraso, diasHab, bloque, motivo,
+        ciclosAnteriores: [...new Set(x.ciclosAnteriores.filter(d => d >= ultimo))],
         hoyEsSuDia: diasHab.includes(diaSemana(hoy)), lleva, dejoDe, dejoDeTodos, cambiosProductos, productos, observacion,
         auto, manual, volvioSolo, pedidoIds: x.pedidos.map(p => String(p.id)),
         diaUltimo: fechaLarga(ultimo), primer: x.fechas[0],
@@ -434,7 +444,7 @@
       if (pidio.has(c.clave)) { const d = pidio.get(c.clave); tarjetas.push({ clave: c.clave, nombre: c.nombre, c, estado: 'pidio', tipo, dia: diaSemana(d) === 0 ? sumarDias(d, -1) : d, calculado: '', movido: false, escrito: '', atraso: 0, atrasado: false, recuperacion: tipo === 'recupero', fuera: false }); }
       if (c.bloque === 'notocar' && c.motivo === 'inactivo') return;   // más de 150 días sin pedir: no se ofrece (se sigue encontrando en el buscador)
       const fila = ag.get(c.clave) || null, calculado = diaCalculado(c);
-      const movido = !!(fila && dia10(fila.fecha) && dia10(fila.ciclo) === c.ultimo), base = movido ? sinDomingo(dia10(fila.fecha)) : calculado;   // un movimiento viejo guardado en domingo vale lunes
+      const movido = !!(fila && dia10(fila.fecha) && (dia10(fila.ciclo) === c.ultimo || (c.ciclosAnteriores || []).includes(dia10(fila.ciclo)))), base = movido ? sinDomingo(dia10(fila.fecha)) : calculado;   // conserva movimientos del ciclo anterior; un pedido comercial posterior los invalida
       // «Le escribí»: vale mientras el cliente no haya vuelto a pedir. Pasados `reescribirDias` días hábiles (el domingo no cuenta) sin pedido vuelve a pendiente («volver a escribir»).
       const escribi = !!(fila && dia10(fila.escrito) && dia10(fila.escrito) >= c.ultimo), escritoF = escribi ? dia10(fila.escrito) : '';
       const vuelveEl = escribi ? habilMas(escritoF, reDias) : '', espera = escribi && hoyEf < vuelveEl, reescribir = escribi && !espera;
@@ -486,8 +496,8 @@
   //   dejo        → «Dejó de comprar» (tipo recupero)
   //   unica       → «Única compra sin volver» (un solo pedido, hace más de `unicaSinVolverDias` días)
   //   productos   → «Dejó de llevar» uno o más productos (ya sin los retirados, reemplazados o con excepción)
-  //   menos       → «Compra menos»: SOLO si el cliente tiene renglones cargados en todos los pedidos comparados (ver `compraMenos` en calcular); si no, no se inventa
-  const ALERTAS = { reescribir: 'Volver a escribir', esperando: 'Esperando hace días', dejo: 'Dejó de comprar', unica: 'Única compra sin volver', productos: 'Dejó de llevar', menos: 'Compra menos' };
+  //   menos       → «Pidió menos variedad»: SOLO si el cliente tiene renglones cargados en todos los pedidos comparados (ver `compraMenos` en calcular); si no, no se inventa
+  const ALERTAS = { reescribir: 'Volver a escribir', esperando: 'Esperando hace días', dejo: 'Dejó de comprar', unica: 'Única compra sin volver', productos: 'Dejó de llevar', menos: 'Pidió menos variedad' };
   const ALERTAS_ORDEN = ['reescribir', 'esperando', 'dejo', 'unica', 'productos', 'menos'];
   function alertas(calc, ag, opciones) {
     const o = opciones || {}, hoy = o.hoy || calc.hoy, U = Object.assign({}, UMBRALES, o.umbrales), out = [];

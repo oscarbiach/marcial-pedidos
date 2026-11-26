@@ -335,13 +335,13 @@
   const prioDe = t => (t.atrasado || t.tipo === 'recupero' ? ['Alta', 'high', 'red'] : t.tipo === 'unica' ? ['Media', 'mid', 'amber'] : ['Normal', 'low', 'gray']);
   const prioHtml = t => { const [txt, dot] = prioDe(t); return `<span class="sv-pr"><i class="sv-dot ${dot}"></i>${txt}</span>`; };
   const desdeTxt = c => (c.dias === 0 ? 'pidió hoy' : `${c.dias} ${c.dias === 1 ? 'día' : 'días'} desde el último pedido`);
-  const SENALES = { reescribir: 'Volver a escribir', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Compra menos', ninguna: 'Sin alertas' };
+  const SENALES = { reescribir: 'Volver a escribir', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Pidió menos variedad', ninguna: 'Sin alertas' };
   function senal(c, t) {
     if (t && t.reescribir && t.estado === 'pendiente') return ['amber', 'Volver a escribir', 'reescribir'];
     if (c.n === 1) return ['amber', 'Una compra', 'unica'];
     if (S.tipoDe(c) === 'recupero') return ['red', `Sin pedir ${c.dias} d`, 'dejo'];
     if (c.dejoDeTodos.length) return ['amber', 'Dejó de llevar', 'productos'];
-    if (c.compraMenos) return ['amber', 'Compra menos', 'menos'];
+    if (c.compraMenos) return ['amber', 'Pidió menos variedad', 'menos'];
     return ['gray', 'Sin alertas', 'ninguna'];
   }
   const ESTADOS = { pendiente: ['blue', 'Pendiente'], atrasado: ['red', 'Atrasado'], esperando: ['amber', 'Esperando'], pidio: ['green', 'Pidió'], pausa: ['gray', 'Sin seguimiento'], inactivo: ['gray', 'Inactivo'] };
@@ -379,7 +379,7 @@
 
   // Alertas (filas con cuadrado de color, nombre, detalle, pill de señal y chevron: abre la ficha)
   const ALERTA_UI = { reescribir: ['amber', '!'], esperando: ['blue', 'clock'], dejo: ['red', '!'], unica: ['amber', '!'], productos: ['amber', 'trending-down'], menos: ['amber', 'trending-down'] };
-  const ALERTA_TXT = { reescribir: 'Volver a escribir', esperando: 'Esperando', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Compra menos' };
+  const ALERTA_TXT = { reescribir: 'Volver a escribir', esperando: 'Esperando', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Pidió menos variedad' };
   function filasAlertas(calc, ag, max) {
     const al = S.alertas(calc, ag, { hoy: hoy() }), todas = E.alertasTodas.has('all'), ver = todas ? al : al.slice(0, max);
     if (!al.length) return { n: 0, html: `<p class="sv-vacio">${ico('circle-check')}Sin alertas por ahora. Todo lo que se mide está en orden.</p>` };
@@ -591,7 +591,7 @@
   // Línea de tiempo con las últimas fechas de pedido. Se dibuja a escala (la distancia es proporcional a los días) y siempre trae la lista escrita.
   function lineaTiempo(c) {
     const fr = c.fechasRecientes, h = hoy();
-    const items = fr.map((f, i) => `<li>${esc(F.fechaLarga(f.fecha))}${f.despacho ? '' : ' <span class="sc-carga">(carga)</span>'}${i ? ` · a los ${diasN(F.diffDias(f.fecha, fr[i - 1].fecha))}` : ''}</li>`).join('');
+    const items = fr.map((f, i) => `<li>${esc(F.fechaLarga(f.fecha))}${i ? ` · a los ${diasN(F.diffDias(f.fecha, fr[i - 1].fecha))}` : ''}</li>`).join('');
     const lista = `<ol class="sc-fechas">${items}<li class="sc-hoy">Hoy · ${c.dias === 0 ? 'pidió hoy' : `pasaron ${diasN(c.dias)} desde el último`}</li></ol>`;
     if (fr.length < 3) return `<p class="sc-vacio">Todavía hay muy pocas fechas de pedido (${c.nFechas}) para dibujar su ritmo.</p>${lista}`;
     const total = Math.max(1, F.diffDias(h, fr[0].fecha));
@@ -608,7 +608,7 @@
     const nf = c.fechasRecientes.length, ind = c.auto.razon;
     return `<details class="sc-hist" data-k="${at(c.clave)}"${E.ritmo.has(c.clave) ? ' open' : ''}><summary>${ico('history', 'ico-sm')}Ver historial y cálculo${ico('chevron-down', 'ico-sm sc-chev')}</summary>
       <div class="sc-hist-cuerpo">
-        <p class="sc-tit-mini">${nf === 1 ? 'Único pedido' : `Últimos ${nf} pedidos`} · fecha de despacho (o de carga si todavía no se despachó)</p>
+        <p class="sc-tit-mini">${nf === 1 ? 'Único pedido' : `Últimos ${nf} pedidos`} · fecha del pedido</p>
         ${lineaTiempo(c)}
         <p class="sc-leyenda">${esc(calculo)} ${esc(pedidosN(c.n))} en total.</p>
         <p class="sc-leyenda"><b>Indicador${c.manual ? ' del cálculo' : ''}:</b> ${esc(ind[0].toUpperCase() + ind.slice(1))}.</p>
@@ -706,7 +706,7 @@
   // Encabezado con datos en línea (.facts de la referencia) y cuatro mini-estadísticas
   function factsFicha(c, dir) {
     const f = (k, v) => `<div class="sv-fact"><span class="sv-muted">${k}</span><b>${v}</b></div>`, t = E.ag && E.ag.porCliente.get(c.clave);
-    return `<div class="sv-facts">${f('Dirección', dir ? esc(dir) : 'Sin completar')}${f('Última entrega', c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada')}${(v2Activo() && (veTodo() || esGestor())) ? f('Vendedor', esc(c.vendedor || 'Atención general')) : ''}${(c.etiquetas || []).length ? `<div class="sv-fact"><span class="sv-muted">Etiquetas</span>${chipsEt(c)}</div>` : ''}</div>`;
+    return `<div class="sv-facts">${f('Dirección', dir ? esc(dir) : 'Sin completar')}${f('Último pedido', esc(F.fechaLarga(c.ultimo)))}${f('Último despacho', c.ultimaEntrega ? esc(F.fechaLarga(c.ultimaEntrega)) : 'Sin fecha registrada')}${(v2Activo() && (veTodo() || esGestor())) ? f('Vendedor', esc(c.vendedor || 'Atención general')) : ''}${(c.etiquetas || []).length ? `<div class="sv-fact"><span class="sv-muted">Etiquetas</span>${chipsEt(c)}</div>` : ''}</div>`;
   }
   function minisFicha(c) {
     const t = E.ag && E.ag.porCliente.get(c.clave), [sc, st] = senal(c, t), cada = Math.max(1, Math.round(c.intervalo));

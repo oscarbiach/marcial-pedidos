@@ -129,3 +129,31 @@ for(const escenario of [noCont,todos]){
  assert.equal(vencido.dia,hoy2);
 }
 console.log('OK: reprogramar alertas rojas respeta día/semana manual; vencidos regresan a hoy.');
+
+// Etapa 1: el despacho y las reposiciones no alteran el ritmo comercial.
+const compras=[
+ {id:'c1',cliente:'Ritmo estable',fecha:'2026-11-05',fechaDespacho:'2026-11-07',estado:'Despachado',items:[{prod:'Pan',qty:1}]},
+ {id:'c2',cliente:'Ritmo estable',fecha:'2026-11-12',fechaDespacho:'2026-11-18',estado:'Despachado',items:[{prod:'Pan',qty:1}]},
+];
+const repo={id:'rep',cliente:'Ritmo estable',fecha:'2026-11-19',fechaDespacho:'2026-11-20',estado:'Despachado',notas:'🔁 REPOSICIÓN — Faltó del pedido anterior',items:[{prod:'Pan',qty:1}]};
+const motor=ps=>S.calcular(ps,'2026-11-20');
+let etapa=motor(compras),ce=etapa.clientes[0];
+assert.equal(ce.intervalo,7);assert.equal(ce.ultimo,'2026-11-12');assert.equal(ce.ultimaEntrega,'2026-11-18');
+assert.deepEqual(ce.fechasRecientes.map(f=>f.fecha),['2026-11-05','2026-11-12']);
+assert.equal(motor(compras.map(p=>({...p,fechaDespacho:''}))).clientes[0].intervalo,7);
+etapa=motor([...compras,repo]);ce=etapa.clientes[0];
+assert.equal(ce.n,2);assert.equal(ce.ultimo,'2026-11-12');assert.equal(ce.ultimaEntrega,'2026-11-20');assert.equal(ce.intervalo,7);
+assert.deepEqual(ce.pedidoIds,['c1','c2']);
+assert.equal(S.agenda(etapa,{pedidos:[...compras,repo]}).pidieron.size,0);
+assert.equal(motor([repo]).clientes.length,0);
+for(const ciclo of ['2026-11-12','2026-11-18','2026-11-20']){
+ const ag=new Map([[ce.clave,{fecha:'2026-11-27',ciclo}]]);
+ assert.equal(S.agenda(etapa,{agenda:ag}).porCliente.get(ce.clave).dia,'2026-11-27');
+}
+const compraNueva={...compras[1],id:'c3',fecha:'2026-11-21',fechaDespacho:'',estado:'Pendiente'};
+const nuevo=S.calcular([...compras,repo,compraNueva],'2026-11-21');
+assert.equal(S.agenda(nuevo,{agenda:new Map([[ce.clave,{fecha:'2026-11-27',ciclo:'2026-11-20'}]])}).porCliente.get(ce.clave).movido,false);
+const decision={id:'dec',clave:ce.clave,tipo:'recuperacion',motivo:'otro',desde:'2026-11-18',pedidosConocidos:['c1','c2']};
+assert.equal(S.calcular([...compras,repo],'2026-11-20',{decisiones:[decision]}).clientes[0].manual.tipo,'recuperacion');
+assert.equal(S.ALERTAS.menos,'Pidió menos variedad');
+console.log('OK: compras por fecha real, despacho independiente, reposiciones sin recompra, agenda anterior conservada y nuevo ciclo comercial.');
