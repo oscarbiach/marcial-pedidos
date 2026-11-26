@@ -138,7 +138,7 @@ test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vis
  await expect(fila(page,'sauce mercado')).toContainText('Atrasado');
  await expect(fila(page,'unica compra vieja')).toContainText('Dejó de comprar');   // un solo pedido hace 23 días: pasó el doble del ritmo de la cartera (tipoDe: «recupero» gana sobre «única»)
  await expect(fila(page,'almacen norte')).toContainText('Habitual');
- await expect(fila(page,'almacen norte')).toContainText('Le toca escribirle · 8 días desde el último pedido');
+ await expect(fila(page,'almacen norte')).toContainText('8 días sin pedir · suele pedir cada 7 días');
  await expect(fila(page,'almacen norte')).toContainText('Alta'.replace('Alta','Normal'));
  await expect(page.locator('#sv-hoy-t').locator('xpath=..')).toContainText('6 tareas');
  // alertas comerciales: cada una abre la ficha
@@ -208,7 +208,7 @@ test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de 
  await f.locator('[data-sc="escribi"]').click();
  await expect(page.locator('#sc-toast')).toContainText('Le escribiste a Kiosco Sur');
  await expect(page.locator('#sc-raiz .sv-kpi').nth(2)).toContainText('1');await expect(page.locator('#sc-raiz .sv-kpi').nth(3)).toContainText('1');
- await expect(f.locator('[data-sc="escribi"]')).toBeChecked();await expect(f).toContainText('Esperando');await expect(f).toContainText('vuelve');
+ await expect(f.locator('[data-sc="escribi"]')).toBeChecked();await expect(f).toContainText('Esperando');await expect(f).toContainText('retomar');await expect(page.locator('.sv-agenda-espera')).toContainText('Ya contactados · en espera');await expect(f.locator('[data-sc="resultado"]')).toHaveText('Anotar respuesta');
  expect(s.db.llamadas.filter(l=>l.f==='seg_escribi').map(l=>l.p_fecha)).toEqual([HOY]);
  // deshacer devuelve a pendiente
  await page.locator('#sc-toast [data-sc="deshacer"]').click();
@@ -232,7 +232,7 @@ test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de 
  const llamada=s.db.llamadas.find(l=>l.f==='contacto');expect(llamada.p_id).toMatch(/^[0-9a-f-]{36}$/);expect(llamada.p_ciclo).toBe('2026-11-17');
  expect(s.db.agenda.get('c2')).toMatchObject({fecha:'2026-11-26',escrito_en:null});
  await vista(page,'agenda');
- await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]')).toContainText('Tenía stock · Contacto programado');
  await expect(page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]')).toHaveCount(0);
  // la ficha muestra el historial
  await page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]').click();
@@ -468,4 +468,28 @@ test('Etapa 1: ficha distingue compra y despacho, sin reiniciar por una reposici
  await page.locator('#scModal .sv-facts').scrollIntoViewIfNeeded();
  await page.screenshot({path:'test-results/seguimiento-etapa1.png',animations:'disabled'});
  sinErrores(page);await page.context().close();
+});
+
+
+test('Etapa 2: motivos concretos, programados y espera separados sin escribir datos',async({browser})=>{
+ const s=setup();
+ s.db.contactos.push({id:'nc',cliente_id:'c2',resultado:'no_contesto',creado_en:'2026-11-23T15:00:00Z',autor:'Juan Marcos'});
+ s.db.contactos.push({id:'stk',cliente_id:'c1',resultado:'tiene_stock',volver_el:HOY,creado_en:'2026-11-23T15:00:00Z',autor:'Juan Marcos'});
+ s.db.agenda.set('c1',{cliente_id:'c1',fecha:HOY,ciclo:'2026-11-16',escrito_en:null});
+ s.db.agenda.set('c3',{cliente_id:'c3',fecha:null,ciclo:'2026-11-13',escrito_en:HOY});
+ const page=await entrar(browser,s,'Juan Marcos');
+ await expect(fila(page,'kiosco sur')).toContainText('No contestó · volver a intentar');
+ await expect(fila(page,'kiosco sur')).toContainText('Alta');
+ await expect(fila(page,'almacen norte')).toContainText('Tenía stock · Contacto programado para hoy');
+ await expect(page.locator('.sv-agenda-espera')).toContainText('Ya contactados · en espera');
+ await expect(fila(page,'sauce mercado')).toContainText('retomar jue 26 si no pide');
+ await expect(fila(page,'sauce mercado')).toContainText('Anotar respuesta');
+ expect(s.db.llamadas).toEqual([]);
+ await page.screenshot({path:'test-results/agenda-etapa2-motivos.png',fullPage:true});
+ await vista(page,'agenda');
+ await expect(page.locator('.daytask[data-k="kiosco sur"]').first()).toContainText('No contestó · volver a intentar');
+ await page.locator('.daytask[data-k="kiosco sur"]').first().click();
+ await expect(page.locator('#scModal')).toContainText('No contestó · volver a intentar');
+ await expect(page.locator('#scModal')).not.toContainText('Invalid Date');
+ expect(s.db.llamadas).toEqual([]);sinErrores(page);await page.context().close();
 });

@@ -293,10 +293,7 @@
   // El detalle que ya no se ve en la tarjeta, en una frase (tooltip y nombre accesible)
   function detalleTarjeta(t) {
     const c = t.c, cada = Math.max(1, Math.round(c.intervalo)), d = [c.nombre];
-    if (t.estado === 'pidio') d.push('Pidió esta semana');
-    else if (t.estado === 'escribi') d.push(`Le escribiste ${diaLargo(t.escrito)}: esperando ${t.tipo === 'habitual' ? 'pedido' : 'respuesta'}; si no pide, vuelve el ${diaCorto(t.vuelveEl)}`);
-    else if (t.reescribir) d.push(`Volver a escribir: le escribiste ${diaLargo(t.escrito)} y no pidió`);
-    if (t.atrasado && t.estado === 'pendiente') d.push(`Atrasado: su día era el ${F.fechaLarga(t.calculado)}`);
+    d.push(motivoAgenda(t));
     d.push(TIPO_FRASE[t.tipo]);
     if (c.dejoDeTodos.length) d.push(`Dejó de llevar ${c.dejoDeTodos.length === 1 ? 'un producto' : c.dejoDeTodos.length + ' productos'}`);
     if (t.estado !== 'pidio' && t.movido) d.push(`Movido a mano (su día calculado es el ${F.fechaLarga(t.calculado)})`);
@@ -332,9 +329,26 @@
   const pillTipo = tipo => sp(TIPO_PILL[tipo][0], TIPO_PILL[tipo][1]);
   // Acción sugerida, prioridad y «señal» de cada cliente (los textos de la referencia: «Consultar reposición», «Alta», «Sin compras»…)
   const accionDe = t => (t.reescribir && t.estado === 'pendiente' ? 'Volver a escribir' : t.tipo === 'recupero' ? 'Recuperar' : t.tipo === 'unica' ? 'Segunda compra' : 'Le toca escribirle');
-  const prioDe = t => (t.atrasado || t.tipo === 'recupero' ? ['Alta', 'high', 'red'] : t.tipo === 'unica' ? ['Media', 'mid', 'amber'] : ['Normal', 'low', 'gray']);
+  const prioDe = t => (t.estado === 'escribi' ? ['En espera', 'low', 'gray'] : t.reescribir || t.atrasado || t.tipo === 'recupero' ? ['Alta', 'high', 'red'] : t.tipo === 'unica' ? ['Media', 'mid', 'amber'] : ['Normal', 'low', 'gray']);
   const prioHtml = t => { const [txt, dot] = prioDe(t); return `<span class="sv-pr"><i class="sv-dot ${dot}"></i>${txt}</span>`; };
   const desdeTxt = c => (c.dias === 0 ? 'pidió hoy' : `${c.dias} ${c.dias === 1 ? 'día' : 'días'} desde el último pedido`);
+  // Un mismo motivo en Hoy, calendario y ficha. No cambia fechas ni registra contactos.
+  function motivoAgenda(t) {
+    const c = t.c, ritmo = `${c.intervaloPropio ? '' : 'aprox. '}cada ${Math.max(1, Math.round(c.intervalo))} días`;
+    if (t.estado === 'pidio') return 'Ya hizo un pedido esta semana';
+    if (t.estado === 'escribi') return `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)} · retomar ${diaCorto(t.vuelveEl)} si no pide`;
+    const contacto = t.contacto || c.contacto;
+    if (t.movido) {
+      const resultado = contacto && contacto.volver_el === t.dia ? ({tiene_stock:'Tenía stock',no_interesa:'No le interesaba por ahora',otro:'Contacto registrado'})[contacto.resultado] : '';
+      return `${resultado ? resultado + ' · ' : ''}Contacto programado para ${t.dia === hoyEf() ? 'hoy' : diaCorto(t.dia)}`;
+    }
+    if (t.noContesto) return 'No contestó · volver a intentar';
+    if (t.reescribir) return 'Pasó la espera sin un pedido nuevo · volver a escribir';
+    if (t.recurrente) return 'Contacto semanal fijado por etiqueta';
+    if (c.manual && c.manual.tipo !== 'pausa') return `Seguimiento manual${c.manual.motivoTxt ? ' · ' + c.manual.motivoTxt : ''}`;
+    if (c.n === 1) return `Una sola compra · hace ${c.dias} días`;
+    return `${c.dias} días sin pedir · suele pedir ${ritmo}`;
+  }
   const SENALES = { reescribir: 'Volver a escribir', dejo: 'Dejó de comprar', unica: 'Una compra', productos: 'Dejó de llevar', menos: 'Pidió menos variedad', ninguna: 'Sin alertas' };
   function senal(c, t) {
     if (t && t.reescribir && t.estado === 'pendiente') return ['amber', 'Volver a escribir', 'reescribir'];
@@ -393,8 +407,8 @@
     const c = t.c, k = at(c.clave), esp = t.estado === 'escribi', ocup = E.guardando.has(c.clave), nv = veTodo() ? '' : ' sv-task--nv';
     const chk = puedeAgendar() ? `<input type="checkbox" class="sv-chk" data-sc="escribi" data-k="${k}"${esp ? ' checked' : ''}${ocup ? ' disabled aria-busy="true"' : ''} aria-label="${at((esp ? 'Desmarcar «Le escribí»: ' : 'Marcar «Le escribí»: ') + c.nombre)}">` : '<span></span>';
     const pills = pillTipo(t.tipo) + (esp ? sp('amber', 'Esperando') : '') + (t.atrasado && !esp ? sp('red', 'Atrasado') : '') + (t.reescribir && !esp ? sp('amber', 'Volver a escribir') : '') + (t.recurrente ? sp('gray', 'Cada semana') : '') + (c.etiquetas || []).slice(0, 2).map(e => sp('tag', e.nombre)).join('');
-    const sub = esp ? `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)} · vuelve ${diaCorto(t.vuelveEl)}` : `${accionDe(t)} · ${desdeTxt(c)}`;
-    const btn = esp && puedeAgendar() ? `<button type="button" class="sv-btn small" data-sc="resultado" data-k="${k}" aria-haspopup="dialog"${ocup ? ' disabled' : ''}>Resultado</button>` : `<button type="button" class="sv-btn small" data-sc="fila" data-k="${k}" aria-label="${at('Ver ' + c.nombre)}">Ver</button>`;
+    const sub = motivoAgenda(t);
+    const btn = esp && puedeAgendar() ? `<button type="button" class="sv-btn small" data-sc="resultado" data-k="${k}" aria-haspopup="dialog"${ocup ? ' disabled' : ''}>Anotar respuesta</button>` : `<button type="button" class="sv-btn small" data-sc="fila" data-k="${k}" aria-label="${at('Ver ' + c.nombre)}">Ver ficha</button>`;
     return `<li class="sv-task${nv}" data-k="${k}">${chk}<div class="sv-task-n"><div><span class="sv-name">${esc(c.nombre)}</span> ${pills}</div><div class="sv-sub">${esc(sub)}</div></div>${prioHtml(t)}${veTodo() ? `<span class="sv-resp">${ico('user', 'ico-sm')}${esc(c.vendedor || 'Atención general')}</span>` : ''}${btn}</li>`;
   }
   // Los clientes con contacto esta semana, pendientes primero (una fila por cliente)
@@ -420,12 +434,15 @@
     const hechos = new Set(); dia.tarjetas.forEach(t => { if (t.estado === 'pidio' && !t.recurrente) hechos.add(t.clave); }); ag.dias.forEach(d => d.tarjetas.forEach(t => { if (t.escrito === hoy() && !t.recurrente) hechos.add(t.clave); }));
     const dejaron = calc.clientes.filter(c => { const t = ag.porCliente.get(c.clave); return t && t.tipo === 'recupero'; }).length;
     const tareas = pend.concat(esp).filter(pasa), al = filasAlertas(calc, ag, 6);
+    const porHablar = tareas.filter(t => t.estado === 'pendiente').sort((a,b) => Number(b.reescribir || b.atrasado || b.tipo === 'recupero') - Number(a.reescribir || a.atrasado || a.tipo === 'recupero') || a.nombre.localeCompare(b.nombre,'es'));
+    const esperando = tareas.filter(t => t.estado === 'escribi');
+    const grupo = (lista,titulo,clase) => lista.length ? `<li class="sv-agenda-grupo ${clase}"><h3>${titulo}</h3><span>${lista.length}</span></li>${lista.map(filaTarea).join('')}` : '';
     return `${cabecera('', 'Seguimiento comercial', 'Todo lo importante del día, sin perder clientes ni contactos.')}
       ${filtros(calc, 'Filtrar:')}
       <ul class="sv-kpis" aria-label="Resumen de hoy">${kpi('red', 'clock', 'Atrasados', pend.filter(t => t.atrasado).length)}${kpi('amber', 'trending-down', 'Dejaron de comprar', dejaron)}${kpi('blue', 'message-circle', 'Esperando respuesta', esp.length)}${kpi('green', 'check', 'Contactados / pidieron hoy', hechos.size)}</ul>
       <div class="sv-two">
         <section class="sv-card sv-sec" aria-labelledby="sv-hoy-t"><div class="sv-ch"><h2 id="sv-hoy-t">${ico('calendar-days')}Agenda de hoy</h2><span class="sv-actions">${pend.length ? `<button type="button" class="sv-linkbtn" data-sc="copiar" data-b="hoy">${ico('copy', 'ico-sm')}Copiar lista</button>` : ''}<span class="sv-count">${tareas.length} ${tareas.length === 1 ? 'tarea' : 'tareas'}</span></span></div>
-          ${tareas.length ? `<ul class="sv-list sv-list--tareas">${tareas.map(filaTarea).join('')}</ul>` : `<p class="sv-vacio">${ico('circle-check')}${pend.length ? 'Ningún pendiente coincide con el filtro.' : 'No hay nadie para escribirle hoy. Buen momento para repasar la agenda semanal.'}</p>`}</section>
+          ${tareas.length ? `<ul class="sv-list sv-list--tareas">${grupo(porHablar,'Para hablar hoy','sv-agenda-hablar')}${grupo(esperando,'Ya contactados · en espera','sv-agenda-espera')}</ul>` : `<p class="sv-vacio">${ico('circle-check')}${pend.length ? 'Ningún pendiente coincide con el filtro.' : 'No hay nadie para escribirle hoy. Buen momento para repasar la agenda semanal.'}</p>`}</section>
         <section class="sv-card sv-sec" aria-labelledby="sv-al-t"><div class="sv-ch"><h2 id="sv-al-t">${ico('triangle-alert')}Alertas comerciales</h2><span class="sv-count">${al.n} ${al.n === 1 ? 'alerta' : 'alertas'}</span></div>${al.html}</section>
       </div>
       <section class="sv-card sv-sec" aria-labelledby="sv-cc-t"><div class="sv-ch"><h2 id="sv-cc-t">${ico('users')}Clientes a contactar</h2><div class="sv-tools"><label class="sv-search">${ico('search', 'ico-sm')}<input type="search" id="sv-pq" class="sv-field" placeholder="Buscar cliente…" aria-label="Buscar entre los clientes a contactar" autocomplete="off" value="${at(E.pq)}"></label><button type="button" class="sv-btn small" data-sc="vista" data-v="clientes">Ver todos</button></div></div>
@@ -438,7 +455,7 @@
   function tareaDia(t) {
     const c = t.c, ocup = E.guardando.has(t.clave), arr = puedeEditar() && !ocup && t.estado !== 'pidio' && !t.recurrente && ancho(), det = detalleTarjeta(t);
     const ek = t.estado === 'pidio' ? ['green', 'Pidió'] : t.estado === 'escribi' ? ['amber', 'Esperando'] : t.reescribir ? ['red', 'Volver a escribir'] : t.atrasado ? ['red', 'Atrasado'] : ['blue', 'Pendiente'];
-    const sub = t.estado === 'pidio' ? 'Pidió esta semana' : t.estado === 'escribi' ? `Le escribiste ${t.escrito === hoy() ? 'hoy' : 'el ' + diaCorto(t.escrito)}` : accionDe(t);
+    const sub = motivoAgenda(t);
     return `<li class="sc-it"><button type="button" class="daytask${t.estado === 'pidio' ? ' daytask--hecha' : ''}${t.recurrente ? ' daytask--rec' : ''}${E.guardando.has(t.clave) ? ' daytask--guardando' : ''}" data-sc="fila" data-k="${at(t.clave)}" data-est="${t.estado}" data-tipo="${t.tipo}" title="${at(det)}" aria-label="${at(det)}"${t.recurrente ? ' data-rec="1"' : ''}${arr ? ' data-arr="1"' : ''}${E.sel === t.clave ? ' aria-current="true"' : ''}${ocup ? ' aria-busy="true"' : ''}>
       <span class="dt-main"><span class="dt-top"><span class="sv-name">${esc(c.nombre)}</span>${pillTipo(t.tipo)}${t.recurrente ? sp('gray', 'Cada semana') : ''}</span><span class="sv-sub">${esc(sub)}</span><span class="sv-sub dt-pr">${prioHtml(t)}${veTodo() ? ` · ${esc(c.vendedor || 'Atención general')}` : ''}${(c.etiquetas || []).length ? ` · ${esc(c.etiquetas.map(e => e.nombre).join(', '))}` : ''}</span></span>${sp(ek[0], ek[1])}</button></li>`;
   }
@@ -657,13 +674,8 @@
     const t = ag.porCliente.get(c.clave), p = ag.pidieron.get(c.clave), partes = [];
     if (p) partes.push(`<b>Pidió</b> ${esc(diaLargo(p))}.`);
     if (!t) { if (!p) partes.push('No figura en el calendario: hace más de 150 días que no pide.'); return partes.join(' '); }
-    if (t.estado === 'escribi') partes.push(`<b>Esperando ${t.tipo === 'habitual' ? 'pedido' : 'respuesta'}</b> desde el ${esc(diaCorto(t.escrito))} · si no pide, vuelve el ${esc(diaCorto(t.vuelveEl))}.`);
-    else {
-      if (t.reescribir) partes.push(`<b>Volver a escribir</b>: le escribiste ${esc(diaLargo(t.escrito))} y no pidió.`);
-      partes.push(t.atrasado && t.estado === 'pendiente' ? `Está <b>atrasado</b>: su día era el ${esc(F.fechaLarga(t.calculado))}. Le toca escribirle <b>hoy</b>.`
-            : `Le toca escribirle <b>${esc(diaLargo(t.dia))}</b>${t.fuera ? ' (después de la semana que viene)' : ''}.`);
-    }
-    if (t.movido) partes.push(`Lo movieron a mano; su día calculado es el ${esc(F.fechaLarga(t.calculado))}.`);
+    partes.push(`<b>${esc(motivoAgenda(t))}</b>.`);
+    if (t.estado !== 'escribi' && !t.movido) partes.push(`Próximo contacto: <b>${esc(diaLargo(t.dia))}</b>.`);
     return partes.join(' ');
   }
   // De qué tipo es el cliente (se le habla o se le hace seguimiento), con su etiqueta y una frase
