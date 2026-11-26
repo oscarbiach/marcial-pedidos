@@ -137,6 +137,7 @@ test('turnos siempre desplegados y preparación muestra incidencias en vivo',asy
  const o=await s.open('Oscar');
  await expect(o.locator('.rv-preparando [data-turno="manana"] .rv-card')).toBeVisible();
  await expect(o.locator('.rv-preparando [data-turno="tarde"] .rv-card')).toBeVisible();
+ for(const t of ['manana','tarde']){const g=o.locator('.rv-preparando [data-turno="'+t+'"]');expect(await g.locator('.rv-card').evaluate(e=>getComputedStyle(e).borderLeftColor)).toBe(await g.evaluate(e=>getComputedStyle(e).borderLeftColor));}
  await expect(o.locator('.rv-card[data-id="p1"]')).toContainText('Faltan');
  await expect(o.locator('.rv-card[data-id="p2"]')).toContainText('Sustituto: Tybo');
  await expect(o.locator('.rv-card[data-id="p2"] .rv-product-done')).toHaveCount(0);
@@ -149,6 +150,8 @@ test('turnos siempre desplegados y preparación muestra incidencias en vivo',asy
  await expect(o.locator('#tab-pedidos [data-turno="manana"] .order-card')).toBeVisible();
  await expect(o.locator('#tab-pedidos [data-turno="tarde"] .order-card')).toBeVisible();
  await expect(o.locator('details.turno-plegable')).toHaveCount(0);
+ for(const g of await o.locator('#tab-pedidos .turno-grupo, #tab-pedidos .retiros-grupo').all()){for(const edge of await g.locator('.oc-edge,.blk-edge').all()){expect(await edge.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(await g.evaluate(e=>getComputedStyle(e).borderLeftColor));}}
+ await o.screenshot({path:'test-results/turnos-colores.png'});
  expect(s.errors).toEqual([]);await s.close();
 });
 
