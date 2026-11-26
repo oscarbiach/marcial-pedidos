@@ -51,6 +51,10 @@ body:has(#tab-stock.active) main{max-width:1600px}
 #sp-grid .sp-card>.sp-producto{background:#e7efed;padding:14px;align-items:center}
 .sp-total{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;min-width:65px;padding:6px 10px;border-radius:12px;background:#215c54;color:white}
 .sp-total>span{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+#sp-paginas{display:flex;align-items:center;gap:10px;white-space:nowrap}#sp-paginas[hidden]{display:none}#sp-pagina{font-variant-numeric:tabular-nums;min-width:40px;text-align:center;color:#214c50;font-weight:800}
+#stock-pantalla:not(.sp-normal) .sp-pie{min-height:42px}
+#stock-pantalla #sp-paginas button{min-height:32px;padding:0 10px;font-size:24px}
+#sp-semana{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:#dcece6;border:1px solid #bdd6ca;border-radius:14px;flex-shrink:0;color:#205849}#sp-semana[hidden]{display:none}#sp-semana b{display:block;font-size:17px}#sp-semana span{display:block;margin-top:3px;font-size:14px}#sp-semana strong{font-size:38px;line-height:1.1;text-align:right}#sp-semana em{font-size:22px;font-style:normal;opacity:.6}@media(max-width:600px){#sp-semana{flex-wrap:wrap}#sp-semana strong{font-size:30px}}
 #sp-grid .sp-card .sp-total strong{background:none;padding:0;color:white;font-size:calc(var(--sp-texto) + 8px);line-height:1.1}
 #sp-grid .sp-filas{padding:5px 14px 5px 22px;border-left:3px solid #dbe7e3;margin:9px 14px 9px 0}
 #sp-grid .sp-fila b{font-weight:500;font-size:max(18px,calc(var(--sp-texto) - 2px))}

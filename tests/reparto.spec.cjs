@@ -1084,7 +1084,7 @@ test('monitor de comprometido: clientes, fechas, retiros, actualización y panta
  await p.evaluate(()=>{state.pedidos=Array.from({length:18},(_,i)=>({id:'k'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega:'2026-11-16',items:[{prod:'Pan variedad '+Math.floor(i/3),qty:1}]}));renderPedidos();});
  await expect(p.locator('.sp-card')).toHaveCount(6);
  await expect(p.locator('.sp-fila')).toHaveCount(18);
- await expect(p.locator('#sp-pagina')).toHaveCount(0);
+ await expect(p.locator('#sp-paginas')).toBeHidden();
  await p.screenshot({path:'test-results/stock-monitor-1920.png'});
  await expect(p.locator('#sp-capacidad')).toBeHidden();
  const antes=await p.locator('#sp-grid').innerHTML();await p.clock.runFor(16000);expect(await p.locator('#sp-grid').innerHTML()).toBe(antes);
@@ -1141,7 +1141,7 @@ test('Stock abre comprometido normal, separa fechas y permite volver del kiosco'
 
 test('Stock: sectores completos y encabezado sin superposición al desplazar',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar',{width:1366,height:768});
- const sectores={panes:['Pan liso - Kalis'],deposito:['Aceitunas verdes','Mayonesa','Aderezo','Tomate triturado','DDL Cunete','Dulce de leche','Condimentos','Pimiento morrón','Tomate perita','Pickles','Aceite de girasol','Aceite de oliva','Orégano'],camara:['Panceta','Mozzarella','Jamón','Carne picada','Crema'],freezer:['Papas Swift 2kg','Papas One Fry']};
+ const sectores={panes:['Pan liso - Kalis'],deposito:['Aceitunas verdes','Mayonesa','Aderezo','Tomate triturado','DDL Cunete','Dulce de leche','Condimentos','Pimiento morrón','Tomate perita','Pickles','Aceite de girasol','Aceite de oliva','Orégano','Pistacho pelado','Variegato','Frutilla para sembrar','Harina 000'],camara:['Panceta','Mozzarella','Jamón','Carne picada','Crema'],freezer:['Papas Swift 2kg','Papas One Fry']};
  await p.evaluate(sectores=>{document.body.classList.add('stock-visible');state.pedidos=Object.values(sectores).flat().map((prod,i)=>({id:'s'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega:'2026-11-16',retiro:true,turno:'tarde',items:[{prod,qty:2}]}));goTab('stock');},sectores);
  for(const [sector,nombres] of Object.entries(sectores)){await p.locator('#sp-filtro').selectOption(sector);expect(await p.locator('.sp-producto h2').allTextContents()).toEqual([...nombres].sort((a,b)=>a.localeCompare(b,'es')));}
  expect(await p.locator('#sp-filtro option').allTextContents()).toEqual(['Panes','Depósito','Cámara','Freezer']);
@@ -1152,6 +1152,39 @@ test('Stock: sectores completos y encabezado sin superposición al desplazar',as
  await p.screenshot({path:'test-results/stock-scroll.png'});
  await p.evaluate(()=>window.scrollTo(0,0));await p.screenshot({path:'test-results/stock-sectores.png'});
  await p.setViewportSize({width:390,height:844});expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Stock suma pendientes de lunes a domingo sin mezclar cajas y unidades',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{state.products.push({n:'Papas congeladas',u:'caja',box:6});state.pedidos=[['2026-11-16',3,false,'Pan clásico'],['2026-11-22',4,false,'Pan clásico'],['2026-11-18',2,true,'Pan clásico'],['2026-11-23',100,false,'Pan clásico'],['2026-11-15',99,false,'Pan clásico'],['',999,false,'Pan clásico'],['2026-11-20',1,false,'Papas congeladas'],['2026-11-21',4,true,'Papas congeladas']].map(([fechaEntrega,qty,unidades,prod],i)=>({id:'sum'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega,items:[{prod,qty,unidades}]}));StockPantalla.abrir();});
+ await expect(p.locator('#sp-semana')).toContainText('16/11/2026 — 22/11/2026');await expect(p.locator('#sp-semana strong')).toHaveText('7 + 2 un.');
+ await p.locator('#sp-filtro').selectOption('freezer');await expect(p.locator('#sp-semana strong')).toHaveText('1 caja + 4 un.');
+ await p.screenshot({path:'test-results/stock-total-semana.png'});
+ await p.locator('#sp-filtro').selectOption('deposito');await expect(p.locator('#sp-semana')).toBeHidden();
+ expect(s.errors).toEqual([]);await s.close();
+});
+
+test('kiosco pagina automáticamente, pausa al tocar y reparte productos largos sin perder clientes',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar',{width:1366,height:768});
+ await p.clock.pauseAt(new Date('2026-11-16T15:01:00Z'));
+ await p.evaluate(()=>{ultimoRefresh=Date.now();reload=async()=>{};refrescarSiCorresponde=()=>{};state.pedidos=Array.from({length:40},(_,i)=>({id:'k'+i,cliente:'Cliente '+String(i).padStart(2,'0'),estado:'Pendiente',fechaEntrega:'2026-11-16',items:[{prod:i<25?'Pan clásico':'Pan variedad '+i,qty:1}]}));StockPantalla.abrir();});
+ await expect(p.locator('#sp-paginas')).toBeVisible();
+ const total=Number((await p.locator('#sp-pagina').textContent()).split('/')[1]);expect(total).toBeGreaterThan(1);
+ const clientes=[];
+ for(let i=0;i<total;i++){
+  clientes.push(...await p.locator('.sp-fila b').allTextContents());
+  expect(await p.locator('#sp-grid').evaluate(e=>e.scrollHeight<=e.clientHeight+2&&e.scrollWidth<=e.clientWidth+2)).toBe(true);
+  await p.clock.runFor(12000);
+ }
+ expect(clientes).toHaveLength(40);expect(new Set(clientes).size).toBe(40);
+ await expect(p.locator('#sp-pagina')).toHaveText('1/'+total);
+ await p.locator('[data-sp="siguiente"]').click();await expect(p.locator('#sp-pagina')).toContainText('En pausa');
+ const pausa=await p.locator('#sp-grid').innerHTML();await p.clock.runFor(12000);expect(await p.locator('#sp-grid').innerHTML()).toBe(pausa);
+ await p.clock.runFor(19000);await expect(p.locator('#sp-pagina')).not.toContainText('En pausa');
+ await p.screenshot({path:'test-results/stock-kiosco-paginas.png'});
+ await p.evaluate(()=>{state.pedidos=state.pedidos.slice(0,1);renderPedidos();});await expect(p.locator('#sp-paginas')).toBeHidden();
+ const fija=await p.locator('#sp-grid').innerHTML();await p.clock.runFor(36000);expect(await p.locator('#sp-grid').innerHTML()).toBe(fija);
  expect(s.errors).toEqual([]);await s.close();
 });
 
