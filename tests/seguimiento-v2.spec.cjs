@@ -430,3 +430,20 @@ test('Juan Marcos opera sobre el cliente actual aunque el historial conserve nom
  await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
  sinErrores(page);
 });
+
+for(const caso of ['espera vencida','no contestó'])test('Reprogramar alerta roja: '+caso,async({browser})=>{
+ const s=setup();
+ s.db.agenda.set('c2',{cliente_id:'c2',fecha:null,ciclo:'2026-11-17',escrito_en:caso==='espera vencida'?'2026-11-20':null});
+ if(caso==='no contestó')s.db.contactos.push({id:'prueba-roja',cliente_id:'c2',resultado:'no_contesto',creado_en:'2026-11-24T12:00:00Z',autor:'Juan Marcos'});
+ const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
+ const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]');await expect(origen).toContainText('Volver a escribir');
+ const a=await origen.boundingBox(),sw=await page.locator('#sc-raiz [data-sc="semana"][data-s="1"]').boundingBox();
+ await page.mouse.move(a.x+20,a.y+10);await page.mouse.down();await page.mouse.move(a.x+60,a.y+40,{steps:4});await page.mouse.move(sw.x+sw.width/2,sw.y+sw.height/2,{steps:10});
+ await expect(page.locator('#sc-raiz [data-sc="semana"][data-s="1"]')).toHaveAttribute('aria-pressed','true');
+ const b=await page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"]').boundingBox();await page.mouse.move(b.x+b.width/2,b.y+60,{steps:10});await page.mouse.up();
+ await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ expect(s.db.agenda.get('c2').fecha).toBe('2026-12-01');
+ const nueva=await entrar(browser,s,'Juan Marcos');await vista(nueva,'agenda');await nueva.locator('#sc-raiz [data-sc="semana"][data-s="1"]').click();
+ await expect(nueva.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
+ sinErrores(page);sinErrores(nueva);
+});
