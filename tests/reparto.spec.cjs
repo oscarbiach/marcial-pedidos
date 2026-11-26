@@ -1074,11 +1074,11 @@ test('monitor de comprometido: clientes, fechas, retiros, actualización y panta
  await p.evaluate(rows=>{state.pedidos=rows.filter(r=>!r.eliminado_en).map(mapPedido_);goTab('pedidos');StockPantalla.abrir();},s.db.pedidos);
  await expect(p.locator('#stock-pantalla')).toBeVisible();
  await expect(p.locator('#sp-cifras')).toHaveText('1 producto · 3 pedidos');
- await expect(p.locator('#sp-grid')).toContainText('Almacén del Centro');await expect(p.locator('#sp-grid')).toContainText('Retiro');
+ await expect(p.locator('#sp-grid')).toContainText('Almacén del Centro');await expect(p.locator('.sp-fila span')).toHaveCount(0);
  await expect(p.locator('#sp-grid')).not.toContainText('Despachado');await expect(p.locator('#sp-grid')).not.toContainText('Eliminado');
  expect(await p.evaluate(()=>document.getElementById('appShell').inert)).toBe(true);
- await p.locator('#sp-filtro').selectOption('manana');await expect(p.locator('.sp-vacio')).toBeVisible();
- await p.locator('#sp-filtro').selectOption('todos');
+ await p.locator('#sp-filtro').selectOption('freezer');await expect(p.locator('.sp-vacio')).toBeVisible();
+ await p.locator('#sp-filtro').selectOption('panes');
  await p.evaluate(()=>{state.pedidos.find(p=>p.id==='p1').estado='Despachado';renderPedidos();});
  await expect(p.locator('#sp-cifras')).toHaveText('1 producto · 2 pedidos');
  await p.evaluate(()=>{state.pedidos=Array.from({length:18},(_,i)=>({id:'k'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega:'2026-11-16',items:[{prod:'Pan variedad '+Math.floor(i/3),qty:1}]}));renderPedidos();});
@@ -1139,6 +1139,22 @@ test('Stock abre comprometido normal, separa fechas y permite volver del kiosco'
  expect(s.errors).toEqual([]);await s.close();
 });
 
+test('Stock: sectores completos y encabezado sin superposición al desplazar',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar',{width:1366,height:768});
+ const sectores={panes:['Pan liso - Kalis'],deposito:['Aceitunas verdes','Mayonesa','Aderezo','Tomate triturado','DDL Cunete','Dulce de leche','Condimentos','Pimiento morrón','Tomate perita','Pickles','Aceite de girasol','Aceite de oliva','Orégano'],camara:['Panceta','Mozzarella','Jamón','Carne picada','Crema'],freezer:['Papas Swift 2kg','Papas One Fry']};
+ await p.evaluate(sectores=>{document.body.classList.add('stock-visible');state.pedidos=Object.values(sectores).flat().map((prod,i)=>({id:'s'+i,cliente:'Cliente '+i,estado:'Pendiente',fechaEntrega:'2026-11-16',retiro:true,turno:'tarde',items:[{prod,qty:2}]}));goTab('stock');},sectores);
+ for(const [sector,nombres] of Object.entries(sectores)){await p.locator('#sp-filtro').selectOption(sector);expect(await p.locator('.sp-producto h2').allTextContents()).toEqual([...nombres].sort((a,b)=>a.localeCompare(b,'es')));}
+ expect(await p.locator('#sp-filtro option').allTextContents()).toEqual(['Panes','Depósito','Cámara','Freezer']);
+ await p.locator('#sp-filtro').selectOption('deposito');
+ await p.evaluate(()=>window.scrollTo(0,420));
+ expect(await p.locator('.sp-cab').evaluate(e=>e.getBoundingClientRect().bottom)).toBeLessThan(0);
+ expect(await p.locator('#appShell>header').evaluate(e=>document.elementFromPoint(100,20)===e||e.contains(document.elementFromPoint(100,20)))).toBe(true);
+ await p.screenshot({path:'test-results/stock-scroll.png'});
+ await p.evaluate(()=>window.scrollTo(0,0));await p.screenshot({path:'test-results/stock-sectores.png'});
+ await p.setViewportSize({width:390,height:844});expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('monitor conserva medidas distintas, no cuenta cola local y abre desde enlace',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar');
  await p.evaluate(()=>{state.pedidos=[{id:'a',cliente:'A',estado:'Pendiente',fechaEntrega:'',items:[{prod:'Pan clásico',qty:2},{prod:'Pan clásico',qty:3,unidades:true},{prod:'Pan integral',qty:1,fetear:true},{prod:'Pan integral',qty:2},{prod:'Panceta',qty:500},{prod:'Papas',qty:500}]},{id:'b',cliente:'No confirmado',estado:'Pendiente',enCola:true,items:[{prod:'Pan clásico',qty:999}]}];history.replaceState(null,'','?pantalla=comprometido');StockPantalla.iniciar();});
@@ -1146,7 +1162,7 @@ test('monitor conserva medidas distintas, no cuenta cola local y abre desde enla
  const d=await p.evaluate(()=>StockPantalla._datos());expect(d.productos).toHaveLength(4);expect(d.pedidos).toHaveLength(1);
  expect(d.productos.filter(x=>x.prod==='Pan clásico').map(x=>x.qty).sort()).toEqual([2,3]);
  await p.evaluate(()=>{state.products.push({n:'Pan clásico',u:'caja',box:48});StockPantalla.cerrar();StockPantalla.abrir();});
- await expect(p.locator('#sp-grid')).toContainText('2 cajas');
+ await expect(p.locator('#sp-grid')).not.toContainText('cajas');expect(await p.locator('.sp-total strong').allTextContents()).toContain('2');
  await expect(p.locator('#sp-grid')).toContainText('3 un.');
  await expect(p.locator('#sp-grid')).not.toContainText('(=');
  await expect(p.locator('#sp-grid')).toContainText('Sin fecha de entrega');await expect(p.locator('#sp-grid')).not.toContainText('999');
