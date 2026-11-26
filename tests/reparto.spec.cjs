@@ -1167,6 +1167,50 @@ test('bitácora: marcación personal, resumen de Joaquín y corrección con moti
  expect(s.errors).toEqual([]);await s.close();
 });
 
+test('bitácora: pausas, pagos y su historial',async({browser})=>{
+ const s=await setup(browser),p=await s.open('Oscar');
+ await p.evaluate(()=>{
+  window.btSituacion='activa';window.btHistorial=[];window.btAcciones=[];const original=sb.rpc;
+  sb.rpc=async(n,a)=>{
+   if(n==='bitacora_leer')return {data:{ahora:'2026-11-16T15:00:00Z',semana:'2026-11-16',yo:{rol:state.who==='Joaquin'?'supervisor':'trabajador'},personas:[{user_id:'Oscar',nombre:state.who==='Juan Marcos'?'Juan Marcos':'Oscar',segundos:7200,segundos_cerrados:7200,activa:btSituacion==='activa'?{id:'b',entrada:'2026-11-16T13:00:00Z'}:null,pausa_desde:btSituacion==='pausa'?'2026-11-16T15:00:00Z':null}],jornadas:[],cambios:[]}};
+   if(n==='bitacora_marcar'){btAcciones.push(a.p_accion);btSituacion=a.p_accion==='pausa'?'pausa':a.p_accion==='salida'?'cerrada':'activa';return {data:{ok:true}};}
+   if(n==='bitacora_calculos_leer')return {data:[{usuario:'Oscar',valor_hora:2500,bonos:[],version:1,pago:btHistorial.find(x=>!x.anulado_en)||null}]};
+   if(n==='bitacora_pago_marcar'){btHistorial.push({id:a.p_op,nombre:'Oscar',semana:a.p_semana,valor_hora:2500,bonos:[],segundos:a.p_segundos,total:5000,pagado_en:'2026-11-16T15:00:00Z'});return {data:{ok:true}};}
+   if(n==='bitacora_pago_anular'){btHistorial.find(x=>x.id===a.p_id).anulado_en='2026-11-16T15:01:00Z';return {data:{ok:true}};}
+   if(n==='bitacora_pagos_historial')return {data:btHistorial};
+   return original(n,a);
+  };goTab('bitacora');
+ });
+ await p.getByRole('button',{name:'Ⅱ Pausar',exact:true}).click();
+ await expect(p.locator('.bt-marca')).toContainText('este tiempo no suma horas');
+ await expect(p.locator('.bt-personas strong')).toHaveText('2 h 00 min');
+ await p.getByRole('button',{name:'▶ Reanudar',exact:true}).click();
+ await expect(p.locator('.bt-marca')).toContainText('Estás en jornada');
+ await p.evaluate(()=>{state.who='Juan Marcos';mostrarApp();goTab('bitacora');});
+ await p.setViewportSize({width:390,height:844});
+ await p.getByRole('button',{name:'Ⅱ Pausar',exact:true}).click();
+ await p.screenshot({path:'test-results/bitacora-pausa.png'});
+ expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await p.getByRole('button',{name:'Terminar jornada',exact:true}).click();
+ await expect(p.getByRole('button',{name:'Marcar entrada',exact:true})).toBeVisible();
+ expect(await p.evaluate(()=>btAcciones)).toEqual(['pausa','reanudar','pausa','salida']);
+ await p.setViewportSize({width:1280,height:900});
+ await p.evaluate(()=>{state.who='Joaquin';mostrarApp();goTab('bitacora');});
+ await p.getByRole('button',{name:'Marcar semana pagada',exact:true}).click();
+ await expect(p.locator('.bt-pagado')).toContainText('Semana pagada');
+ await expect(p.locator('.bt-pagado')).toContainText('5.000');
+ await p.getByRole('button',{name:'Historial de pagos',exact:true}).click();
+ await expect(p.locator('.bt-historial-pago')).toContainText('Pagada');
+ await p.screenshot({path:'test-results/bitacora-pagos.png'});
+ await p.getByRole('button',{name:'Cerrar historial'}).click();
+ await p.getByRole('button',{name:'Volver a pendiente',exact:true}).click();
+ await expect(p.locator('.bt-pago')).toContainText('Pendiente de pago');
+ await p.getByRole('button',{name:'Historial de pagos',exact:true}).click();
+ await expect(p.locator('.bt-historial-pago')).toContainText('Volvió a pendiente');
+ await p.keyboard.press('Escape');await expect(p.locator('#bt-modal')).toHaveCount(0);
+ expect(s.errors).toEqual([]);await s.close();
+});
+
 test('bitácora reintenta una respuesta perdida con la misma operación',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar');
  await p.evaluate(()=>{window.btOps=[];window.btActivo=false;const original=sb.rpc;sb.rpc=async(n,a)=>{
