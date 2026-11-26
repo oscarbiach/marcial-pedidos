@@ -36,8 +36,12 @@
  function resumenSemana(pedidos){
   const panel=$('sp-semana');panel.hidden=!['panes','freezer'].includes(E.filtro);if(panel.hidden)return;
   const diaSemana=new Date(state.today+'T12:00:00Z').getUTCDay(),inicio=sumarDias(state.today,-((diaSemana+6)%7)),fin=sumarDias(inicio,6),totales=new Map();
-  for(const p of pedidos.filter(p=>fecha(p)>=inicio&&fecha(p)<=fin))for(const i of p.items){const medida=E.filtro==='panes'?(i.unidades?'unidad':'caja'):medidaDe(prodInfo(i.prod),i.fetear,i.unidades)||'sin medida';totales.set(medida,(totales.get(medida)||0)+Number(i.qty||0));}
-  panel.innerHTML=`<div><b>Comprometido esta semana</b><span>${fmtDate(inicio)} — ${fmtDate(fin)}</span></div><strong>${totales.size?[...totales].map(([m,n])=>esc(E.filtro==='panes'&&m==='caja'?n.toLocaleString('es-AR'):n.toLocaleString('es-AR')+' '+(MEDIDA_NOMBRE[m]?.[n===1?0:1]||m))).join(' <em>+</em> '):'0'}</strong>`;
+  for(const p of pedidos.filter(p=>fecha(p)>=inicio&&fecha(p)<=fin))for(const i of p.items){
+   const medida=E.filtro==='panes'?(i.unidades?'unidad':'caja'):medidaDe(prodInfo(i.prod),i.fetear,i.unidades)||'sin medida',k=normalizar(i.prod);
+   if(!totales.has(k))totales.set(k,{nombre:i.prod,medidas:new Map()});
+   const medidas=totales.get(k).medidas;medidas.set(medida,(medidas.get(medida)||0)+Number(i.qty||0));
+  }
+  panel.innerHTML=`<div class="sp-semana-cab"><b>Comprometido esta semana</b><span>${fmtDate(inicio)} — ${fmtDate(fin)}</span></div><div class="sp-semana-productos">${totales.size?[...totales.values()].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(g=>`<div class="sp-semana-producto"><span>${esc(g.nombre)}</span><strong>${[...g.medidas].map(([m,n])=>esc(E.filtro==='panes'&&m==='caja'?n.toLocaleString('es-AR'):n.toLocaleString('es-AR')+' '+(MEDIDA_NOMBRE[m]?.[n===1?0:1]||m))).join(' <em>+</em> ')}</strong></div>`).join(''):'<span>Sin compromisos esta semana</span>'}</div>`;
  }
  function render(){
   if(!E.abierto)return;
