@@ -44,18 +44,18 @@ const O='dbcd0e59-fc02-4c23-b1d6-aba342da21e8',J='e3e52cc0-d8e3-41e0-a641-26e33f
  assert.equal((await db.query("select has_function_privilege('anon','bitacora_leer(date)','EXECUTE') as ok")).rows[0].ok,false);
 
  // Pausar cierra un tramo y reanudar abre otro: el intervalo no suma horas.
- await as(O);const entrada=await call('bitacora_marcar',[randomUUID(),'entrada']);const pauseOp=randomUUID(),pause=await call('bitacora_marcar',[pauseOp,'pausa']);
+ await as(O);const entrada=await call('bitacora_marcar',[randomUUID(),'entrada']);await new Promise(r=>setTimeout(r,10));const pauseOp=randomUUID(),pause=await call('bitacora_marcar',[pauseOp,'pausa']);
  assert.deepEqual(await call('bitacora_marcar',[pauseOp,'pausa']),pause);assert.equal(pause.jornada.fin_pausa,true);
  d=await call('bitacora_leer');assert.ok(d.personas[0].pausa_desde);assert.equal(d.personas[0].activa,null);
  await assert.rejects(call('bitacora_marcar',[randomUUID(),'pausa']),/No tenés/);
  const resumeOp=randomUUID(),resume=await call('bitacora_marcar',[resumeOp,'reanudar']);assert.deepEqual(await call('bitacora_marcar',[resumeOp,'reanudar']),resume);
  assert.notEqual(resume.jornada.id,entrada.jornada.id);d=await call('bitacora_leer');assert.equal(d.personas[0].pausa_desde,null);
- await call('bitacora_marcar',[randomUUID(),'salida']);
+ await new Promise(r=>setTimeout(r,10));await call('bitacora_marcar',[randomUUID(),'salida']);
  const martes=(await db.query('select ($1::date+1)::text d',[semana])).rows[0].d;
  await db.query('update bitacora_jornadas set entrada=$2,salida=$3 where id=$1',[entrada.jornada.id,martes+'T09:00:00-03:00',martes+'T11:00:00-03:00']);
  await db.query('update bitacora_jornadas set entrada=$2,salida=$3 where id=$1',[resume.jornada.id,martes+'T13:00:00-03:00',martes+'T15:00:00-03:00']);
  d=await call('bitacora_leer',[semana]);assert.equal(d.personas[0].segundos_cerrados,21600); // 2 h de cruce + 4 h de trabajo; pausa excluida
- await call('bitacora_marcar',[randomUUID(),'entrada']);const otro=await call('bitacora_marcar',[randomUUID(),'pausa']);await call('bitacora_marcar',[randomUUID(),'salida']);
+ await call('bitacora_marcar',[randomUUID(),'entrada']);await new Promise(r=>setTimeout(r,10));const otro=await call('bitacora_marcar',[randomUUID(),'pausa']);await call('bitacora_marcar',[randomUUID(),'salida']);
  assert.equal((await call('bitacora_leer')).personas[0].pausa_desde,null);assert.equal((await db.query('select salida from bitacora_jornadas where id=$1',[otro.jornada.id])).rows[0].salida.toISOString(),new Date(otro.jornada.salida).toISOString());
  await assert.rejects(call('bitacora_pago_marcar',[randomUUID(),O,semana,1,21600]),/Solo Joaquín/);await assert.rejects(call('bitacora_pagos_historial'),/Solo Joaquín/);
  await as(J);await call('bitacora_calculos_guardar',[O,semana,2500,JSON.stringify([{detalle:'Extra',importe:1000}]),0]);
