@@ -4,6 +4,7 @@ const O='dbcd0e59-fc02-4c23-b1d6-aba342da21e8',J='e3e52cc0-d8e3-41e0-a641-26e33f
 (async()=>{const db=new PGlite();try{
  await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);insert into auth.users values('${O}'),('${J}'),('${M}'),('${X}');create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.uid',true),'')::uuid$$;`);
  await db.exec(fs.readFileSync('supabase/migrations/20261125_bitacora.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261126_bitacora_calculos.sql','utf8'));
  const as=uid=>db.query("select set_config('test.uid',$1,false)",[uid||'']);
  const call=async(n,a=[])=>{const r=await db.query(`select ${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as r`,a);return r.rows[0].r;};
  await as(X);await assert.rejects(call('bitacora_leer'),/Sin acceso/);await assert.rejects(call('bitacora_marcar',[randomUUID(),'entrada']),/Sin permiso/);
@@ -28,6 +29,15 @@ const O='dbcd0e59-fc02-4c23-b1d6-aba342da21e8',J='e3e52cc0-d8e3-41e0-a641-26e33f
  const cruce=(await db.query("select ($1::date-1)::text as d",[semana])).rows[0].d;
  await call('bitacora_corregir',[randomUUID(),null,O,null,cruce+'T23:00:00-03:00',semana+'T02:00:00-03:00','Cruce de semana']);
  d=await call('bitacora_leer',[semana]);assert.equal(d.personas.find(p=>p.user_id===O).segundos,7200);assert.equal(d.personas.find(p=>p.user_id===M).segundos,18000);
+ await call('bitacora_corregir',[randomUUID(),c.jornada.id,M,2,desde,semana+'T13:00:00-03:00','']);
+ const calc=await call('bitacora_calculos_guardar',[M,semana,2500,JSON.stringify([{detalle:'Extra',importe:1500}]),0]);assert.equal(calc.calculo.version,1);
+ let pagos=await call('bitacora_calculos_leer',[semana]);assert.equal(pagos.find(p=>p.usuario===M).valor_hora,2500);assert.equal(pagos.find(p=>p.usuario===M).bonos[0].importe,1500);
+ const siguiente=(await db.query('select ($1::date+7)::text d',[semana])).rows[0].d;
+ pagos=await call('bitacora_calculos_leer',[siguiente]);assert.equal(pagos.find(p=>p.usuario===M).valor_hora,2500);assert.deepEqual(pagos.find(p=>p.usuario===M).bonos,[]);
+ await assert.rejects(call('bitacora_calculos_guardar',[M,semana,3000,'[]',0]),/cálculo cambió/);
+ await assert.rejects(call('bitacora_calculos_guardar',[M,semana,-5,'[]',1]),/Revisá/);
+ await as(M);await assert.rejects(call('bitacora_calculos_leer',[semana]),/Solo Joaquín/);await assert.rejects(call('bitacora_calculos_guardar',[M,semana,5000,'[]',1]),/Solo Joaquín/);
+ assert.equal((await db.query("select has_table_privilege('authenticated','bitacora_calculos','SELECT') as ok")).rows[0].ok,false);
  await as(M);d=await call('bitacora_leer',[semana]);assert.equal(d.personas.length,1);assert.equal(d.cambios.length,0);assert.ok(d.jornadas.every(j=>j.user_id===M));
  assert.equal((await db.query("select has_table_privilege('authenticated','bitacora_jornadas','INSERT') as ok")).rows[0].ok,false);
  assert.equal((await db.query("select has_function_privilege('anon','bitacora_leer(date)','EXECUTE') as ok")).rows[0].ok,false);
