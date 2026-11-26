@@ -1611,7 +1611,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="admin.css?v=130">
 <link rel="stylesheet" href="auditoria.css?v=149">
 <link rel="stylesheet" href="reparto-control.css?v=117">
-<link rel="stylesheet" href="cargar-pedido.css?v=160">
+<link rel="stylesheet" href="cargar-pedido.css?v=161">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -5988,12 +5988,12 @@ function addItemRow(type) {
           oninput="onAcInput(this)"
           onblur="setTimeout(()=>closeAc(this),200)">
         <div class="ac-list"></div>
-      </div>
       ${type==='cargar'?`<div class="corte" hidden>
         <label class="fetear-check"><input type="checkbox" class="fetear-input" onchange="actualizarCorte(this)"> FETEAR</label>
         <select class="cuero-pc" aria-label="Preparación de panceta" hidden onchange="elegirCuero(this)"><option value="con">Con cuero</option><option value="sin">Sin cuero</option><option value="pieza">Sin fetear</option></select>
         <input type="checkbox" class="sincuero-input" hidden>
       </div>`:''}
+      </div>
       <button class="del-btn" aria-label="Quitar producto" onclick="removeRow('${id}')">${mIco('x')}</button>
     </div>
     <div class="box-hint" style="display:none"></div>
@@ -6650,7 +6650,7 @@ function abrirInstalar() {
 <script src="bitacora.js?v=147"></script>
 <script src="stock-pantalla.js?v=152"></script>
 <!-- Para cargar (Telegram) reservado. Ver docs/diseno-pedidos.md. -->
-<script src="cargar-pedido.js?v=160"></script>
+<script src="cargar-pedido.js?v=161"></script>
 <script src="pedidos-fijos.js"></script>
 <script src="preparacion.js?v=117"></script>
 <script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>

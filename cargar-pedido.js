@@ -5,7 +5,7 @@ function destacarProducto(row) {
     flash.onfinish=()=>row.classList.remove('latido');
   }
 }
-function movimientoPC(){return !esMobile() && (!matchMedia('(prefers-reduced-motion:reduce)').matches)}
+function movimientoPC(){return !esMobile()}
 function animarLista(lista,cambiar){
   if(!movimientoPC()){cambiar();return}
   const anterior=lista.getBoundingClientRect().height;

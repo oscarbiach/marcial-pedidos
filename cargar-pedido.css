@@ -78,7 +78,6 @@ body:has(#tab-cargar.active){background:radial-gradient(ellipse at 5% 5%,#e0e7fc
  #almanaque button:hover{background:#edf2fa}#almanaque [aria-pressed=true]{background:#213f68;color:white}
  #almanaque [aria-current=date]{border:2px solid #12805c}
  #almanaque #quitarFecha{margin-top:8px;text-decoration:underline;font-size:13px}
- #tab-cargar .ped-item-row:has(.corte:not([hidden])){grid-template-columns:minmax(62px,90px) minmax(0,1fr) auto 44px}
  #tab-cargar .corte .fetear-check{display:flex;align-items:center;gap:5px;margin:0;cursor:pointer;white-space:nowrap}
  #tab-cargar .corte .fetear-input{width:16px;height:16px;padding:0}
  .cuero-pc{padding:6px 4px;border:1px solid #acbccb;border-radius:6px;color:#183653;background:white}
@@ -116,9 +115,20 @@ body:has(#tab-cargar.active){background:radial-gradient(ellipse at 5% 5%,#e0e7fc
 .hc-hab.ya .hh-n{color:#145a32}
 
 @media(min-width:768px){
- #tab-cargar .ped-item-row,#tab-cargar .ped-item-row:has(.corte:not([hidden])){grid-template-columns:clamp(62px,7vw,90px) minmax(0,1fr) 88px 44px}
- #tab-cargar .del-btn{grid-column:4}
- #tab-cargar .corte{grid-column:3;min-width:0}
- #tab-cargar .corte select{width:100%;padding-inline:2px}
- #tab-cargar .corte .fetear-check{min-height:36px;font-size:12px}
+ #tab-cargar .ped-item-row{grid-template-columns:clamp(62px,7vw,90px) minmax(0,1fr) 44px}
+ #tab-cargar .ped-item-row .ac-wrap{min-width:0}
+ #tab-cargar .corte{position:absolute;right:6px;inset-block:0;display:flex;align-items:center}
+ #tab-cargar .ac-wrap:has(.corte:not([hidden]))>.ac-input{padding-right:94px}
+ #tab-cargar .corte select{max-width:84px;padding:3px 2px}
+ #tab-cargar .corte .fetear-check{min-height:36px;margin:0;padding:0 5px;font-size:12px}
 }
+/* La ficha de carga conserva su respuesta visual en la app instalada. */
+@media(prefers-reduced-motion:reduce){
+ #picker.open{animation:entrarCargaSuave .30s ease-out!important}
+ #picker .pk-cuerpo,#tab-cargar .extras-body.open,#tab-cargar .ac-list.open{animation:entrarCargaSuave .18s ease-out!important}
+ #reciboCarga{animation:entrarCargaSuave .32s ease-out!important}
+}
+@media(max-width:767px) and (prefers-reduced-motion:reduce){
+ #tab-cargar .item-row{animation:entrarCargaSuave .32s ease-out!important}
+}
+@keyframes entrarCargaSuave{from{opacity:.28}to{opacity:1}}
