@@ -4875,9 +4875,8 @@ function verHistorialArrastre() {
   return lista;
 }
 
-// Misma llamada que ya usa "Editar pedido" (editar_pedido en Supabase):
-// se manda el pedido tal cual está, solo con la fecha de entrega nueva.
-// El backend ya frena esto solo si el pedido dejó de estar Pendiente.
+// Mueve únicamente la fecha: conserva los renglones, el armado y el remito.
+// El backend valida el estado y la fecha anterior para evitar pisar cambios.
 function moverEntregaPorArrastre(id, zona) {
   const p = state.pedidos.find(x => x.id === id);
   if (!p || p.estado !== 'Pendiente') return;
@@ -4889,14 +4888,13 @@ function moverEntregaPorArrastre(id, zona) {
   });
   const card = document.querySelector(`.order-card[data-pid="${id}"]`);
   if (card) { flipPendiente = { id, rect: card.getBoundingClientRect() }; card.style.pointerEvents = 'none'; }
-  google.script.run
-    .withSuccessHandler(r => {
+  sb.rpc('pedido_mover_entrega', { p_id:p.id, p_fecha:nuevaFecha || null, p_anterior:p.fechaEntrega || null })
+    .then(({data:r,error}) => {
+      if (error) throw sbError_(error);
       if (r.ok) { toast('✓ Entrega movida'); reload(); }
       else { toast('Error: ' + (r.error || 'No se pudo mover')); flipPendiente = null; if (card) card.style.pointerEvents = ''; }
     })
-    .withFailureHandler(e => { toast('Error: ' + e.message); flipPendiente = null; if (card) card.style.pointerEvents = ''; })
-    .updatePedido({ id: p.id, cliente: p.cliente, direccion: p.direccion,
-                    fechaEntrega: nuevaFecha, notas: p.notas, items: p.items, retiro: p.retiro });
+    .catch(e => { toast('Error: ' + e.message); flipPendiente = null; if (card) card.style.pointerEvents = ''; });
 }
 
 function pedidoAPapeleraPorArrastre(id) {

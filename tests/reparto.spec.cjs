@@ -18,6 +18,11 @@ async function setup(browser,{turnosPlegados=false}={}){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='pedido_mover_entrega'){
+   const a=q.args,p=db.pedidos.find(p=>p.id===a.p_id);writes.push({name:q.name,args:a});
+   if(!p||p.estado!=='Pendiente'||(p.fecha_entrega||null)!==a.p_anterior)return {error:{message:'El pedido cambió'}};
+   p.fecha_entrega=a.p_fecha;return {data:{ok:true}};
+  }
   if(q.name==='pedido_cambiar_turno'){
    const a=q.args,p=db.pedidos.find(p=>p.id===a.p_id);
    if(failItem)return {error:{message:'Sin conexión'}};
@@ -1314,4 +1319,18 @@ test('bitácora reintenta una respuesta perdida con la misma operación',async({
  await p.getByRole('button',{name:'Reintentar entrada',exact:true}).click();await expect(p.getByRole('button',{name:'Marcar salida',exact:true})).toBeVisible();
  expect(await p.evaluate(()=>btOps[0].p_op===btOps[1].p_op)).toBe(true);
  expect(s.errors).toEqual([]);await s.close();
+});
+
+
+test('Mover entrega conserva remito hecho y no reescribe productos ni preparación',async({browser})=>{
+ const s=await setup(browser);s.db.pedidos[0].remito_hecho=true;
+ const productos=structuredClone(s.db.pedidos[0].pedido_items),preparacion=structuredClone(s.db.prep_items);
+ const p=await s.open('Oscar');await p.evaluate(rows=>{state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+ await p.evaluate(()=>moverEntregaPorArrastre('p1','manana'));
+ await expect.poll(()=>s.db.pedidos[0].fecha_entrega).toBe('2026-11-17');
+ await expect.poll(()=>p.evaluate(()=>state.pedidos.find(x=>x.id==='p1').remitoHecho)).toBe(true);
+ expect(s.db.pedidos[0].remito_hecho).toBe(true);expect(s.db.pedidos[0].pedido_items).toEqual(productos);expect(s.db.prep_items).toEqual(preparacion);
+ expect(s.writes.filter(w=>w.name==='pedido_mover_entrega').map(w=>w.args)).toEqual([{p_id:'p1',p_fecha:'2026-11-17',p_anterior:'2026-11-16'}]);
+ await p.evaluate(()=>moverEntregaPorArrastre('p1','sinfecha'));await expect.poll(()=>s.db.pedidos[0].fecha_entrega).toBe(null);
+ expect(s.db.pedidos[0].remito_hecho).toBe(true);expect(s.errors).toEqual([]);await s.close();
 });
