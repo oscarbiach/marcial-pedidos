@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v155';
+const CACHE = 'dm-pedidos-v156';
 
 const SHELL = [
   './',
@@ -52,7 +52,7 @@ const SHELL = [
   './preparacion.js?v=117',
   './preparacion.css',
   './reparto-vivo.js?v=144',
-  './turnos.js?v=144',
+  './turnos.js?v=156',
   './turnos.css?v=137',
   './reparto-vivo.css?v=144',
   './reparto-red.js?v=117',

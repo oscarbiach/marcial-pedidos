@@ -1,7 +1,7 @@
 /* Turno de entrega manual, compartido por Pedidos y Reparto. */
 (function(){
  'use strict';
- const opciones=[['manana','Mañana'],['tarde','Tarde'],['','Sin turno']];
+ const opciones=[['manana','TURNO MAÑANA'],['tarde','TURNO TARDE'],['','Sin turno']];
  const clave=p=>!p.retiro&&['manana','tarde'].includes(p.turno)?p.turno:'';
  const nombre=t=>opciones.find(([k])=>k===t)?.[1]||'Sin turno';
  function grupos(lista,render,contexto){
