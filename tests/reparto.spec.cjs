@@ -1117,16 +1117,18 @@ test('monitor conserva medidas distintas, no cuenta cola local y abre desde enla
 test('bitácora: marcación personal, resumen de Joaquín y corrección con motivo',async({browser})=>{
  const s=await setup(browser),p=await s.open('Oscar');
  await p.evaluate(()=>{
-  window.btRows=[];window.btCorrecciones=[];const rpc=sb.rpc;
+  window.btRows=[];window.btCorrecciones=[];window.btPagos=[];const rpc=sb.rpc;
   sb.rpc=async(n,a)=>{
    if(n==='bitacora_leer'){
-    const supervisor=state.who==='Joaquin',personas=(supervisor?['Oscar','Juan Marcos']:[state.who]).map(nombre=>({nombre,user_id:nombre,activa:btRows.find(j=>j.user_id===nombre&&!j.salida)||null,segundos:3600,segundos_cerrados:0}));
+    const supervisor=state.who==='Joaquin',personas=(supervisor?['Oscar','Juan Marcos']:[state.who]).map(nombre=>({nombre,user_id:nombre,activa:btRows.find(j=>j.user_id===nombre&&!j.salida)||null,segundos:7200,segundos_cerrados:5400}));
     return {data:{ahora:'2026-11-16T15:00:00Z',semana:a.p_semana||'2026-11-16',yo:{nombre:state.who,rol:supervisor?'supervisor':'trabajador'},personas,jornadas:btRows.filter(j=>supervisor||j.user_id===state.who).map(j=>({...j,nombre:j.user_id,segundos_semana:3600})),cambios:[]}};
    }
    if(n==='bitacora_marcar'){
     if(a.p_accion==='entrada')btRows.push({id:'b1',user_id:state.who,entrada:'2026-11-16T11:00:00Z',salida:null,version:1});else btRows.find(j=>j.user_id===state.who&&!j.salida).salida='2026-11-16T15:00:00Z';
     return {data:{ok:true}};
    }
+   if(n==='bitacora_calculos_leer')return {data:btPagos};
+   if(n==='bitacora_calculos_guardar'){btPagos=[{usuario:a.p_usuario,valor_hora:a.p_valor_hora,bonos:a.p_bonos,version:1}];return {data:{ok:true}};}
    if(n==='bitacora_corregir'){btCorrecciones.push(a);const j=btRows.find(x=>x.id===a.p_id);j.entrada=a.p_entrada;j.salida=a.p_salida;j.version++;return {data:{ok:true}};}
    return rpc(n,a);
   };goTab('bitacora');
@@ -1146,10 +1148,18 @@ test('bitácora: marcación personal, resumen de Joaquín y corrección con moti
  await expect(p.locator('.bt-personas article')).toHaveCount(2);await expect(p.locator('.bt-estado.on')).toHaveCount(1);
  await expect(p.locator('[data-bt="marcar"]')).toHaveCount(0);
  await p.getByRole('button',{name:'Corregir',exact:true}).click();
- await p.locator('#bt-modal [name="salida"]').fill('2026-11-16T11:30');await p.locator('#bt-modal [name="motivo"]').fill('Olvidó marcar salida');
+ await p.locator('#bt-modal [name="salida"]').fill('2026-11-16T11:30');await expect(p.locator('#bt-modal [name="motivo"]')).not.toHaveAttribute('required');
  await p.getByRole('button',{name:'Guardar corrección',exact:true}).click();await expect(p.locator('#bt-modal')).toHaveCount(0);
  expect(await p.evaluate(()=>btCorrecciones[0].p_salida)).toBe('2026-11-16T14:30:00.000Z');
  await expect(p.locator('.bt-estado.on')).toHaveCount(0);
+ await p.locator('[data-bt="calcular"]').first().click();
+ await p.locator('[name="tarifa"]').fill('2500');await p.locator('[data-pago="sumar"]').click();
+ await p.locator('[data-bono="detalle"]').fill('Entrega extra');await p.locator('[data-bono="importe"]').fill('1500');
+ await expect(p.locator('#bt-total')).toContainText('5.250');
+ await p.screenshot({path:'test-results/bitacora-calculo.png'});
+ await p.getByRole('button',{name:'Guardar cálculo',exact:true}).click();await expect(p.locator('#bt-modal')).toHaveCount(0);
+ await expect(p.locator('.bt-pago').first()).toContainText('5.250');
+ expect(await p.evaluate(()=>btCorrecciones[0].p_motivo)).toBe('');
  await p.screenshot({path:'test-results/bitacora-joaquin.png'});
  await p.evaluate(()=>{state.who='Juan Marcos';mostrarApp();goTab('bitacora');});await expect(p.locator('.bt-personas article')).toHaveCount(1);await expect(p.locator('.bt-personas')).toContainText('Juan Marcos');
  await p.setViewportSize({width:390,height:844});await p.screenshot({path:'test-results/bitacora-juan-marcos.png'});
