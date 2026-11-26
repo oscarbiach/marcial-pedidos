@@ -1611,6 +1611,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="admin.css?v=130">
 <link rel="stylesheet" href="auditoria.css?v=149">
 <link rel="stylesheet" href="reparto-control.css?v=117">
+<link rel="stylesheet" href="cargar-pedido.css?v=160">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
@@ -1712,28 +1713,24 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
           <div id="cargarItemRows"></div>
           <button class="add-item-btn" onclick="agregarProducto('cargar')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Agregar producto</button>
         </div>
+        <div class="datos-entrega">
+<div class="fecha-wrap">          <input type="date" aria-label="Fecha" id="n_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)"><span class="fecha-cel" id="fechaCel" aria-hidden="true">Fecha</span><button id="fechaPC" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico"><use href="marca/iconos.svg#i-calendar-days"/></svg><span id="fechaTexto">Fecha</span></button>
+<div id="almanaque" role="dialog" aria-label="Elegir fecha" hidden><div class="mes"><button type="button" id="mesAnt" aria-label="Mes anterior">‹</button><strong id="mesNombre"></strong><button type="button" id="mesSig" aria-label="Mes siguiente">›</button></div><div class="dias" id="dias"></div><button type="button" id="quitarFecha">Quitar fecha</button></div></div>
+          <div class="fecha-rapida" role="group" aria-label="Fecha rápida"><button type="button" data-rap="0" aria-pressed="false">Hoy</button><button type="button" data-rap="1" aria-pressed="false">Mañana</button></div>
+          <div class="turno-campo"><select id="n_turno" aria-label="Turno"><option value="">Sin turno</option><option value="manana">Turno mañana</option><option value="tarde">Turno tarde</option></select></div>
+        </div>
         <div class="form-extras-row">
-          <button type="button" class="extras-toggle" id="n_extrasBtn" onclick="toggleExtras('n')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
-          <label class="retiro-mini"><input type="checkbox" id="n_retiro" onchange="Turnos.retiro('n')"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
+          <button type="button" class="extras-toggle" id="n_extrasBtn" aria-controls="n_extras" onclick="toggleExtras('n')"><span>Dirección y observación</span></button>
+          <label class="retiro-mini"><input type="checkbox" id="n_retiro" onchange="Turnos.retiro('n')">Retiro</label>
         </div>
         <div class="extras-body" id="n_extras">
-          <div class="row2">
-            <div class="field">
-              <label>¿Cuándo se entrega?</label>
-              <input type="date" id="n_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
-            </div>
-            <div class="field">
-              <label>Dirección (opcional)</label>
-              <input type="text" id="n_direccion" placeholder="Ej: Av. San Martín 1234"
-                oninput="this.dataset.auto=''">
-            </div>
+          <div class="field"><label for="n_direccion">Dirección (opcional)</label>
+            <input type="text" id="n_direccion" placeholder="Ej: Av. San Martín 1234" oninput="this.dataset.auto=''">
           </div>
-          <div class="field">
-            <label>Observación (opcional)</label>
+          <div class="field"><label for="n_notas">Observación (opcional)</label>
             <textarea id="n_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
           </div>
         </div>
-        <div class="field turno-campo"><label for="n_turno">Turno de entrega</label><select id="n_turno"><option value="">Sin turno</option><option value="manana">TURNO MAÑANA</option><option value="tarde">TURNO TARDE</option></select></div>
         <button class="btn btn-primary" id="cargarSubmitBtn" onclick="submitCargarPedido()">Guardar Pedido</button>
       </div>
       <!-- Historial del cliente: solo PC ancha. Aparece al elegir el
@@ -2115,6 +2112,10 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 </div>
 
 <!-- Toast -->
+<div id="reciboCarga" role="status" aria-live="polite" hidden>
+  <div class="sello"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="m8 20 8 8 17-18"/></svg></div>
+  <div><strong>Pedido guardado</strong><span id="reciboDetalle"></span></div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script src="seguimiento-clientes.js?v=153"></script>
@@ -3279,6 +3280,7 @@ function resetCargarForm() {
   document.getElementById('n_turno').value = '';
   document.getElementById('n_retiro').checked = false;
   Turnos.retiro('n');
+  pintarFecha(false);
   document.getElementById('cargarItemRows').innerHTML = '';
   setExtrasOpen('n', false);
   // En celular no se arranca con una fila vacía: los productos entran por
@@ -3300,6 +3302,7 @@ function etiquetaExtras(prefix) {
   return esMobile() ? 'Entrega y más' : EXTRAS_LABELS[prefix];
 }
 function setExtrasOpen(prefix, open) {
+  if(prefix==='n'){abrirExtrasCarga(prefix,open);return}
   document.getElementById(prefix + '_extras').classList.toggle('open', open);
   document.getElementById(prefix + '_extrasBtn').innerHTML =
     mIco('calendar-days') + '<span>' + etiquetaExtras(prefix) + '</span>' + mIco(open ? 'chevron-up' : 'chevron-down', 'ico-sm');
@@ -3309,6 +3312,7 @@ function setExtrasOpen(prefix, open) {
 // Estando plegado, el chip dice si adentro hay algo cargado. Sin esto hay
 // que abrirlo cada vez solo para controlar.
 function actualizarChipExtras(prefix) {
+  if(prefix==='n'){chipCarga(prefix);return}
   const btn = document.getElementById(prefix + '_extrasBtn');
   if (!btn) return;
   const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
@@ -3357,7 +3361,7 @@ function submitCargarPedido() {
   const inp = document.getElementById('n_cliente');
   if (inp) inp.focus();
   window.scrollTo(0, 0);
-  toast('✓ Pedido guardado');
+  mostrarReciboCarga(nuevo);
 }
 
 // En celular los productos se cargan con el selector a pantalla completa;
@@ -3399,7 +3403,10 @@ window.addEventListener('resize', () => { if (activeTab === 'cargar') actualizar
 
 function agregarProducto(destino) {
   if (esMobile()) abrirPicker(destino, null);
-  else addItemRow(destino);
+  else {
+    const lista=document.getElementById(ROW_CONTAINERS[destino]);
+    animarLista(lista,()=>addItemRow(destino));
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3520,7 +3527,7 @@ function pickerPintarCantidad() {
   const ex = [];
   if (info && info.fetea) {
     ex.push(`<label><input type="checkbox" ${pkFetear ? 'checked' : ''}
-      onchange="pkFetear=this.checked;pickerPintarCantidad()"> ${mIco('scissors', 'ico-sm')} Para fetear (se anota en kg)</label>`);
+      onchange="pkFetear=this.checked;pickerPintarCantidad()"> ${mIco('scissors', 'ico-sm')} FETEAR</label>`);
     if (pkFetear && isPanceta(pkProd)) {
       ex.push(`<label><input type="checkbox" ${pkSinCuero ? 'checked' : ''}
         onchange="pkSinCuero=this.checked"> ${mIco('ban', 'ico-sm')} Sin cuero</label>`);
@@ -3552,6 +3559,7 @@ function pickerConfirmar() {
     pkFila.dataset.unidades = typeof it.unidades === 'string' ? it.unidades : '';
     updateBoxHint(pkFila);
     actualizarResumenFila(pkFila);
+    destacarProducto(pkFila);
   } else {
     addItemRowWith(pkDestino, it);
   }
@@ -5981,12 +5989,17 @@ function addItemRow(type) {
           onblur="setTimeout(()=>closeAc(this),200)">
         <div class="ac-list"></div>
       </div>
+      ${type==='cargar'?`<div class="corte" hidden>
+        <label class="fetear-check"><input type="checkbox" class="fetear-input" onchange="actualizarCorte(this)"> FETEAR</label>
+        <select class="cuero-pc" aria-label="Preparación de panceta" hidden onchange="elegirCuero(this)"><option value="con">Con cuero</option><option value="sin">Sin cuero</option><option value="pieza">Sin fetear</option></select>
+        <input type="checkbox" class="sincuero-input" hidden>
+      </div>`:''}
       <button class="del-btn" aria-label="Quitar producto" onclick="removeRow('${id}')">${mIco('x')}</button>
     </div>
     <div class="box-hint" style="display:none"></div>
-    <label class="fetear-check"><input type="checkbox" class="fetear-input"
+    ${type!=='cargar'?`<label class="fetear-check"><input type="checkbox" class="fetear-input"
       onchange="updateBoxHint(this.closest('.item-row'))"> ${mIco('scissors', 'ico-sm')} Para fetear</label>
-    <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> ${mIco('ban', 'ico-sm')} Sin cuero (por defecto va con cuero)</label>
+    <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> ${mIco('ban', 'ico-sm')} Sin cuero (por defecto va con cuero)</label>`:''}
   `;
   container.appendChild(div);
 }
@@ -6013,7 +6026,7 @@ function updateBoxHint(rowEl) {
 
   let html = '';
   if (fetOn && p.u && p.u !== 'kg') {
-    html = 'Feteado: se anota en kg';
+    if(!rowEl.closest('#cargarItemRows')) html = 'Feteado: se anota en kg';
   } else if (meds.length > 1) {
     // Una botonera con las medidas del producto: cajas/un., cajas/un./kg, tiras/un., kg/un.
     const toggle = `<span class="unit-toggle">` + meds.map(x =>
@@ -6021,15 +6034,24 @@ function updateBoxHint(rowEl) {
     const conv = !enUn && contenidoTexto(p) && qty > 0 ? ' = ' + round2(qty * p.box) + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'unidades') : '';
     html = toggle + (qty > 0 ? cantMedida(round2(qty), m) + conv : '');
   } else if (p && p.u) {
-    html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : p.u === 'tira' ? 'tiras' : esc(p.u));
+    if(!rowEl.closest('#cargarItemRows')) html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : p.u === 'tira' ? 'tiras' : esc(p.u));
   }
   hint.innerHTML = html;
   hint.style.display = html ? 'block' : 'none';
+  if(rowEl.querySelector('.corte')){
+  const conOpciones=fetOn && isPanceta(p.n);
+  rowEl.querySelector('.corte').hidden=!p?.fetea;
+  rowEl.querySelector('.fetear-check').hidden=conOpciones;
+  const cuero=rowEl.querySelector('.cuero-pc');
+  cuero.hidden=!conOpciones;
+  cuero.value=rowEl.querySelector('.sincuero-input').checked?'sin':'con';
+  }else{
   const fet = rowEl.querySelector('.fetear-check');
   if (fet) fet.style.display = (p && p.fetea) ? 'flex' : 'none';
   // "Sin cuero" solo aparece si el producto es panceta y está para fetear.
   const cuero = rowEl.querySelector('.cuero-check');
   if (cuero) cuero.style.display = (fetOn && isPanceta(rowEl.querySelector('.ac-input').value)) ? 'flex' : 'none';
+  }
   const wrap = rowEl.querySelector('.qty-wrap');
   const suf = m === 'kg' ? 'kg' : (enUn ? (MEDIDA_NOMBRE[m] ? MEDIDA_NOMBRE[m][1] : '') : '');
   wrap.querySelector('.qty-unit').textContent = suf || 'kg';
@@ -6062,7 +6084,8 @@ function addItemRowWith(type, it) {
 
 function removeRow(id) {
   const el = document.getElementById(id);
-  if (el) el.remove();
+  if (el?.closest("#cargarItemRows")) animarLista(el.parentElement,()=>el.remove());
+  else if(el) el.remove();
 }
 
 function getItemRows(type) {
@@ -6108,7 +6131,7 @@ function onAcInput(input) {
   if (!filtered.length) { list.classList.remove('open'); list.innerHTML = ''; return; }
   list.innerHTML = filtered.map(p => {
     const hl = q ? esc(p.n).replace(new RegExp(`(${escReg(q)})`, 'gi'), '<strong>$1</strong>') : esc(p.n);
-    const sub = p.c || (p.u ? 'se anota en ' + medidasDe(p).map(m => m === 'unidad' ? 'unidades' : m).join(', ') + (contenidoTexto(p) ? ' · ' + contenidoTexto(p) : '') : '');
+    const sub = p.c || (p.u ? medidasDe(p).map(m => m === 'unidad' ? 'unidades' : m).join(', ') + (contenidoTexto(p) ? ' · ' + contenidoTexto(p) : '') : '');
     return `<div class="ac-item" onmousedown="selectAc(event,'${escAttr(p.n)}')">
       ${hl}${sub ? `<div class="ac-cat">${esc(sub)}</div>` : ''}
     </div>`;
@@ -6119,10 +6142,25 @@ function onAcInput(input) {
 function selectAc(e, prod) {
   e.preventDefault();
   const input = e.target.closest('.ac-wrap').querySelector('.ac-input');
-  input.value = prod;
-  input.closest('.ac-wrap').querySelector('.ac-list').classList.remove('open');
-  updateBoxHint(input.closest('.item-row'));
-  const qtyInput = input.closest('.item-row').querySelector('.qty-input');
+  const row=input.closest('.item-row');
+  const list=input.nextElementSibling;
+  const animar=movimientoPC();
+  const altoInicial=row.getBoundingClientRect().height;
+  input.value=prod;
+  list.classList.remove('open');
+  if(animar){
+    list.classList.add('cerrando');
+    const cierre=list.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(-3px)'}],
+      {duration:160,easing:'ease-out'});
+    cierre.onfinish=()=>list.classList.remove('cerrando');
+  }
+  updateBoxHint(row);
+  const altoFinal=row.getBoundingClientRect().height;
+  if(animar && altoFinal!==altoInicial){
+    row.animate([{height:altoInicial+'px'},{height:altoFinal+'px'}],
+      {duration:210,easing:'cubic-bezier(.22,.68,.18,1)'});
+  }
+  const qtyInput=row.querySelector('.qty-input');
   qtyInput.focus(); qtyInput.select();
 }
 
@@ -6164,10 +6202,11 @@ function habitualesDe(peds) {
       const k = nom.toLowerCase();
       if (!nom || vistos.has(k)) return;
       vistos.add(k);
-      const e = mapa.get(k) || { prod: nom, veces: 0, qtys: new Map() };
+      const e = mapa.get(k) || { prod: nom, veces: 0, qtys: new Map(), muestras: new Map() };
       e.veces++;
       const q = itemLabelCorto(it);
       e.qtys.set(q, (e.qtys.get(q) || 0) + 1);
+      if (!e.muestras.has(q)) e.muestras.set(q, it); // el más reciente con esa cantidad
       mapa.set(k, e);
     });
   });
@@ -6177,7 +6216,8 @@ function habitualesDe(peds) {
     .map(e => ({
       prod: e.prod,
       veces: e.veces,
-      qty: Array.from(e.qtys.entries()).sort((a, b) => b[1] - a[1])[0][0]
+      qty: Array.from(e.qtys.entries()).sort((a, b) => b[1] - a[1])[0][0],
+      item: e.muestras.get(Array.from(e.qtys.entries()).sort((a, b) => b[1] - a[1])[0][0])
     }));
 }
 
@@ -6223,16 +6263,7 @@ function actualizarHistCliente() {
   box.innerHTML =
     '<div class="hc-tit">Historial · ' + peds.length + ' pedido' + (peds.length !== 1 ? 's' : '') + '</div>' +
     '<div class="hc-cli">' + esc(titulo) + '</div>' +
-    (mostrarHabituales
-      ? '<div class="hc-sub">Suele llevar</div><div class="hc-habs">' +
-        habs.map(h =>
-          '<div class="hc-hab">' +
-            '<span class="hh-q">' + h.qty + '</span>' +
-            '<span class="hh-n">' + esc(h.prod) + '</span>' +
-            '<span class="hh-v">' + h.veces + '×</span>' +
-          '</div>').join('') +
-        '</div>'
-      : '') +
+    (mostrarHabituales ? sueleHtml(habs) : '') +
     '<div class="hc-sub">Últimos pedidos</div>' +
     ultimos.map(p =>
       '<div class="hc-ped">' +
@@ -6243,6 +6274,7 @@ function actualizarHistCliente() {
             '<span class="hc-n">' + esc(it.prod) + '</span>').join('') +
         '</div>' +
       '</div>').join('');
+  box._habs = mostrarHabituales ? habs : [];
   box.hidden = false;
 }
 
@@ -6617,7 +6649,8 @@ function abrirInstalar() {
 <script src="stock.js"></script>
 <script src="bitacora.js?v=147"></script>
 <script src="stock-pantalla.js?v=152"></script>
-<script src="pedidos-a-cargar.js"></script>
+<!-- Para cargar (Telegram) reservado. Ver docs/diseno-pedidos.md. -->
+<script src="cargar-pedido.js?v=160"></script>
 <script src="pedidos-fijos.js"></script>
 <script src="preparacion.js?v=117"></script>
 <script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>
