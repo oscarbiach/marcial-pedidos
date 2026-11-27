@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v169';
+const CACHE = 'dm-pedidos-v170';
 
 const SHELL = [
   './',
@@ -55,10 +55,10 @@ const SHELL = [
   './stock-pantalla.css?v=152',
   './preparacion.js?v=117',
   './preparacion.css',
-  './reparto-vivo.js?v=166',
-  './turnos.js?v=156',
+  './reparto-vivo.js?v=170',
+  './turnos.js?v=170',
   './turnos.css?v=157',
-  './reparto-vivo.css?v=166',
+  './reparto-vivo.css?v=170',
   './reparto-red.js?v=117',
   './gestion.js?v=159',
   './gestion.css?v=159',
@@ -75,9 +75,12 @@ const SHELL = [
   './armado-pedido.css?v=165',
   './reparto-control.js?v=165',
   './reparto-control.css?v=165',
-  './cargar-pedido.css?v=161',
-  './cargar-pedido.js?v=161',
-  './pedidos-fijos.js'
+  './cargar-pedido.css?v=170',
+  './cargar-pedido.js?v=170',
+  './calendario.css?v=170',
+  './calendario.js?v=170',
+  './marca/iconos.svg?v=170',
+  './pedidos-fijos.js?v=170'
 ];
 
 self.addEventListener('install', e => {

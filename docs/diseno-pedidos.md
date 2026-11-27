@@ -10,6 +10,13 @@ Probar las propuestas en un prototipo independiente con datos ficticios. Antes d
 - Mantener el azul marino de la marca, los botones principales en azul a índigo y la tarjeta completa con los colores de los grupos de Pedidos. Fecha visible, dirección y observación plegables. Animaciones integradas, sin selector de demostración.
 - La colaboración que funcionó en esta pantalla: Codex prototipó y ajustó las interacciones con feedback del usuario. Claude adaptó esa base, volvió accionable «Suele pedir» y sumó los atajos Hoy/Mañana y el día de la semana. Para otra pantalla, compartir con ambos el mismo recorrido, ejemplos y criterios de aceptación.
 
+## Calendario y edición de pedidos
+
+- En PC, la semana va de lunes a domingo. En celular, la tira semanal permite elegir un día. La bandeja «Sin fecha» muestra los productos y permite agarrar la tarjeta completa.
+- Un atraso se identifica en la tarjeta y se puede resolver ahí mismo. Al probar el diseño, usar 30 pedidos ficticios con dos atrasados.
+- Retiros usa verde y Reparto usa azul. Al filtrar, el reflejo del fondo y la entrada de las tarjetas se acompañan. En las tarjetas enviadas, el rayado diagonal deja legibles el cliente y los productos.
+- Editar comparte con Cargar los controles de fecha, turno, retiro y productos. Al llevar un prototipo a la app, probar también la edición desde Reparto y los pedidos de reposición.
+
 ## Para cargar y Telegram
 
 La bandeja «Para cargar» está desactivada por decisión de Marcial. El bot de Telegram nunca se implementó. Se conserva pedidos-a-cargar.js para un posible uso futuro. La app no carga el módulo ni inicia sus consultas periódicas. Para reactivarlo, primero confirmar que exista un origen operativo de pedidos y probar el circuito de recepción, carga y descarte con datos ficticios.

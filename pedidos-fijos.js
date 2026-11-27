@@ -52,14 +52,14 @@
   function lunes() { return lunesDe(hoyArg()); }
   function armar() {
     const d = $('fijos'); if (!d || S.listo) return;
-    d.innerHTML = `<summary><span id="fijos-tit">📌 Fijos semanales (0)</span><button type="button" class="fijo-btn fijo-nuevo" data-fijo="nuevo" title="Cargar un pedido fijo semanal">📌 Nuevo fijo</button></summary>
+    d.innerHTML = `<div class="fijos-cab"><span id="fijos-tit">📌 Fijos semanales (0)</span><button type="button" class="fijo-btn fijo-nuevo" data-fijo="nuevo" title="Cargar un pedido fijo semanal">📌 Nuevo fijo</button></div>
       <div class="fijos-cuerpo">
         <div id="fijos-lista"></div>
         <p id="fijos-aviso" class="fijos-ayuda" role="status" aria-live="polite"></p>
       </div>`;
     d.addEventListener('click', e => {
       const b = e.target.closest('[data-fijo]'); if (!b) return;
-      if (b.dataset.fijo === 'nuevo') { e.preventDefault(); abrirAlta(b); return; }   // dentro del <summary>: no plegar ni desplegar
+      if (b.dataset.fijo === 'nuevo') { e.preventDefault(); abrirAlta(b); return; }   // dentro del <div class="fijos-cab">: no plegar ni desplegar
       if (b.dataset.fijo === 'editar') { abrirEditar(b.dataset.id, b); return; }
       accion(b.dataset.fijo, b.dataset.id);
     });
@@ -124,6 +124,7 @@
   const abierto = () => $('fijoModal').classList.contains('open');
   function error(msg) { $('fijoError').textContent = msg || ''; }
   function abrirVentana(titulo, disp) {
+    CalendarioPedidos.fijos(false);
     S.disparador = disp || null; S.guardando = false;
     $('fijoModalTit').textContent = titulo;
     $('fijoGuardarBtn').disabled = false;
@@ -158,7 +159,7 @@
   function cerrar() {
     if (S.guardando) return;
     closeModal('fijoModal');
-    if (S.disparador && document.contains(S.disparador)) S.disparador.focus();
+    CalendarioPedidos.fijos(true); $('calPin').focus();
   }
   async function guardar() {
     if (S.guardando || !S.modal) return;

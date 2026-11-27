@@ -1605,7 +1605,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="proveedores-pagos.css?v=162">
 <link rel="stylesheet" href="stock-pantalla.css?v=152">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=166">
+<link rel="stylesheet" href="reparto-vivo.css?v=170">
 <link rel="stylesheet" href="turnos.css?v=157">
 <link rel="stylesheet" href="armado-pedido.css?v=165">
 <link rel="stylesheet" href="reparto-fotos.css?v=165">
@@ -1613,12 +1613,14 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="admin.css?v=164">
 <link rel="stylesheet" href="auditoria.css?v=149">
 <link rel="stylesheet" href="reparto-control.css?v=165">
-<link rel="stylesheet" href="cargar-pedido.css?v=161">
+<link rel="stylesheet" href="cargar-pedido.css?v=170">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
      (que es justo cuando se carga un pedido en el campo). Version fija. -->
 <script src="./vendor/supabase-2.45.4.min.js"></script>
+<link rel="stylesheet" href="calendario.css?v=170">
+<script src="calendario.js?v=170"></script>
 </head>
 <body>
 
@@ -1744,7 +1746,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- PEDIDOS -->
     <div id="tab-pedidos" class="tab-panel">
-      <div id="pedidosMain">
+      <div id="pedidosMain"><div class="cal-vidrio" aria-hidden="true"><i></i><i></i></div>
         <!-- El botón "Armar recorrido" vivía acá. Se mudó a la pestaña
              🚚 Reparto: el recorrido es el último paso de armar la hoja de
              carga, no algo aparte — se elegían los pedidos dos veces, una
@@ -1780,7 +1782,8 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
           <button class="desp-btn" id="despBtn" onclick="entrarDespacho()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-package-check"/></svg>Despachar varios</button>
         </div>
         <div id="frescura" class="frescura"></div>
-        <details id="fijos" class="fijos"></details>
+        <button type="button" class="cal-pin" id="calPin" title="Pedidos fijos semanales" aria-label="Pedidos fijos semanales" aria-controls="fijos" aria-expanded="false" onclick="CalendarioPedidos.fijos()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg?v=170#i-pin-fijo"/></svg></button>
+<section id="fijos" class="fijos" aria-label="Pedidos fijos semanales" hidden></section>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos"
                 onclick="openPapelera()">
@@ -1797,7 +1800,6 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
         <div id="compList"></div>
       </aside>
-      <button id="compFab" class="pc-only" title="Stock comprometido" aria-label="Stock comprometido" onclick="toggleCompPanel()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-boxes"/></svg></button>
     </div>
 
     <!-- HOJA DE REPARTO -->
@@ -1939,14 +1941,23 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 </div>
 
 <!-- ── MODAL: Editar Pedido ── -->
+<dialog id="calResolver" aria-labelledby="calResolverTitulo">
+ <form>
+  <div class="cal-res-cab"><h2 id="calResolverTitulo">Resolver atraso</h2><button type="button" aria-label="Cerrar" onclick="this.closest('dialog').close()">×</button></div>
+  <strong id="calResolverCliente"></strong><p id="calVencimiento"></p>
+  <label for="calNuevaFecha">Nueva fecha de entrega</label><input type="date" id="calNuevaFecha" required>
+  <button type="submit" class="btn btn-primary" value="mover">Reprogramar entrega</button>
+  <button type="submit" class="btn btn-outline" formnovalidate value="despachar">Marcar despachado</button>
+ </form>
+</dialog>
 <div class="overlay" id="pedidoModal">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitulo">
     <div class="modal-handle"></div>
     <div class="modal-header">
-      <h2><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-square-pen"/></svg> Editar Pedido</h2>
+      <h2 id="editTitulo"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-square-pen"/></svg> Editar pedido</h2>
       <button class="close-btn" onclick="closeModal('pedidoModal')" aria-label="Cerrar"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-x"/></svg></button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body form-card">
       <input type="hidden" id="p_editId">
       <div class="field">
         <label>Cliente</label>
@@ -1963,32 +1974,29 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
         <div id="pedItemRows"></div>
         <button class="add-item-btn" onclick="agregarProducto('ped')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-plus"/></svg>Agregar producto</button>
       </div>
-      <div class="form-extras-row">
-        <button type="button" class="extras-toggle" id="p_extrasBtn" onclick="toggleExtras('p')"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-calendar-days"/></svg><span>Entrega, dirección y observación</span><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-chevron-down"/></svg></button>
-        <label class="retiro-mini"><input type="checkbox" id="p_retiro" onchange="Turnos.retiro('p')"> <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg> RETIRO</label>
-      </div>
-      <div class="extras-body" id="p_extras">
-        <div class="row2">
-          <div class="field">
-            <label>¿Cuándo se entrega?</label>
-            <input type="date" id="p_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)">
+        <div class="datos-entrega">
+<div class="fecha-wrap">          <input type="date" aria-label="Fecha" id="p_fecha" onkeydown="return pickerKeys(event)" onclick="openPicker(this)"><span class="fecha-cel" id="p_fechaCel" aria-hidden="true">Fecha</span><button id="p_fechaPC" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico"><use href="marca/iconos.svg#i-calendar-days"/></svg><span id="p_fechaTexto">Fecha</span></button>
+<div id="p_almanaque" role="dialog" aria-label="Elegir fecha" hidden><div class="mes"><button type="button" id="p_mesAnt" aria-label="Mes anterior">‹</button><strong id="p_mesNombre"></strong><button type="button" id="p_mesSig" aria-label="Mes siguiente">›</button></div><div class="dias" id="p_dias"></div><button type="button" id="p_quitarFecha">Quitar fecha</button></div></div>
+          <div class="fecha-rapida" role="group" aria-label="Fecha rápida"><button type="button" data-rap="0" aria-pressed="false">Hoy</button><button type="button" data-rap="1" aria-pressed="false">Mañana</button></div>
+          <div class="turno-campo"><select id="p_turno" aria-label="Turno"><option value="">Sin turno</option><option value="manana">Turno mañana</option><option value="tarde">Turno tarde</option></select></div>
+        </div>
+        <div class="form-extras-row">
+          <button type="button" class="extras-toggle" id="p_extrasBtn" aria-controls="p_extras" onclick="toggleExtras('p')"><span>Dirección y observación</span></button>
+          <label class="retiro-mini"><input type="checkbox" id="p_retiro" onchange="Turnos.retiro('p')">Retiro</label>
+        </div>
+        <div class="extras-body" id="p_extras">
+          <div class="field"><label for="p_direccion">Dirección (opcional)</label>
+            <input type="text" id="p_direccion" placeholder="Ej: Av. San Martín 1234" oninput="this.dataset.auto=''">
           </div>
-          <div class="field">
-            <label>Dirección (opcional)</label>
-            <input type="text" id="p_direccion" placeholder="Ej: Av. San Martín 1234"
-              oninput="this.dataset.auto=''">
+          <div class="field"><label for="p_notas">Observación (opcional)</label>
+            <textarea id="p_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
           </div>
         </div>
-        <div class="field">
-          <label>Observación (opcional)</label>
-          <textarea id="p_notas" rows="2" placeholder="Ej: llamar antes de ir…"></textarea>
-        </div>
-      </div>
-      <div class="field turno-campo"><label for="p_turno">Turno de entrega</label><select id="p_turno"><option value="">Sin turno</option><option value="manana">TURNO MAÑANA</option><option value="tarde">TURNO TARDE</option></select></div>
-      <button class="btn btn-primary" onclick="submitEditPedido()">Guardar Cambios</button>
-      <button class="btn btn-secondary" onclick="closeModal('pedidoModal')">Cancelar</button>
+      <div class="edit-acciones"><button class="btn btn-primary" onclick="submitEditPedido()">Guardar cambios</button>
+      <button class="btn btn-secondary" onclick="closeModal('pedidoModal')">Cancelar</button></div>
     </div>
   </div>
+  <aside id="histEdit" hidden></aside>
 </div>
 
 <!-- ── MODAL: Detalle ── -->
@@ -3226,6 +3234,7 @@ function setTab(tab) {
   // Pedidos usa todo el ancho en PC; las otras pestañas (y los modales,
   // que tienen su propio ancho fijo aparte) quedan tal cual estaban.
   document.body.classList.toggle('pedidos-ancho', tab === 'pedidos');
+  if(tab!=='pedidos')CalendarioPedidos.fijos(false);
   // Clientes (seguimiento) también usa el ancho útil en PC: lista | ficha.
   document.body.classList.toggle('seg-ancho', tab === 'clientes');
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
@@ -3320,7 +3329,7 @@ function etiquetaExtras(prefix) {
   return esMobile() ? 'Entrega y más' : EXTRAS_LABELS[prefix];
 }
 function setExtrasOpen(prefix, open) {
-  if(prefix==='n'){abrirExtrasCarga(prefix,open);return}
+  if(prefix==='n'||prefix==='p'){abrirExtrasCarga(prefix,open);return}
   document.getElementById(prefix + '_extras').classList.toggle('open', open);
   document.getElementById(prefix + '_extrasBtn').innerHTML =
     mIco('calendar-days') + '<span>' + etiquetaExtras(prefix) + '</span>' + mIco(open ? 'chevron-up' : 'chevron-down', 'ico-sm');
@@ -3330,7 +3339,7 @@ function setExtrasOpen(prefix, open) {
 // Estando plegado, el chip dice si adentro hay algo cargado. Sin esto hay
 // que abrirlo cada vez solo para controlar.
 function actualizarChipExtras(prefix) {
-  if(prefix==='n'){chipCarga(prefix);return}
+  if(prefix==='n'||prefix==='p'){chipCarga(prefix);return}
   const btn = document.getElementById(prefix + '_extrasBtn');
   if (!btn) return;
   const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
@@ -3605,7 +3614,7 @@ function actualizarResumenFila(row) {
   res.innerHTML = `<span class="ir-q">${itemLabelCorto(it)}</span>
     <span class="ir-n">${esc(prod || 'Sin producto')}${itemTags(it)}</span>
     <button class="ir-x" onclick="event.stopPropagation();removeRow('${row.id}')" aria-label="Quitar producto">${mIco('x')}</button>`;
-  res.onclick = () => abrirPicker(pkDestino, row);
+  res.onclick = () => abrirPicker(Object.keys(ROW_CONTAINERS).find(k=>ROW_CONTAINERS[k]===row.parentElement.id), row);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4467,7 +4476,7 @@ function pedidoBloqueHtml(p) {
           <span class="blk-q">${itemDespachoLabelCorto(p, it)}</span><span class="blk-n">${esc(it.prod)}${itemTags(it)}${itemPartialTagHtml(p, it)}</span>`).join('')}
         ${resto > 0 ? `<div class="blk-mas">+ ${resto} producto${resto !== 1 ? 's' : ''} más…</div>` : ''}
       </div>
-      <div class="blk-pie">
+      <div class="blk-pie datos-carga">
         ${p.quien ? `<span class="blk-quien">${mIco('user', 'ico-sm')} ${esc(p.quien)}</span>` : ''}
         <span>${cargaLabel(p.fecha)}</span>
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
@@ -4484,11 +4493,7 @@ function pedidoCardHtml(p) {
 
   // La fecha de carga es dato secundario y explícito ("Cargado hoy/ayer/
   // el DD/MM"), separado de la fecha de ENTREGA (que va como chip abajo).
-  const meta = [];
-  if (p.direccion) meta.push(dirLinkHtml(p.direccion, 'dir-link'));
-  meta.push(cargaLabel(p.fecha));
-  meta.push(p.items.length + ' producto' + (p.items.length !== 1 ? 's' : ''));
-  if (p.quien) meta.push(esc(p.quien));
+  const meta = p.direccion ? [dirLinkHtml(p.direccion,'dir-link')] : [];
 
   // Las fechas que sí importan van como chip, no perdidas en una lista
   // separada por puntos.
@@ -4728,7 +4733,7 @@ function posicionarGhost(clientX, clientY) {
 function actualizarHoverEnPunto(clientX, clientY) {
   if (!arrastre) return;
   const el = document.elementFromPoint(clientX, clientY);
-  const dz = el && el.closest ? el.closest('.order-list[id^="dz-"]') : null;
+  const dz = el && el.closest ? el.closest('[data-cal-drop]') : null;
   if (dz !== arrastre.zonaHoverEl) {
     if (arrastre.zonaHoverEl) arrastre.zonaHoverEl.classList.remove('dz-over');
     arrastre.zonaHoverEl = dz || null;
@@ -4814,7 +4819,7 @@ function onArrastreUp(e) {
   // no está en la página. document.elementFromPoint mira la página tal
   // como está en este instante, así nunca se guarda un destino viejo.
   const elSoltado = moved ? document.elementFromPoint(e.clientX, e.clientY) : null;
-  const zonaEl = elSoltado && elSoltado.closest ? elSoltado.closest('.order-list[id^="dz-"]') : null;
+  const zonaEl = elSoltado && elSoltado.closest ? elSoltado.closest('[data-cal-drop]') : null;
   limpiarListenersArrastre();
   limpiarVisualArrastre();
   arrastre = null;
@@ -4825,8 +4830,12 @@ function onArrastreUp(e) {
   // que evita un borrado sin querer.
   if (sobrePapelera) return;
   if (zonaEl) {
-    const zona = zonaEl.id.replace(/^dz-/, '');
-    moverEntregaPorArrastre(id, zona);
+    const zona = zonaEl.dataset.calDrop;
+    const turno = elSoltado.closest('.cal-turno[data-turno]');
+    const p = state.pedidos.find(x => x.id === id);
+    if (p && state.who!=='Mateo' && turno && p.fechaEntrega === zona && !p.retiro && turno.dataset.turno !== 'retiro')
+      Turnos.mover(p, turno.dataset.turno);
+    else moverEntregaPorArrastre(id, zona);
   }
 }
 
@@ -4906,7 +4915,7 @@ function verHistorialArrastre() {
 function moverEntregaPorArrastre(id, zona) {
   const p = state.pedidos.find(x => x.id === id);
   if (!p || p.estado !== 'Pendiente') return;
-  const nuevaFecha = zona === 'hoy' ? state.today : zona === 'manana' ? sumarDias(state.today, 1) : '';
+  const nuevaFecha = zona === 'hoy' ? state.today : zona === 'manana' ? sumarDias(state.today, 1) : /^\d{4}-\d{2}-\d{2}$/.test(zona) ? zona : '';
   if ((p.fechaEntrega || '') === nuevaFecha) return;   // soltado en su propio grupo
   registrarMovimientoArrastre({
     accion: 'entrega', id: p.id, cliente: p.cliente,
@@ -4996,21 +5005,7 @@ function renderPedidos() {
   });
 
   let cuerpo = resumenDelDiaHtml();
-  // Los 5 grupos de pendientes van en un bloque propio (en PC se acomodan
-  // en columnas — ver .pend-grid en el CSS; en celular se apilan igual
-  // que siempre, uno abajo del otro). Hoy/Mañana/Sin fecha aceptan que se
-  // suelte ahí un pedido arrastrado (zona, ver pedidoSectionHtml).
-  let pendCuerpo = '';
-  pendCuerpo += pedidoSectionHtml('Atrasados', atrasados);
-  pendCuerpo += pedidoSectionHtml('Para hoy', hoyG, 'hoy');
-  pendCuerpo += pedidoSectionHtml('Para mañana', mananaG, 'manana');
-  pendCuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha, 'sinfecha');
-  pendCuerpo += pedidoPliegueHtml(masAdelante, {
-    claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
-    abierto: q ? true : showProgramados,
-    texto: `${mIco('calendar-clock', 'ico-sm')} <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
-  }, true);
-  if (pendCuerpo) cuerpo += `<div class="pend-grid">${pendCuerpo}</div>`;
+  cuerpo += CalendarioPedidos.html(pedidos.filter(p=>p.estado==='Pendiente'));
 
   // Despachados y Cancelados van DEBAJO de todo el bloque de pendientes,
   // a todo el ancho (no como una columna más).
@@ -5035,6 +5030,7 @@ function renderPedidos() {
   }
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
   actualizarRetiroToggle();
+  CalendarioPedidos.pintado();
   updatePapeleraFab();
   renderComprometido();
   actualizarBarraDesp();
@@ -5957,7 +5953,8 @@ function openPedidoEdit(id, pedidoActual) {
   Turnos.retiro('p');
   // Si el pedido ya tiene fecha, dirección u observación, los extras
   // arrancan abiertos para que se vean; si no, quedan plegados.
-  setExtrasOpen('p', !!(p.fechaEntrega || p.direccion || p.notas));
+  setExtrasOpen('p', false);
+  fechaEditar.cerrar();fechaEditar.pintar(false);
   const cont = document.getElementById('pedItemRows');
   cont.innerHTML = '';
   (p.items || []).forEach(it => addItemRowWith('ped', it));
@@ -5965,6 +5962,8 @@ function openPedidoEdit(id, pedidoActual) {
   // quedaría un renglón "Sin producto" que no se entiende.
   if (!cont.children.length && !esMobile()) addItemRow('ped');
   document.getElementById('pedidoModal').classList.add('open');
+  actualizarHistCliente('ped');
+  document.querySelector('#pedidoModal .modal').scrollTop=0;
 }
 
 function submitEditPedido() {
@@ -6002,6 +6001,7 @@ function addItemRow(type) {
   const existing = container.querySelectorAll('.item-row').length;
   if (existing >= 20) { toast('Máximo 20 productos por pedido'); return; }
 
+  const corteIntegrado=type==='cargar'||type==='ped';
   const id = 'row_' + (++rowCount);
   const div = document.createElement('div');
   div.id = id;
@@ -6019,7 +6019,7 @@ function addItemRow(type) {
           oninput="onAcInput(this)"
           onblur="setTimeout(()=>closeAc(this),200)">
         <div class="ac-list"></div>
-      ${type==='cargar'?`<div class="corte" hidden>
+      ${corteIntegrado?`<div class="corte" hidden>
         <label class="fetear-check"><input type="checkbox" class="fetear-input" onchange="actualizarCorte(this)"> FETEAR</label>
         <select class="cuero-pc" aria-label="Preparación de panceta" hidden onchange="elegirCuero(this)"><option value="con">Con cuero</option><option value="sin">Sin cuero</option><option value="pieza">Sin fetear</option></select>
         <input type="checkbox" class="sincuero-input" hidden>
@@ -6028,7 +6028,7 @@ function addItemRow(type) {
       <button class="del-btn" aria-label="Quitar producto" onclick="removeRow('${id}')">${mIco('x')}</button>
     </div>
     <div class="box-hint" style="display:none"></div>
-    ${type!=='cargar'?`<label class="fetear-check"><input type="checkbox" class="fetear-input"
+    ${!corteIntegrado?`<label class="fetear-check"><input type="checkbox" class="fetear-input"
       onchange="updateBoxHint(this.closest('.item-row'))"> ${mIco('scissors', 'ico-sm')} Para fetear</label>
     <label class="cuero-check" style="display:none"><input type="checkbox" class="sincuero-input"> ${mIco('ban', 'ico-sm')} Sin cuero (por defecto va con cuero)</label>`:''}
   `;
@@ -6057,7 +6057,7 @@ function updateBoxHint(rowEl) {
 
   let html = '';
   if (fetOn && p.u && p.u !== 'kg') {
-    if(!rowEl.closest('#cargarItemRows')) html = 'Feteado: se anota en kg';
+    if(!rowEl.closest('#cargarItemRows,#pedItemRows')) html = 'Feteado: se anota en kg';
   } else if (meds.length > 1) {
     // Una botonera con las medidas del producto: cajas/un., cajas/un./kg, tiras/un., kg/un.
     const toggle = `<span class="unit-toggle">` + meds.map(x =>
@@ -6065,7 +6065,7 @@ function updateBoxHint(rowEl) {
     const conv = !enUn && contenidoTexto(p) && qty > 0 ? ' = ' + round2(qty * p.box) + ' ' + (p.u === 'caja' && p.cajaEn === 'kg' ? 'kg' : 'unidades') : '';
     html = toggle + (qty > 0 ? cantMedida(round2(qty), m) + conv : '');
   } else if (p && p.u) {
-    if(!rowEl.closest('#cargarItemRows')) html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : p.u === 'tira' ? 'tiras' : esc(p.u));
+    if(!rowEl.closest('#cargarItemRows,#pedItemRows')) html = 'Se anota en ' + (p.u === 'unidad' ? 'unidades' : p.u === 'tira' ? 'tiras' : esc(p.u));
   }
   hint.innerHTML = html;
   hint.style.display = html ? 'block' : 'none';
@@ -6116,7 +6116,7 @@ function addItemRowWith(type, it) {
 
 function removeRow(id) {
   const el = document.getElementById(id);
-  if (el?.closest("#cargarItemRows")) animarLista(el.parentElement,()=>el.remove());
+  if (el?.closest("#cargarItemRows,#pedItemRows")) animarLista(el.parentElement,()=>el.remove());
   else if(el) el.remove();
 }
 
@@ -6261,13 +6261,14 @@ function haceCuantoTxt(f) {
   return ' · hace ' + d + ' días';
 }
 
-function actualizarHistCliente() {
-  const box = document.getElementById('histCli');
+function actualizarHistCliente(tipo='cargar') {
+  const editando=tipo==='ped';
+  const box=document.getElementById(editando?'histEdit':'histCli');
   if (!box) return;
-  const inp = document.getElementById('n_cliente');
+  const inp = document.getElementById(editando?'p_cliente':'n_cliente');
   const nombre = inp ? inp.value.trim() : '';
   // Lo anotado desde WhatsApp «para el próximo pedido» de este cliente (ver whatsapp-carga.js).
-  if (window.WhatsAppCarga) WhatsAppCarga.alCambiarCliente(nombre);
+  if (!editando && window.WhatsAppCarga) WhatsAppCarga.alCambiarCliente(nombre);
   // Si el cliente tiene despachos de hace más de 7 días, la carga habitual
   // ya no los trae: sin esto, el panel de "suele llevar"/últimos pedidos
   // se veía pobre (o vacío) para un cliente antiguo con pedidos recientes.
@@ -6277,7 +6278,7 @@ function actualizarHistCliente() {
   // incluido, donde el panel no existe nunca) traía todo el historial
   // viejo para nada.
   if (nombre && histClientePodriaVerse()) asegurarHistorialCompleto();
-  const peds = pedidosDelCliente(nombre);
+  const peds = pedidosDelCliente(nombre).filter(p=>!editando || p.id!==document.getElementById('p_editId').value);
 
   // Sin cliente escrito, o cliente nuevo sin historial: el panel no
   // aparece. Un cuadro vacío al costado sería ruido, no información.
@@ -6296,7 +6297,7 @@ function actualizarHistCliente() {
   box.innerHTML =
     '<div class="hc-tit">Historial · ' + peds.length + ' pedido' + (peds.length !== 1 ? 's' : '') + '</div>' +
     '<div class="hc-cli">' + esc(titulo) + '</div>' +
-    (mostrarHabituales ? sueleHtml(habs) : '') +
+    (mostrarHabituales ? sueleHtml(habs,tipo) : '') +
     '<div class="hc-sub">Últimos pedidos</div>' +
     ultimos.map(p =>
       '<div class="hc-ped">' +
@@ -6317,7 +6318,7 @@ function actualizarHistCliente() {
 function onClienteInput(input) {
   // El historial es solo del formulario de carga; el mismo autocomplete lo
   // usa también el modal de editar, y ahí no corresponde.
-  if (input.id === 'n_cliente') actualizarHistCliente();
+  if (input.id === 'n_cliente' || input.id === 'p_cliente') actualizarHistCliente(input.id==='p_cliente'?'ped':'cargar');
   const q = input.value.trim().toLowerCase();
   const list = input.nextElementSibling;
   // Si se borra el cliente, la dirección que se había rellenado sola
@@ -6351,7 +6352,7 @@ function selectCliente(e, name) {
   const c = (state.clientes || []).find(x => x.n.toLowerCase() === name.toLowerCase());
   const dirInput = document.getElementById(input.dataset.dir || '');
   if (c && c.d && dirInput) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
-  if (input.id === 'n_cliente') actualizarHistCliente();
+  if (input.id === 'n_cliente' || input.id === 'p_cliente') actualizarHistCliente(input.id==='p_cliente'?'ped':'cargar');
 }
 
 function closeClienteAcLater(input) {
@@ -6363,7 +6364,7 @@ function closeClienteAcLater(input) {
     const c = (state.clientes || []).find(x => x.n.toLowerCase() === input.value.trim().toLowerCase());
     const dirInput = document.getElementById(input.dataset.dir || '');
     if (c && c.d && dirInput && !dirInput.value.trim()) { dirInput.value = c.d; dirInput.dataset.auto = '1'; }
-    if (input.id === 'n_cliente') actualizarHistCliente();
+    if (input.id === 'n_cliente' || input.id === 'p_cliente') actualizarHistCliente(input.id==='p_cliente'?'ped':'cargar');
   }, 200);
 }
 
@@ -6685,14 +6686,14 @@ function abrirInstalar() {
 <script src="proveedores-pagos.js?v=162"></script>
 <script src="stock-pantalla.js?v=152"></script>
 <!-- Para cargar (Telegram) reservado. Ver docs/diseno-pedidos.md. -->
-<script src="cargar-pedido.js?v=161"></script>
-<script src="pedidos-fijos.js"></script>
+<script src="cargar-pedido.js?v=170"></script>
+<script src="pedidos-fijos.js?v=170"></script>
 <script src="preparacion.js?v=117"></script>
 <script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="turnos.js?v=156"></script>
+<script src="turnos.js?v=170"></script>
 <script src="gestion.js?v=159"></script>
 <script src="auditoria.js?v=162"></script>
 <script src="bonificaciones-cliente.js?v=164"></script>
@@ -6700,6 +6701,6 @@ function abrirInstalar() {
 <script src="reparto-fotos.js?v=165"></script>
 <script src="armado-pedido.js?v=165"></script>
 <script src="reparto-control.js?v=165"></script>
-<script src="reparto-vivo.js?v=166"></script>
+<script src="reparto-vivo.js?v=170"></script>
 </body>
 </html>

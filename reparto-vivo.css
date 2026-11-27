@@ -175,3 +175,6 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-quitar svg{box-sizing:content-box;border:1px solid #d6dfeb;border-radius:50%;padding:4px;background:white}
 .rv .rv-quitar:hover,.rv .rv-quitar:focus-visible{background:transparent;color:#a12637}
 @media(max-width:760px){.rv-board.rv-oficina{grid-template-columns:1fr}.entrega-switch{flex-wrap:wrap;justify-content:center}.entrega-switch button{min-height:44px;flex:1}}
+
+.rv .rv-quitar svg{transition:background-color .18s,border-color .18s,color .18s,transform .18s}
+.rv .rv-quitar:is(:hover,:focus-visible) svg{background:#b82032;border-color:#a0182a;color:white;transform:scale(1.1)}
