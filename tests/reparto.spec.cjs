@@ -1420,6 +1420,7 @@ test('tablero de pedidos: bandejas, fijos y retiro animado en PC y celular',asyn
   s.db.pedidos_fijos=[{id:'fijo1',cliente:'Semanal de prueba',items:[],activo:true,eliminado_en:null}];
   for(const width of [1440,390]){
    const page=await s.open('Oscar',{width,height:900});
+   if(width===390)await page.emulateMedia({reducedMotion:'reduce'});
    await page.evaluate(rows=>{state.pedidos=rows.filter(p=>!p.eliminado_en).map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
    const instalar=page.locator('#installBar.show .ib-x');
    if(await instalar.isVisible())await instalar.click();
@@ -1437,6 +1438,7 @@ test('tablero de pedidos: bandejas, fijos y retiro animado en PC y celular',asyn
    await page.locator('[data-tipo=retiro]').click();
    await expect(page.locator('#tab-pedidos')).toHaveClass(/solo-retiros/);
    await expect(page.locator('.vidrio-retiros .cristal-uno')).toHaveCSS('animation-play-state','running');
+   await expect(page.locator('.vidrio-retiros .cristal-uno')).toHaveCSS('animation-name',width===390?'brilloSuave':'reflejoLargo');
    await expect(page.locator('#pedidosList [data-pid=p3]')).toBeVisible();
    await expect(page.locator('#pedidosList [data-pid=p1]')).toHaveCount(0);
    await page.locator('[data-tipo=todos]').click();await page.locator('[data-vista=fecha]').click();

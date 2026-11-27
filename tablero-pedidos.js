@@ -64,13 +64,18 @@ const TableroPedidos = (() => {
     const filtro=filtroEntregaActual(), retiro=filtro==='retiro';
     $('tab-pedidos').classList.toggle('solo-retiros',retiro);
     const clave=claveLista();
-    if (activeTab==='pedidos' && animable() && clave!==ultimaLista) {
+    const mover=animable();
+    if (activeTab==='pedidos' && (mover || retiro) && clave!==ultimaLista) {
       const entrada=retiro && ultimoFiltro!==filtro;
       const origen=document.querySelector('#entregaSwitch:not([hidden]) [data-tipo=retiro]') || $('retiroToggle');
       const centro=origen.getBoundingClientRect();
       const tarjetas=[...root.querySelectorAll(entrada?'.retiro[data-pid]':'[data-pid]')].map(el=>({el,r:el.getBoundingClientRect()})).filter(({r})=>r.height&&r.bottom>0&&r.top<innerHeight);
       if(entrada) tarjetas.sort((a,b)=>Math.hypot(a.r.x-centro.x,a.r.y-centro.y)-Math.hypot(b.r.x-centro.x,b.r.y-centro.y));
       tarjetas.forEach(({el,r},i)=>{
+        if(!mover){
+          if(entrada)el.animate([{opacity:.55},{opacity:1}],{duration:600,easing:'ease-out'});
+          return;
+        }
         const prev=antes.get(el.dataset.pid);
         const x=entrada?Math.sign(centro.x-r.x)*13:(prev?prev.x-r.x:0);
         const y=entrada?14:(prev?prev.y-r.y:9);

@@ -51,7 +51,12 @@ body.fijos-ok #verFijos{display:inline-flex}
  .tablero-dias-nav b{display:block;width:max-content;margin:3px auto 0}
  .tablero-turno-lista{display:block}
 }
-@media(prefers-reduced-motion:reduce){#tab-pedidos .vidrio-retiros i{animation:none!important}#tab-pedidos .vidrio-retiros{transition:none!important}}
+@media(prefers-reduced-motion:reduce){
+ #tab-pedidos .vidrio-retiros i{animation:brilloSuave 9s ease-in-out infinite alternate!important;animation-play-state:paused!important}
+ #tab-pedidos.solo-retiros .vidrio-retiros i{animation-play-state:running!important}
+ #tab-pedidos .vidrio-retiros .cristal-dos{animation-direction:alternate-reverse!important}
+ #tab-pedidos .vidrio-retiros{transition:opacity 1s ease!important}
+}
 
 
 #pedidosList button:is(.prog-notice,.archived-notice){width:100%;font-family:inherit;text-align:left}
