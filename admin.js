@@ -171,7 +171,9 @@
           : `<button type="button" class="adm-btn peligro" data-adm="cli-baja" ${dis}>Dar de baja</button>`}
         ${F.nuevo || fus ? '' : `<button type="button" class="adm-btn" data-adm="cli-fusionar" ${dis}>Fusionar con otro cliente…</button>`}
       </div>
+      ${F.nuevo || fus ? '' : '<section class="adm-bloque" id="adm-cli-bonificaciones" aria-label="Bonificaciones por producto"></section>'}
       ${F.nuevo ? '' : '<div class="adm-bloque"><h4>Historial de cambios</h4><ul class="adm-hist" id="adm-cli-hist"></ul></div>'}</form>`;
+    if(!F.nuevo&&!fus)window.BonificacionesCliente?.montar($('adm-cli-bonificaciones'),F.id);
     pintarHistorialCliente(); avisoCliente(); pintarSeg(); cargarSeg();
     if (foco) { const h = $('adm-ficha-h'); if (h) h.focus({ preventScroll: true }); }
   }

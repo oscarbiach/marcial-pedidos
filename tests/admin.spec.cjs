@@ -25,6 +25,10 @@ function setup(opts={}){
  const cli=c=>({id:c.id,nombre:c.nombre,direccion:c.direccion,observaciones:c.observaciones||null,eliminado_en:c.eliminado_en,fusionado_en:c.fusionado_en||null,version:c.version,eliminado_por:null,creado_en:null});
  const err=m=>({error:{message:m}});
  async function request(q){
+  if(q.name==='admin_bonificaciones_cliente'){
+   if(!['Oscar','Joaquin'].includes(q.who))return {error:{code:'42501',message:'Sin permiso'}};
+   return {data:{productos:[{producto:'Carne',unidad:'kg',estado:'Verificada',porcentaje:5,lista_con_iva:11050,cobrado_con_iva:10497.5,iva:10.5,fecha:'2026-11-20',comprobante:'Factura A 00001-00000123',renglon:'1'},{producto:'Sin respaldo',estado:'Sin referencia verificada',porcentaje:null}],pendientes_vinculacion:2}};
+  }
   if(q.name==='catalogo_aliases')return {data:{}};
   if(q.name==='notas_leer')return {data:[]};
   if(q.name==='catalogo_leer'){const m=new Map();for(const p of db.pedidos.filter(p=>!p.eliminado_en))for(const i of p.pedido_items){const k=i.producto.toLowerCase();if(!db.productos.some(x=>x.nombre.toLowerCase()===k))m.set(k,{clave:k,texto:i.producto,cliente:p.cliente,usos:1});}return {data:{productos:db.productos,pendientes:[...m.values()],decisiones:[]}};}
@@ -138,6 +142,16 @@ test('botón solo para Oscar y Joaquín; Productos sale de la navegación y vive
   expect(page.errors).toEqual([]);await page.close();
  }
  await abrir(browser,s,'Thiago').then(async page=>{await page.evaluate(()=>goTab('productos'));await expect(page.locator('#adminPanel')).not.toHaveClass(/open/);await page.close();});
+});
+
+test('bonificaciones solo en ficha administrativa, importes con IVA y rechazo sin rol',async({browser})=>{
+ const s=setup(),page=await abrir(browser,s,'Joaquin');
+ await page.locator('#adminBtn').click();await page.locator('#adm-tab-clientes').click();await page.locator('#adm-cli-lista .adm-fila').first().click();
+ const box=page.locator('#adm-cli-bonificaciones');await expect(box).toContainText('5 %');await expect(box).toContainText('10.497,50');await expect(box).toContainText('11.050,00');
+ await expect(box).toContainText('20/11/2026');await expect(box).toContainText('Factura A 00001-00000123');await expect(box).toContainText('Sin referencia verificada');
+ await box.scrollIntoViewIfNeeded();await shot(page,'bonificaciones-admin');expect(page.errors).toEqual([]);await page.close();
+ const denied=await abrir(browser,s,'Juan Marcos');await expect(denied.locator('#adminBtn')).toBeHidden();
+ const r=await denied.evaluate(()=>sb.rpc('admin_bonificaciones_cliente',{p_cliente:'c1'}));expect(r.error.code).toBe('42501');await expect(denied.locator('#adm-cli-bonificaciones')).toHaveCount(0);await denied.close();
 });
 
 test('Escape, fondo y foco del panel',async({browser})=>{

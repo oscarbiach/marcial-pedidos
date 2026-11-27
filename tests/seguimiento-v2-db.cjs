@@ -185,5 +185,18 @@ const uuid=()=>crypto.randomUUID();
  await as(3);assert.equal(await call('seg_puede_cliente',[C(5)]),false);
  await as(2);assert.equal(await call('seg_puede_cliente',[C(1)]),true);
  await as(null);assert.equal(await call('seg_puede_cliente',[C(5)]),false);
- console.log('OK: seguimiento por vendedor, atención general, permisos y agenda.');
+ await db.exec(sql('20261127_seguimiento_etiquetas_juan'));
+ await db.exec(sql('20261127_seguimiento_etiquetas_juan'));
+ await as(5);assert.equal((await call('seg_yo')).puede_etiquetar,true);
+ assert.equal((await call('seg_yo')).ve_todo,false);
+ for(const id of [C(3),C(4),C(5)]){
+   assert.deepEqual((await call('seg_cliente_etiquetas',[id,[e2]])).etiquetas,[e2]);
+   assert.deepEqual((await call('seg_cliente_etiquetas',[id,[]])).etiquetas,[]);
+ }
+ for(const id of [C(1),C(2)])await sin42501(call('seg_cliente_etiquetas',[id,[e2]]));
+ await sin42501(call('seg_cliente_vendedor',[C(4),'Oscar']));
+ await as(3);await sin42501(call('seg_cliente_etiquetas',[C(1),[e2]]));
+ await as(null);await sin42501(call('seg_cliente_etiquetas',[C(5),[e2]]));
+ await as(2);assert.equal((await call('seg_cliente_etiquetas',[C(1),[e2]])).ok,true);
+ console.log('OK: seguimiento por vendedor, atención general, etiquetas sin ampliar cartera y permisos.');
 })().catch(e=>{console.error(e);process.exit(1);});
