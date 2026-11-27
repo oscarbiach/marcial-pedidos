@@ -551,6 +551,7 @@ test('sustituto parcial, remito compartido y carga crean solo el faltante pendie
  await expect(oscar.locator('.rc-status')).toHaveText('✓ Cargado y despachado');
  expect(s.db.pedidos[0].estado).toBe('Despachado');expect(s.db.pedidos.find(p=>p.id==='repo_p1').pedido_items[0].cantidad).toBe(2);
  await mateo.locator('[data-rc="cerrar"]').click();await mateo.evaluate(()=>goTab('pedidos'));
+ await mateo.locator('[data-bandeja]').click();
  await expect(mateo.locator('[data-pid="repo_p1"]')).toHaveClass(/es-repo/);
  expect(s.errors).toEqual([]);await s.close();
 });
@@ -1409,4 +1410,55 @@ test('Pagos proveedores: carga, errores, permisos y transferencia sin salir de l
  await t.locator('[data-pgv="transferir"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);await t.locator('[data-modo="transferido"]').click();await expect(t.locator('.pgv-pago')).toContainText('Pagado');await expect(t.locator('[data-pgv="editar"]')).toHaveCount(0);
  await t.setViewportSize({width:390,height:844});await t.screenshot({path:'test-results/pagos-proveedores-movil.png',animations:'disabled'});expect(await t.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await t.locator('[data-pgv="config"]').click();await expect(t.locator('[data-pgv="editar"]')).toBeVisible();await t.locator('[data-pgv="editar"]').click();await expect(t.locator('#pgv-modal input')).toHaveCount(3);await t.locator('#pgv-modal [name="importe"]').fill('200');await t.locator('#pgv-modal [type="submit"]').click();await expect(t.locator('.pgv-pago')).toContainText('200,00');await t.locator('[data-pgv="eliminar"]').click();await t.locator('#pgv-modal [type="submit"]').click();await t.locator('[data-modo="eliminados"]').click();await expect(t.locator('[data-pgv="restaurar"]')).toBeVisible();await t.locator('[data-pgv="restaurar"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);expect(s.db.proveedores_pagos[0].importe).toBe('200');expect(s.errors).toEqual([]);await s.close();
+});
+
+test('tablero de pedidos: bandejas, fijos y retiro animado en PC y celular',async({browser})=>{
+ const s=await setup(browser);
+ try{
+  s.db.pedidos[1].fecha_entrega='2026-11-20';
+  s.db.pedidos.push(pedido('p6','Sin fecha de prueba',{fecha_entrega:null}));
+  s.db.pedidos_fijos=[{id:'fijo1',cliente:'Semanal de prueba',items:[],activo:true,eliminado_en:null}];
+  for(const width of [1440,390]){
+   const page=await s.open('Oscar',{width,height:900});
+   await page.evaluate(rows=>{state.pedidos=rows.filter(p=>!p.eliminado_en).map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+   const instalar=page.locator('#installBar.show .ib-x');
+   if(await instalar.isVisible())await instalar.click();
+   const bandeja=page.locator('[data-bandeja]');
+   await expect(bandeja).toHaveText(/Sin fecha de entrega\s*1/);
+   await bandeja.click();await expect(page.locator('[data-pid=p6]')).toBeVisible();
+   const futuros=page.locator('.futuros');
+   await expect(futuros).toHaveAttribute('aria-expanded','false');
+   expect((await futuros.boundingBox()).y).toBeGreaterThan((await page.locator('.tablero-dias').boundingBox()).y);
+   await futuros.click();await expect(page.locator('[data-pid=p2]')).toBeVisible();
+   await page.locator('#verFijos').click();await expect(page.locator('#fijos')).toContainText('Semanal de prueba');
+   await page.locator('[data-fijo=editar]').click();await expect(page.locator('#fijoModal')).toBeVisible();
+   await page.locator('#fijoModal .close-btn').click();await expect(page.locator('#fijos')).toBeVisible();
+   await page.locator('#verFijos').click();
+   await page.locator('[data-tipo=retiro]').click();
+   await expect(page.locator('#tab-pedidos')).toHaveClass(/solo-retiros/);
+   await expect(page.locator('.vidrio-retiros .cristal-uno')).toHaveCSS('animation-play-state','running');
+   await expect(page.locator('#pedidosList [data-pid=p3]')).toBeVisible();
+   await expect(page.locator('#pedidosList [data-pid=p1]')).toHaveCount(0);
+   await page.locator('[data-tipo=todos]').click();await page.locator('[data-vista=fecha]').click();
+   await expect(page.locator('[data-dia=hoy]')).toHaveAttribute('aria-pressed','true');
+   if(width>700){
+    const card=page.locator('#pedidosList [data-pid=p1]');
+    async function soltar(destino){
+     await card.scrollIntoViewIfNeeded();
+     const r=await card.boundingBox(),x=r.x+26,y=r.y+26;
+     await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+12,y);
+     const fin=await destino.boundingBox();await page.mouse.move(fin.x+fin.width/2,fin.y+fin.height/2,{steps:8});await page.mouse.up();
+    }
+    await soltar(page.locator('.tablero-turnos [data-turno=tarde]'));
+    await expect.poll(()=>s.db.pedidos[0].turno).toBe('tarde');
+    await expect(card.locator('xpath=ancestor::section[1]')).toHaveAttribute('data-turno','tarde');
+    await soltar(page.locator('[data-dia=manana]'));await expect.poll(()=>s.db.pedidos[0].fecha_entrega).toBe('2026-11-17');
+    s.db.pedidos[0].fecha_entrega='2026-11-16';
+   }
+   await page.locator('[data-dia=futuro]').click();await expect(page.locator('#pedidosList [data-pid=p2]')).toBeVisible();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await page.close();
+  }
+  expect(s.errors).toEqual([]);
+ }finally{await s.close();}
 });
