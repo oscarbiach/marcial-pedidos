@@ -1606,6 +1606,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=166">
 <link rel="stylesheet" href="turnos.css?v=157">
+<link rel="stylesheet" href="tablero-pedidos.css?v=167">
 <link rel="stylesheet" href="armado-pedido.css?v=165">
 <link rel="stylesheet" href="reparto-fotos.css?v=165">
 <link rel="stylesheet" href="gestion.css?v=159">
@@ -1618,6 +1619,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
      de un CDN: una dependencia menos al abrir, y la app arranca sin senal
      (que es justo cuando se carga un pedido en el campo). Version fija. -->
 <script src="./vendor/supabase-2.45.4.min.js"></script>
+<script src="tablero-pedidos.js?v=167"></script>
 </head>
 <body>
 
@@ -1742,6 +1744,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 
     <!-- PEDIDOS -->
     <div id="tab-pedidos" class="tab-panel">
+      <div class="vidrio-retiros" aria-hidden="true"><i class="luz-verde"></i><i class="cristal-uno"></i><i class="cristal-dos"></i></div>
       <div id="pedidosMain">
         <!-- El botón "Armar recorrido" vivía acá. Se mudó a la pestaña
              🚚 Reparto: el recorrido es el último paso de armar la hoja de
@@ -1775,10 +1778,16 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-refresh-cw"/></svg></span><span class="rb-txt">Actualizar</span>
           </button>
-          <button class="desp-btn" id="despBtn" onclick="entrarDespacho()"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-package-check"/></svg>Despachar varios</button>
         </div>
         <div id="frescura" class="frescura"></div>
-        <details id="fijos" class="fijos"></details>
+        <div class="tablero-mandos">
+          <div class="tablero-vistas" role="group" aria-label="Vista de pedidos">
+            <button type="button" data-vista="todos" aria-pressed="true">Todos los días</button>
+            <button type="button" data-vista="fecha" aria-pressed="false">Por fecha</button>
+          </div>
+          <button type="button" id="verFijos" aria-controls="fijos" aria-expanded="false"><svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-calendar"/></svg> Fijos</button>
+          <section id="fijos" class="fijos" aria-label="Pedidos fijos semanales" hidden></section>
+        </div>
         <div id="pedidosList"></div>
         <button id="papeleraFab" class="pc-only" title="Papelera de pedidos"
                 onclick="openPapelera()">
@@ -3220,6 +3229,7 @@ function setTab(tab) {
   // Pedidos usa todo el ancho en PC; las otras pestañas (y los modales,
   // que tienen su propio ancho fijo aparte) quedan tal cual estaban.
   document.body.classList.toggle('pedidos-ancho', tab === 'pedidos');
+  if (tab !== 'pedidos') TableroPedidos.fijos(false);
   // Clientes (seguimiento) también usa el ancho útil en PC: lista | ficha.
   document.body.classList.toggle('seg-ancho', tab === 'clientes');
   document.querySelectorAll('#pcNav [data-tab], #bottomNav [data-tab]')
@@ -4573,23 +4583,18 @@ function pedidoSectionHtml(titulo, list, zona) {
   </div>`;
 }
 
-// Sección plegable genérica (Más adelante / Despachados / Cancelados).
-// Con el buscador activo se fuerza abierta: un resultado que coincide
-// nunca debe quedar escondido detrás de un plegado. comoColumna=true es
-// para "Más adelante": va adentro de .pend-grid como una columna más,
-// junto a los otros grupos de pendientes (Despachados/Cancelados, en
-// cambio, van sueltos, a todo el ancho, debajo de todo el bloque).
-function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaGrouping }, comoColumna) {
+// Los grupos secundarios se abren al buscar y ocupan el ancho de la lista.
+function pedidoPliegueHtml(list, { claseAviso, texto, abierto, onclick, entregaGrouping }) {
   if (!list.length) return '';
-  let html = `<div class="${claseAviso}" onclick="${onclick}()">
+  let html = `<button type="button" class="${claseAviso}" aria-expanded="${abierto}" onclick="${onclick}()">
     <span>${texto}</span>
     <span>${mIco(abierto ? 'chevron-up' : 'chevron-down')}</span>
-  </div>`;
+  </button>`;
   if (abierto) {
     const inner = entregaGrouping ? listaPorEntrega(list) : list.map(pedidoCardHtml).join('');
     html += `<div class="order-list prog-list">${inner}</div>`;
   }
-  return comoColumna ? `<div class="pend-group">${html}</div>` : html;
+  return html;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4690,6 +4695,7 @@ function onArrastreKeydown(e) {
 // vibración — ver .drag-ghost en el CSS.
 function iniciarArrastreVisual() {
   arrastre.moved = true;
+  document.body.classList.toggle('arrastre-turnos', !arrastre.p.retiro && state.who !== 'Mateo');
   document.body.classList.add('arrastrando-pedido');
   arrastre.el.classList.add('dragging');
 
@@ -4721,7 +4727,7 @@ function posicionarGhost(clientX, clientY) {
 function actualizarHoverEnPunto(clientX, clientY) {
   if (!arrastre) return;
   const el = document.elementFromPoint(clientX, clientY);
-  const dz = el && el.closest ? el.closest('.order-list[id^="dz-"]') : null;
+  const dz = TableroPedidos.destino(el, arrastre.p);
   if (dz !== arrastre.zonaHoverEl) {
     if (arrastre.zonaHoverEl) arrastre.zonaHoverEl.classList.remove('dz-over');
     arrastre.zonaHoverEl = dz || null;
@@ -4807,7 +4813,7 @@ function onArrastreUp(e) {
   // no está en la página. document.elementFromPoint mira la página tal
   // como está en este instante, así nunca se guarda un destino viejo.
   const elSoltado = moved ? document.elementFromPoint(e.clientX, e.clientY) : null;
-  const zonaEl = elSoltado && elSoltado.closest ? elSoltado.closest('.order-list[id^="dz-"]') : null;
+  const zonaEl = TableroPedidos.destino(elSoltado, arrastre.p);
   limpiarListenersArrastre();
   limpiarVisualArrastre();
   arrastre = null;
@@ -4818,8 +4824,13 @@ function onArrastreUp(e) {
   // que evita un borrado sin querer.
   if (sobrePapelera) return;
   if (zonaEl) {
-    const zona = zonaEl.id.replace(/^dz-/, '');
-    moverEntregaPorArrastre(id, zona);
+    if (zonaEl.hasAttribute('data-turno')) {
+      const p = state.pedidos.find(p => p.id === id);
+      if (p && p.estado === 'Pendiente' && !p.retiro && state.who !== 'Mateo')
+        Turnos.mover(p, zonaEl.dataset.turno);
+    } else {
+      moverEntregaPorArrastre(id, zonaEl.dataset.diaDestino || zonaEl.id.slice(3));
+    }
   }
 }
 
@@ -4857,6 +4868,7 @@ function limpiarListenersArrastre() {
 }
 
 function limpiarVisualArrastre() {
+  document.body.classList.remove('arrastre-turnos');
   if (!arrastre) return;
   if (arrastre.autoScrollRAF) cancelAnimationFrame(arrastre.autoScrollRAF);
   if (arrastre.papeleraTimer) clearTimeout(arrastre.papeleraTimer);
@@ -4989,21 +5001,7 @@ function renderPedidos() {
   });
 
   let cuerpo = resumenDelDiaHtml();
-  // Los 5 grupos de pendientes van en un bloque propio (en PC se acomodan
-  // en columnas — ver .pend-grid en el CSS; en celular se apilan igual
-  // que siempre, uno abajo del otro). Hoy/Mañana/Sin fecha aceptan que se
-  // suelte ahí un pedido arrastrado (zona, ver pedidoSectionHtml).
-  let pendCuerpo = '';
-  pendCuerpo += pedidoSectionHtml('Atrasados', atrasados);
-  pendCuerpo += pedidoSectionHtml('Para hoy', hoyG, 'hoy');
-  pendCuerpo += pedidoSectionHtml('Para mañana', mananaG, 'manana');
-  pendCuerpo += pedidoSectionHtml('Sin fecha de entrega', sinFecha, 'sinfecha');
-  pendCuerpo += pedidoPliegueHtml(masAdelante, {
-    claseAviso: 'prog-notice', onclick: 'toggleProgramados', entregaGrouping: true,
-    abierto: q ? true : showProgramados,
-    texto: `${mIco('calendar-clock', 'ico-sm')} <span class="pn-n">${masAdelante.length}</span> pedido${masAdelante.length !== 1 ? 's' : ''} programado${masAdelante.length !== 1 ? 's' : ''} para más adelante`,
-  }, true);
-  if (pendCuerpo) cuerpo += `<div class="pend-grid">${pendCuerpo}</div>`;
+  cuerpo += TableroPedidos.lista({atrasados, hoy:hoyG, manana:mananaG, sinfecha:sinFecha, futuro:masAdelante}, !!q);
 
   // Despachados y Cancelados van DEBAJO de todo el bloque de pendientes,
   // a todo el ancho (no como una columna más).
@@ -5026,7 +5024,9 @@ function renderPedidos() {
       ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
       : '<p style="text-align:center;color:var(--gray);padding:40px">Sin pedidos todavía.<br>Cargá el primero desde <b>Cargar</b>.</p>';
   }
+  const anteriores = TableroPedidos.posiciones();
   document.getElementById('pedidosList').innerHTML = filtroTagHtml() + cuerpo;
+  TableroPedidos.actualizar(anteriores);
   actualizarRetiroToggle();
   updatePapeleraFab();
   renderComprometido();
@@ -6678,13 +6678,13 @@ function abrirInstalar() {
 <script src="stock-pantalla.js?v=152"></script>
 <!-- Para cargar (Telegram) reservado. Ver docs/diseno-pedidos.md. -->
 <script src="cargar-pedido.js?v=161"></script>
-<script src="pedidos-fijos.js"></script>
+<script src="pedidos-fijos.js?v=167"></script>
 <script src="preparacion.js?v=117"></script>
 <script>window.LECTOR_PESOS_ACTIVO = false; // Conservado para poder retomar el lector más adelante.</script>
 <script src="peso-fuentes.js?v=117"></script>
 <script src="balanza.js?v=117"></script>
 <script src="reparto-red.js?v=117"></script>
-<script src="turnos.js?v=156"></script>
+<script src="turnos.js?v=167"></script>
 <script src="gestion.js?v=159"></script>
 <script src="auditoria.js?v=162"></script>
 <script src="bonificaciones-cliente.js?v=164"></script>
