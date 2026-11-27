@@ -41,7 +41,7 @@
   function abrir(p) {
     if (S.open && !cerrar()) return;
     S.epoch++; S.revision++; S.open=true; S.p=p; S.cola=null; S.items=new Map(); S.productos=new Map();
-    S.drafts.clear(); S.active=null; S.ready=false; S.busy=false; S.error=''; S.actionError=''; S.itemError=null; S.choosing=false;
+    S.retirados=[]; S.drafts.clear(); S.active=null; S.ready=false; S.busy=false; S.error=''; S.actionError=''; S.itemError=null; S.choosing=false;
     S.interacting=false; S.repaint=false;
     S.extras.clear();
     S.returnId=p.id; S.returnFocus=document.activeElement;
@@ -85,12 +85,13 @@
     S.loading=true; S.again=false;
     const epoch=S.epoch,revision=S.revision,id=S.p.id;
     try {
-      const [pedido,cola,prod]=await Promise.all([
+      const [pedido,cola,prod,archivo]=await Promise.all([
         sb.from('pedidos').select('id,fecha,quien,cliente,fecha_entrega,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)').eq('id',id).is('eliminado_en',null),
         sb.from('prep_cola').select('*').eq('pedido_id',id),
-        sb.from('prep_productos').select('nombre,frio,se_pesa')
+        sb.from('prep_productos').select('nombre,frio,se_pesa'),
+        sb.from('prep_retirados').select('item_id,producto,preparacion').eq('pedido_id',id).order('retirado_en')
       ].map(q=>pedir(q)));
-      for(const result of [pedido,cola,prod]) if(result.error) throw result.error;
+      for(const result of [pedido,cola,prod,archivo]) if(result.error) throw result.error;
       const p=pedido.data?.[0] ? mapPedido_(pedido.data[0]) : null;
       const ids=p?.items.map(it=>it.id) || [];
       const detalle=ids.length ? await pedir(sb.from('prep_items').select('*').in('item_id',ids)) : {data:[]};
@@ -103,7 +104,8 @@
       for(const itemId of S.drafts.keys()) if(!ids.includes(itemId)) S.drafts.delete(itemId);
       if(S.active!==null && !ids.includes(S.active)) S.active=null;
       S.ready=true; S.error='';
-      const fotos=[...new Set((detalle.data || []).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)]).filter(Boolean))];
+      S.retirados=archivo.data||[];
+      const fotos=[...new Set([...(detalle.data||[]).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)]),...S.retirados.flatMap(RepartoFotos.rutasRetiradas)].filter(Boolean))];
       const faltan=fotos.filter(f=>!S.fotos.has(f) || S.fotos.get(f).hasta<Date.now());
       if(faltan.length){
         const urls=await pedir(sb.storage.from('preparacion').createSignedUrls(faltan,3600));
@@ -128,9 +130,9 @@
     const x=row(it),d=borrador(it),open=S.active===it.id,ok=listo(it),zero=d.falta && numero(d.enviado)===0;
     const medida=it.fetear?'kg':typeof it.unidades==='string'?it.unidades:medidaDe(prodInfo(it.prod),false,it.unidades);
     const url=x.foto && S.fotos.get(x.foto)?.url,dirty=S.drafts.has(it.id);
-    return `<article class="ap-item ${ok&&!dirty?'ap-done':''} ${x.falta||x.sustituto?'ap-incidencia':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
+    return `<article class="ap-item ${ok&&!dirty?'ap-done':''} ${x.falta||x.sustituto?'ap-incidencia':''} ${x.revisar_edicion?'ap-edit-warning':''} ${open?'ap-active':''}" id="ap-item-${it.id}">
       <button class="ap-item-head" data-ap="abrir" data-i="${it.id}" aria-expanded="${open}" aria-controls="ap-editor-${it.id}">
-        <span class="ap-number">${ok?'✓':index+1}</span><span class="ap-item-name"><b>${esc(it.prod)}</b><small>${esc(cantidad(it))}${repTagsTexto(it)?' · '+esc(repTagsTexto(it)):''}</small></span>
+        <span class="ap-number" ${x.revisar_edicion?'aria-label="Preparación a revisar"':''}>${x.revisar_edicion?'!':ok?'✓':index+1}</span><span class="ap-item-name"><b>${esc(it.prod)}</b><small>${esc(cantidad(it))}${repTagsTexto(it)?' · '+esc(repTagsTexto(it)):''}</small></span>
         <span class="ap-item-status">${esc(estadoItem(it))}</span><span aria-hidden="true">${open?'−':'+'}</span>
       </button>
       ${open?`<div class="ap-editor" id="ap-editor-${it.id}">
@@ -180,6 +182,7 @@
         ${!S.ready?'<p class="ap-empty">Cargando el armado…</p>':!editable()?'<p class="ap-error">Este pedido ya no está disponible para preparar.</p>':''}
         ${p.notas?`<aside class="ap-observacion ${esReposicion(p)?'nota-reposicion':''}"><b>Observación del pedido</b><p>${esc(p.notas)}</p></aside>`:''}
         ${S.ready?p.items.map(producto).join(''):''}
+        ${S.ready?RepartoFotos.retirados(S.retirados,S.fotos,esc):''}
         ${state.who!=='Mateo'&&S.ready&&total&&stage==='listo'?'<button class="ap-operations" data-ap="operaciones">Ver resumen para remito →</button>':''}
       </div>
       <footer class="ap-footer"><div><b>${S.drafts.size?'Cambios sin guardar':complete?'Todo preparado':total-done===1?'Queda 1 producto':`Quedan ${total-done} productos`}</b></div><button id="ap-finalizar" data-ap="etapa" ${disabled?'disabled':''}>${S.busy?'Guardando…':next}</button></footer>
@@ -231,7 +234,7 @@
     }
     if(out.foto===null)out.fotos_extra=[];
     if(out.sustituto_foto===null)out.sustituto_fotos_extra=[];
-    if(completar)out.separado=true;
+    if(completar){out.separado=true;if(x.revisar_edicion)out.revisar_edicion=false;}
     return out;
   }
   async function moverEtapa(to,epoch) {
@@ -363,6 +366,7 @@
     $('ap-raiz').appendChild(v);filtrar();buscar.focus();
   }
   function clic(e) {
+    if(RepartoFotos.verRetirado(e,S.retirados,S.fotos,'ap-viewer',pintar))return;
     if(e.target===$('ap-raiz')){if(S.backdropDown)cerrar();S.backdropDown=false;return;}
     const b=e.target.closest('[data-ap]');if(!b||b.disabled)return;
     const a=b.dataset.ap,it=S.p.items.find(x=>String(x.id)===b.dataset.i);
@@ -386,7 +390,7 @@
     if(a==='leer-foto'&&window.LECTOR_PESOS_ACTIVO)return leerFotoGuardada(it);
     if(a==='quitar-foto'||a==='quitar-foto-sub')return quitarFoto(it,a==='quitar-foto-sub',b.dataset.path);
     if(a==='ver-foto'||a==='ver-foto-sub'){
-      RepartoFotos.abrir({parent:$('ap-raiz'),clase:'ap-viewer',fotos:fotosDe(row(it),a==='ver-foto-sub').map(path=>({path,url:S.fotos.get(path)?.url})),seleccionada:b.dataset.path,origen:b,titulo:a==='ver-foto-sub'?row(it).sustituto:it.prod,onClose:pintar});
+      RepartoFotos.abrir({parent:$('ap-raiz'),clase:'ap-viewer',fotos:fotosDe(row(it),a==='ver-foto-sub').map(path=>({path,url:S.fotos.get(path)?.url})),seleccionada:b.dataset.path,origen:b,titulo:a==='ver-foto-sub'?row(it).sustituto:it.prod,revisar:!!row(it).revisar_edicion,onClose:pintar});
     }
   }
   const soltar=()=>setTimeout(()=>{S.interacting=false;if(S.repaint)pintar();},0);

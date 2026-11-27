@@ -47,9 +47,12 @@
     const results=await Promise.all(S.ids.slice(i,i+6).map(id=>pedir(sb.rpc('prep_leer',{p_id:id}))));
     for(const r of results){if(r.error)throw r.error;if(r.data?.pedido)rows.push(r.data);}
    }
+   const archivo=await pedir(sb.from('prep_retirados').select('pedido_id,item_id,producto,preparacion').in('pedido_id',S.ids).order('retirado_en'));
+   if(archivo.error)throw archivo.error;
+   for(const r of rows)r.retirados=(archivo.data||[]).filter(x=>x.pedido_id===r.pedido.id);
    if(epoch!==S.epoch||revision!==S.revision){S.again=true;return;}
    S.rows=rows;S.error='';
-   const paths=[...new Set(rows.flatMap(r=>(r.items||[]).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)])).filter(Boolean))];
+   const paths=[...new Set(rows.flatMap(r=>[...(r.items||[]).flatMap(x=>[...fotosDe(x),...fotosDe(x,true)]),...r.retirados.flatMap(RepartoFotos.rutasRetiradas)]).filter(Boolean))];
    const missing=paths.filter(p=>!S.fotos.has(p)||S.fotos.get(p).hasta<Date.now());
    if(missing.length){
     const r=await pedir(sb.storage.from('preparacion').createSignedUrls(missing,3600));
@@ -72,9 +75,9 @@
    const enviado=x.falta?Number(x.enviado||0):it.qty,missing=faltante(it,x),weighted=!!meta.get(it.prod)?.se_pesa||m==='kg';
    const pendientePeso=weighted&&!x.separado&&!(Number(x.peso)>0);
    const real=enviado===0?'No se envía':pendientePeso?'Por pesar':Number(x.peso)>0?qty(x.peso)+' kg':qty(enviado)+' '+unit(m);
-   return `<tr class="${enviado===0?'rc-not-sent':''}"><td><b>${esc(it.prod)}</b>${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
+   return `<tr class="${x.revisar_edicion?'rc-edit-warning':''} ${enviado===0?'rc-not-sent':''}"><td><b>${esc(it.prod)}</b>${x.revisar_edicion?'<span class="rc-edit-icon" aria-label="Preparación a revisar">!</span>':''}${repTagsTexto(it)?`<span>${esc(repTagsTexto(it))}</span>`:''}${missing?`<span class="rc-missing">Pendiente: ${qty(missing)} ${esc(unit(m))}</span>`:''}${x.sustituto?`<span>Sustituido: ${qty(x.sustituye)} ${esc(unit(m))}</span>`:''}</td>
     <td>${enviado>0?pesoVista(r,x,false,real):`<strong>${esc(real)}</strong>`}${enviado>0&&weighted&&!(Number(x.peso)>0)&&!x.foto?'<span class="rc-warning">Sin peso registrado</span>':''}${enviado>0&&Number(x.peso)>0&&m!=='kg'?`<span>${qty(enviado)} ${esc(unit(m))}</span>`:''}</td><td>${enviado>0?foto(fotosDe(x),it.prod,weighted):'—'}</td></tr>
-    ${x.sustituto?`<tr class="rc-sub-row"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td>${pesoVista(r,x,true,Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+unit(x.sustituto_medida))}${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)&&!x.sustituto_foto?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(fotosDe(x,true),x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
+    ${x.sustituto?`<tr class="rc-sub-row ${x.revisar_edicion?'rc-edit-warning':''}"><td><b>${esc(x.sustituto)}</b><span>Sustituye a ${esc(it.prod)}</span></td><td>${pesoVista(r,x,true,Number(x.sustituto_peso)>0?qty(x.sustituto_peso)+' kg':qty(x.sustituto_cantidad)+' '+unit(x.sustituto_medida))}${Number(x.sustituto_peso)>0&&x.sustituto_medida!=='kg'?`<span>${qty(x.sustituto_cantidad)} ${esc(unit(x.sustituto_medida))}</span>`:''}${x.sustituto_medida==='kg'&&!(Number(x.sustituto_peso)>0)&&!x.sustituto_foto?'<span class="rc-warning">Sin peso registrado</span>':''}</td><td>${foto(fotosDe(x,true),x.sustituto,x.sustituto_medida==='kg')}</td></tr>`:''}`;
   }).join('')}</tbody></table></div>`;
  }
  function tarjeta(r){
@@ -86,7 +89,7 @@
   return `<article class="rc-order ${loaded?'rc-loaded':''}" data-pedido="${esc(p.id)}"><div class="rc-order-top"><div><h3>${esc(p.cliente)}</h3>${p.direccion?`<p>${esc(p.direccion)}</p>`:''}</div><span class="rc-status">${loaded?'✓ Cargado y despachado':p.estado==='Despachado'?'Despachado':!available?'En preparación':short?'Con faltantes':'Completo'}</span></div>
    ${p.notas?`<p class="rc-notes ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>`:''}
    <button class="rc-expand" data-rc="expandir" data-id="${esc(p.id)}" aria-expanded="${expanded}">${expanded?'Ocultar productos':'Ver productos'} ${expanded?'−':'+'}</button>
-   ${expanded?tabla(r):''}
+   ${expanded?tabla(r)+RepartoFotos.retirados(r.retirados,S.fotos,esc):''}
    ${!available&&p.estado==='Pendiente'?'<p class="rc-notes">Cantidades pedidas. Si cambia la preparación, habrá que revisar el remito.</p>':''}
    ${p.estado==='Despachado'?control.reposicion_id?'<p class="rc-missing">Pedido violeta de reposición creado.</p>':'':`<div class="rc-actions">
     ${state.who!=='Mateo'?`<button data-rc="remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" ${remitoOff?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
@@ -143,6 +146,7 @@
   $('rc-raiz').appendChild(v);v.querySelector('[data-review="si"]:not(:disabled),[data-review="no"]').focus();
  }
  function clic(e){
+  if(RepartoFotos.verRetirado(e,S.rows.flatMap(r=>r.retirados||[]),S.fotos,'rc-viewer',pintar))return;
   if(e.target===$('rc-raiz')){if(S.backdropDown)cerrar();S.backdropDown=false;return;}
   const b=e.target.closest('[data-rc]');if(!b||b.disabled)return;const a=b.dataset.rc,id=b.dataset.id;
   if(a==='cerrar')return cerrar();if(a==='actualizar')return cargar();
@@ -151,7 +155,7 @@
   if(a==='editar'){const r=S.rows.find(x=>x.pedido.id===id);if(r&&cerrar())ArmadoPedido.abrir(mapPedido_(r.pedido));return;}
   if(a==='foto'){
    const fotos=[...b.closest('td').querySelectorAll('[data-rc="foto"]')].map(el=>({path:el.dataset.path,url:S.fotos.get(el.dataset.path)?.url}));
-   RepartoFotos.abrir({parent:$('rc-raiz'),clase:'rc-viewer',fotos,seleccionada:b.dataset.path,origen:b,titulo:b.closest('tr').querySelector('td b')?.textContent||'Fotos del producto',onClose:pintar});return;
+   RepartoFotos.abrir({parent:$('rc-raiz'),clase:'rc-viewer',fotos,seleccionada:b.dataset.path,origen:b,titulo:b.closest('tr').querySelector('td b')?.textContent||'Fotos del producto',revisar:b.closest('tr').classList.contains('rc-edit-warning'),onClose:pintar});return;
   }
   if(['cargar','remito','control'].includes(a))accion(id,a);
  }

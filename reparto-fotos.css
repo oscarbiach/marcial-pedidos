@@ -7,3 +7,5 @@
 .rf-viewer button.rf-next{right:12px;left:auto}
 .rf-viewer .rf-count{position:absolute;top:24px;left:50%;transform:translateX(-50%);color:white;font-size:16px;font-weight:750;pointer-events:none}
 .rf-viewer [hidden]{display:none!important}
+.rf-edit-warning{position:absolute;z-index:3;bottom:64px;left:50%;transform:translateX(-50%);width:min(580px,calc(100% - 100px));margin:0;padding:12px 16px;border:1px solid #efa6a6;border-radius:12px;background:#fff0f0;color:#8c2020;font-size:15px;line-height:1.4;text-align:center;box-shadow:0 4px 18px #0003;pointer-events:none}
+.rf-retirados{margin:12px 0;padding:12px;border:1px solid #bc4545;border-radius:10px}.rf-retirados h4{margin:0 0 8px}.rf-retirados article{padding:6px 0}.rf-retirados button{padding:2px;margin:4px;background:transparent;border:0}.rf-retirados img{width:58px;height:58px;object-fit:cover;border-radius:6px}

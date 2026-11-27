@@ -205,6 +205,10 @@ const assert = require('node:assert/strict');
   assert.equal((await db.query("select estado from pedidos where id='jm-despacho'")).rows[0].estado,'Despachado');
   assert.equal((await db.query("select cargado_por from prep_pedidos where pedido_id='jm-despacho'")).rows[0].cargado_por,'Juan Marcos');
   assert.equal((await db.query('select cantidad from pedido_items where pedido_id=$1',[jm.reposiciones[0]])).rows[0].cantidad,'2');
+  await db.exec("create table clientes(nombre text, direccion text, nombre_key text generated always as (lower(trim(nombre))) stored unique)");
+  for(const file of ['20261127_reparto_editar_preparacion','20261125_pedidos_turno'])
+    await db.exec(fs.readFileSync('supabase/migrations/'+file+'.sql','utf8'));
+  await db.exec(fs.readFileSync('tests/reparto-edicion.sql','utf8'));
   await db.close();
   console.log('OK: cola y Realtime; peso/foto opcionales; control; despacho atómico; faltantes; sustitutos; reintentos; cambios concurrentes y acceso.');
 })().catch(e => {console.error(e); process.exitCode=1;});
