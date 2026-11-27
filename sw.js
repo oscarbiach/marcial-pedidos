@@ -8,7 +8,7 @@
 //
 // Al cambiar el HTML hay que subirle el número a CACHE: eso borra el
 // cache viejo y obliga a bajar todo de nuevo.
-const CACHE = 'dm-pedidos-v167';
+const CACHE = 'dm-pedidos-v168';
 
 const SHELL = [
   './',
@@ -54,7 +54,7 @@ const SHELL = [
   './preparacion.js?v=117',
   './preparacion.css',
   './reparto-vivo.js?v=166',
-  './turnos.js?v=167',
+  './turnos.js?v=156',
   './turnos.css?v=157',
   './reparto-vivo.css?v=166',
   './reparto-red.js?v=117',
@@ -75,9 +75,7 @@ const SHELL = [
   './reparto-control.css?v=165',
   './cargar-pedido.css?v=161',
   './cargar-pedido.js?v=161',
-  './pedidos-fijos.js?v=167',
-  './tablero-pedidos.js?v=167',
-  './tablero-pedidos.css?v=167'
+  './pedidos-fijos.js'
 ];
 
 self.addEventListener('install', e => {

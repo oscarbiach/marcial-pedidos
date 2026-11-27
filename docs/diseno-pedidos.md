@@ -13,7 +13,3 @@ Probar las propuestas en un prototipo independiente con datos ficticios. Antes d
 ## Para cargar y Telegram
 
 La bandeja «Para cargar» está desactivada por decisión de Marcial. El bot de Telegram nunca se implementó. Se conserva pedidos-a-cargar.js para un posible uso futuro. La app no carga el módulo ni inicia sus consultas periódicas. Para reactivarlo, primero confirmar que exista un origen operativo de pedidos y probar el circuito de recepción, carga y descarte con datos ficticios.
-
-## Pedidos
-
-En el tablero, dejar Sin fecha de entrega arriba y los pedidos para más adelante en una franja plegable al pie. Los fijos semanales se abren desde un botón compacto. Mantener el arrastre entre días en PC y entre turnos en la vista Por fecha. Usar los grupos para indicar fecha, turno y estado sin repetirlos en cada tarjeta. Al filtrar retiros, coordinar los reflejos verdes lentos del fondo con la aparición escalonada de las tarjetas.
