@@ -119,3 +119,9 @@ body.gestion-admin #adminBtn { display: inline-flex; }
 .adm-etq[aria-pressed="true"]::before { content: "\2713\00a0"; }
 .adm-etq:disabled { opacity: .55; cursor: progress; }
 .adm-etq:focus-visible { outline: 2px solid var(--m-azul-500); outline-offset: 2px; }
+.bc-scroll{overflow:auto;max-height:30rem}
+.bc-table{width:100%;border-collapse:collapse;font-size:13px}
+.bc-table th,.bc-table td{text-align:left;padding:12px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.bc-table th{background:#f4f7fa;font-weight:600}
+.bc-table small{display:block;color:#62748a;margin-top:4px}
+.bc-percent{display:inline-block;border-radius:8px;padding:5px 8px;background:#e8f4ee;color:#176644;white-space:nowrap}

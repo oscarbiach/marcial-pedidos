@@ -102,6 +102,7 @@
   const v2Activo = () => datosOk() && v2().instalado && !!v2().yo;
   const sinAsignar = () => datosOk() && v2().instalado && !v2().yo;
   const esGestor = () => v2Activo() && !!v2().yo.gestor;         // administrador o ve_todo: asigna vendedor y etiquetas
+  const puedeEtiquetar = () => esGestor() || (v2Activo() && !!v2().yo.puede_etiquetar);
   const veTodo = () => v2Activo() && !!v2().yo.ve_todo;          // ve la columna y el filtro de vendedor
   const usuarioMotor = () => (v2Activo() ? { nombre: v2().yo.nombre, ve_todo: !!v2().yo.ve_todo, ve_sin_vendedor: !!v2().yo.ve_sin_vendedor } : sinAsignar() ? { nombre: '', ve_todo: false } : undefined);   // sin clientes asignados no se ve ninguno (ni en el buscador)
   function metaMapa() {
@@ -1181,13 +1182,13 @@
   function metaFicha(c) {
     if (!v2Activo()) return '';
     const k = at(c.clave), ocup = E.guardandoMeta.has(c.clave) ? ' disabled aria-busy="true"' : '', act = new Set((c.etiquetas || []).map(e => e.id)), todas = v2().etiquetas;
-    if (!esGestor()) return (c.etiquetas || []).length ? `<section class="sc-f-sec sc-f-sec--meta"><h4>Etiquetas</h4>${chipsEt(c)}</section>` : '';
+    if (!puedeEtiquetar()) return (c.etiquetas || []).length ? `<section class="sc-f-sec sc-f-sec--meta"><h4>Etiquetas</h4>${chipsEt(c)}</section>` : '';
     const sel = `<label class="sc-campo sc-campo--h"><span>Vendedor</span><select data-sc="vendedor-sel" data-k="${k}"${ocup}><option value="">Atención general (sin vendedor)</option>${v2().usuarios.map(u => `<option value="${at(u.nombre)}"${S.norm(u.nombre) === S.norm(c.vendedor || '') ? ' selected' : ''}>${esc(u.nombre)}</option>`).join('')}</select></label>`;
     const chips = todas.length ? `<div class="sc-chipsel-l" role="group" aria-label="Etiquetas del cliente">${todas.map(e => `<button type="button" class="sc-etb" data-sc="et-toggle" data-k="${k}" data-e="${at(e.id)}" aria-pressed="${act.has(e.id)}"${ocup}>${ico(act.has(e.id) ? 'check' : 'plus', 'ico-sm')}${esc(e.nombre)}${e.dia_semana ? `<small>${esc(ABREV[e.dia_semana])}</small>` : ''}</button>`).join('')}</div>` : '<p class="sc-vacio">Todavía no hay etiquetas. Se crean desde la vista Clientes, en «Etiquetas».</p>';
-    return `<section class="sc-f-sec sc-f-sec--meta" aria-label="Vendedor y etiquetas">${sel}<h4 class="sc-h-et">Etiquetas</h4>${chips}</section>`;
+    return `<section class="sc-f-sec sc-f-sec--meta" aria-label="Vendedor y etiquetas">${esGestor()?sel:''}<h4 class="sc-h-et">Etiquetas</h4>${chips}</section>`;
   }
   async function cambiarEtiqueta(k, eid) {
-    const c = clienteDe(k); if (!c || !esGestor() || E.guardandoMeta.has(k)) return;
+    const c = clienteDe(k); if (!c || !puedeEtiquetar() || E.guardandoMeta.has(k)) return;
     const act = new Set((c.etiquetas || []).map(e => e.id)); if (act.has(eid)) act.delete(eid); else act.add(eid);
     const ids = [...act], objs = ids.map(id => v2().etiquetas.find(e => e.id === id)).filter(Boolean), previo = E.sobre.meta.get(k);
     E.guardandoMeta.add(k); E.sobre.meta.set(k, Object.assign({}, previo || {}, { etiquetas: objs })); E.foco = { k, acc: 'et-toggle' }; E.ver++; E.huella = ''; render();

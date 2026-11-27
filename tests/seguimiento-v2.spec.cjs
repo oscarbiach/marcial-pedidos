@@ -15,7 +15,7 @@ const HOY='2026-11-24';   // martes
 const sumar=(f,n)=>{const d=new Date(f+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 function pedidoDb(id,cliente,fecha,extra={}){return {id,cliente,fecha,fecha_pedido:null,quien:'Oscar',direccion:'San Martín 123',notas:'',estado:'Despachado',fecha_entrega:null,fecha_despacho:fecha,retiro:false,eliminado_en:null,eliminado_por:null,remito_hecho:true,creado_en:fecha+'T12:00:00+00:00',actualizado_en:'2026-11-20T10:00:00.000001+00:00',pedido_items:[{id:1,producto:'Mozzarella',cantidad:2,orden:0},{id:2,producto:'Aceite',cantidad:1,orden:1}],...extra};}
 const semanal=(cliente,ultimo,n)=>Array.from({length:n},(_,i)=>pedidoDb(`${norm(cliente).replace(/\W/g,'')}${i}`,cliente,sumar(ultimo,-7*i)));
-const YO={'Juan Marcos':{nombre:'Juan Marcos',ve_todo:false,ve_sin_vendedor:true,gestor:false},Joaquin:{nombre:'Joaquin',ve_todo:true,gestor:true},Oscar:{nombre:'Oscar',ve_todo:false,gestor:true},Thiago:{nombre:'Thiago',ve_todo:false,gestor:false}};
+const YO={'Juan Marcos':{nombre:'Juan Marcos',ve_todo:false,ve_sin_vendedor:true,gestor:false,puede_etiquetar:true},Joaquin:{nombre:'Joaquin',ve_todo:true,gestor:true},Oscar:{nombre:'Oscar',ve_todo:false,gestor:true},Thiago:{nombre:'Thiago',ve_todo:false,gestor:false}};
 function setup(opts={}){
  const clientes=[['c1','Almacén Norte','Thiago'],['c2','Kiosco Sur','Thiago'],['c3','Sauce Mercado','Oscar'],['c4','Santo Tomé Kiosco','Juan Marcos'],['c5','Cliente sin dueño',null],['c6','Única Compra Vieja','Thiago'],['c7','Dejó Hace Rato','Juan Marcos']]
   .map(([id,nombre,vendedor])=>({id,nombre,direccion:'Calle '+id+' 123, Santa Fe',eliminado_en:null,observaciones:id==='c2'?'Cierra a las 13':null,vendedor}));
@@ -80,7 +80,7 @@ function setup(opts={}){
   if(q.name==='seg_etiqueta_borrar'){if(!y||!y.gestor)return err('Solo quien administra','42501');const e=db.etiquetas.find(x=>x.id===q.args.p_id);if(e)e.activa=false;return {data:{ok:true}};}
   if(q.name==='seg_cliente_etiquetas'){
    const a=q.args;db.llamadas.push({f:'cliente_etiquetas',cliente:a.p_cliente_id,etiquetas:a.p_etiquetas});
-   if(!y||!y.gestor)return err('Solo quien administra','42501');
+   if(!y||!(y.gestor||(y.puede_etiquetar&&puede(q,a.p_cliente_id))))return err('Solo quien administra','42501');
    db.clienteEt.set(a.p_cliente_id,a.p_etiquetas.filter(id=>db.etiquetas.some(e=>e.id===id)));return {data:{ok:true,etiquetas:db.clienteEt.get(a.p_cliente_id)}};
   }
   if(q.name==='seg_cliente_vendedor'){
@@ -200,6 +200,22 @@ test('Juan Marcos ve propios y generales; filtra Sin seguimiento sin mostrar cli
  await expect(page.locator('#sc-raiz .sv-table tbody')).not.toContainText('Cliente sin dueño');
  await page.locator('#sc-raiz select[data-cf="seguimiento"]').selectOption('');
  await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(3);
+ sinErrores(page);
+});
+
+test('Juan Marcos agrega y quita etiquetas sin recibir gestión de vendedores ni clientes ajenos',async({browser})=>{
+ const s=setup();s.db.etiquetas.push({id:'e-sauce',nombre:'Sauce',dia_semana:null,siempre:false,activa:true});
+ const page=await entrar(browser,s,'Juan Marcos');await vista(page,'clientes');
+ for(const k of ['cliente sin dueno','santo tome kiosco']){
+  await page.locator(`#sc-raiz [data-sc="fila"][data-k="${k}"]`).click();
+  await expect(page.locator('#sc-ficha [data-sc="vendedor-sel"]')).toHaveCount(0);
+  const chip=page.locator('#sc-ficha [data-sc="et-toggle"][data-e="e-sauce"]');
+  await chip.click();await expect(chip).toHaveAttribute('aria-pressed','true');
+  await chip.click();await expect(chip).toHaveAttribute('aria-pressed','false');
+  await page.keyboard.press('Escape');
+ }
+ await page.locator('#sc-q').fill('sauce mercado');
+ await expect(page.locator('#sc-raiz .sc-bus-l')).toContainText('Ningún cliente coincide');
  sinErrores(page);
 });
 
