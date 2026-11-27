@@ -267,13 +267,16 @@
     if(S.error)return 'Reintentar conexión';
     if(!S.ready)return 'Consultando reparto…';
     const e=etapa(id);
-    return icono(e==='pendiente'?'truck':'circle-check')+(e==='pendiente'?'Enviar a reparto':'En reparto · '+etapas[e]);
+    return icono(e==='pendiente'?'truck':'circle-check')+(e==='pendiente'?'ENVIAR A REPARTO':'EN REPARTO');
   }
   function actualizarAccionesPedidos(){
     if(!envia())return;
     $('pedidosList')?.querySelectorAll('[data-envio-pedido]').forEach(b=>{
       const id=b.dataset.envioPedido,html=textoEnvio(id);
       if(b._textoEnvio!==html){b.innerHTML=html;b._textoEnvio=html;}
+      const enReparto=etapa(id)!=='pendiente';
+      b.closest('[data-pid]')?.classList.toggle('cal-enviado',enReparto);
+      b.setAttribute('aria-label',enReparto?'En reparto · '+etapas[etapa(id)]:'Enviar a reparto');
       b.disabled=S.busy.has(id)||(!S.ready&&!S.error);
     });
   }
@@ -333,7 +336,7 @@
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
-    if(b.dataset.rv==='quitar'&&envia()){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p&&confirm('¿Sacar del reparto a '+p.cliente+'? El pedido seguirá en Pedidos.'))mover(p.id,'pendiente',true);}
+    if(b.dataset.rv==='quitar'&&envia()){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p)mover(p.id,'pendiente',true);}
     if(b.dataset.rv==='editar'&&envia()&&etapa(b.dataset.id)!=='pendiente'){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p)openPedidoEdit(p.id,p);}
     if (b.dataset.rv === 'remito' && envia()) RepartoControl.remito(b.dataset.id);
     if (b.dataset.rv === 'camioneta') RepartoControl.camioneta(S.pedidos.filter(p=>visible(p)&&etapa(p.id)==='listo').map(p=>p.id));
@@ -459,5 +462,5 @@
   window.addEventListener('pageshow',()=>{cancel();if(S.canal)cargar();});
   document.addEventListener('keydown', e => { if (e.key === 'Escape') cancel(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); else if (S.canal) cargar(); });
-  window.RepartoVivo = { envia, botonPedido, accionPedido, montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
+  window.RepartoVivo = { etapa, envia, botonPedido, accionPedido, montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
 })();

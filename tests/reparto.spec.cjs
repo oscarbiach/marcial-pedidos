@@ -164,7 +164,7 @@ test('turnos siempre desplegados y preparación muestra incidencias en vivo',asy
  await expect(o.locator('#tab-pedidos [data-turno="manana"] .order-card')).toBeVisible();
  await expect(o.locator('#tab-pedidos [data-turno="tarde"] .order-card')).toBeVisible();
  await expect(o.locator('details.turno-plegable')).toHaveCount(0);
- for(const g of await o.locator('#tab-pedidos .turno-grupo, #tab-pedidos .retiros-grupo').all()){for(const edge of await g.locator('.oc-edge,.blk-edge').all()){expect(await edge.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(await g.evaluate(e=>getComputedStyle(e).borderLeftColor));}}
+ for(const g of await o.locator('#tab-pedidos .cal-turno').all()){for(const edge of await g.locator('.oc-edge,.blk-edge').all()){expect(await edge.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(await g.evaluate(e=>getComputedStyle(e).borderLeftColor));}}
  await o.screenshot({path:'test-results/turnos-colores.png'});
  expect(s.errors).toEqual([]);await s.close();
 });
@@ -186,7 +186,7 @@ test('turnos manuales: grupos, cambio en vivo, error y carga independiente por t
  s.failItem(true);await o.locator('[data-turno-id="p2"]').selectOption('tarde');
  await expect(o.locator('[data-turno-id="p2"]')).toHaveValue('manana');s.failItem(false);
  await o.evaluate(()=>goTab('pedidos'));
- await expect(o.locator('#tab-pedidos .turno-grupo[data-turno="manana"]')).toContainText('La Esquina');
+ await expect(o.locator('#tab-pedidos .cal-dia.es-hoy .cal-turno[data-turno="manana"]')).toContainText('La Esquina');
  await o.evaluate(()=>openPedidoDetail('p2'));await o.locator('#detailBody [data-turno-id="p2"]').selectOption('');
  await expect(o.locator('#detailBody [data-turno-id="p2"]')).toBeEnabled();await s.emit('pedidos');
  await m.locator('[data-rv-turno=""]').click();await expect(m.locator('.rv-card')).toHaveCount(1);
@@ -202,7 +202,7 @@ test('turno elegido se guarda y conserva al editar solo productos o mover fecha'
  await p.evaluate(()=>sbUpdatePedido({id:'p1',cliente:'Cliente',fechaEntrega:'2026-11-17',items:[]}));
  expect(await p.evaluate(()=>Object.hasOwn(turnoWrites[1].p,'turno'))).toBe(false);
  await p.evaluate(row=>{state.pedidos=[mapPedido_(row)];openPedidoEdit('p1');},s.db.pedidos[0]);await p.locator('#p_turno').selectOption('manana');
- await p.getByRole('button',{name:'Guardar Cambios',exact:true}).click();
+ await p.getByRole('button',{name:'Guardar cambios',exact:true}).click();
  expect(await p.evaluate(()=>turnoWrites[2].p.turno)).toBe('manana');
  expect(s.errors).toEqual([]);await s.close();
 });
@@ -218,7 +218,7 @@ test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',as
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
  await irAPedidos(oscar,s);
  const envio=oscar.locator('[data-envio-pedido="p1"]').first();
- await envio.click();await expect(envio).toContainText('En reparto · Preparando');
+ await envio.click();await expect(envio).toHaveText('EN REPARTO');
  await expect(mateo.locator('.rv-preparando .rv-card')).toHaveCount(1);
  await envio.click();await expect(oscar.locator('#tab-reparto')).toHaveClass(/active/);
  await mateo.locator('.rv-card[data-id="p1"]').press('ArrowLeft');
@@ -309,10 +309,9 @@ test('oficina saca con la X de cada columna y puede reenviar la misma preparaci�
   const s=await setup(browser);enCola(s,stage);s.db.prep_items.push({item_id:1,peso:2.5,foto:'prueba.jpg'});
   const p=await s.open(who),quitar=p.locator('.rv-quitar[data-id="p1"]');
   await expect(p.locator('[data-stage]')).toHaveCount(3);await expect(p.locator('[data-rv-turno]')).toHaveCount(0);
-  p.once('dialog',d=>d.dismiss());await quitar.click();await expect(quitar).toBeVisible();expect(s.moves).toHaveLength(0);
-  p.once('dialog',d=>d.accept());await quitar.click();await expect(p.locator('.rv-card[data-id="p1"]')).toHaveCount(0);
-  await irAPedidos(p,s);const envio=p.locator('[data-envio-pedido="p1"]').first();await expect(envio).toHaveText('Enviar a reparto');
-  await envio.click();await expect(envio).toContainText('Preparando');expect(s.db.prep_items[0]).toMatchObject({peso:2.5,foto:'prueba.jpg'});
+  await quitar.click();await expect(p.locator('.rv-card[data-id="p1"]')).toHaveCount(0);
+  await irAPedidos(p,s);const envio=p.locator('[data-envio-pedido="p1"]').first();await expect(envio).toHaveText('ENVIAR A REPARTO');
+  await envio.click();await expect(envio).toHaveAttribute('aria-label','En reparto · Preparando');expect(s.db.prep_items[0]).toMatchObject({peso:2.5,foto:'prueba.jpg'});
   expect(s.db.pedidos[0].estado).toBe('Pendiente');expect(s.moves.map(m=>m.p_etapa)).toEqual(['pendiente','preparando']);
   expect(s.errors).toEqual([]);await s.close();
  }
@@ -1429,4 +1428,66 @@ test('Llegadas de proveedores: semana laborable para Oscar, Joaquín y Thiago',a
    }
  }
  expect(s.errors).toEqual([]);await s.close();
+});
+
+test('editar pedidos usa los controles de carga y conserva los renglones originales en PC y celular',async({browser})=>{
+ const s=await setup(browser);
+ try {
+  for(const width of [1440,390]){
+   const p=await s.open('Oscar',{width,height:900});
+   await p.evaluate(rows=>{
+    state.pedidos=rows.map(mapPedido_);goTab('pedidos');renderPedidos();
+    document.getElementById('n_cliente').value='Borrador de carga';
+    const rpc=sb.rpc;sb.rpc=(name,args)=>{
+     if(name==='pedido_guardar_turno'){window.cambioDePrueba=args;return Promise.resolve({data:{ok:true}});}
+     return rpc(name,args);
+    };
+   },s.db.pedidos.filter(x=>!x.eliminado_en));
+   const modal=p.locator('#pedidoModal');
+   await p.locator('#pedidosList [data-pid=p1]').first().click();
+   await p.getByRole('button',{name:'Editar pedido',exact:true}).click();
+   await expect(modal.locator('#p_extras')).toBeHidden();
+   if(width===1440){
+    await modal.locator('#p_fechaPC').click();await expect(modal.locator('#p_almanaque')).toBeVisible();
+    await modal.locator('#p_quitarFecha').click();
+   }
+   await modal.getByRole('button',{name:'Mañana',exact:true}).click();
+   await modal.locator('#p_turno').selectOption('tarde');
+   await expect(modal.locator('.form-card')).toHaveCSS('background-color','rgb(214, 223, 253)');
+   await modal.locator('#p_retiro').check();await expect(modal.locator('#p_turno')).toBeHidden();
+   await expect(modal.locator('.form-card')).toHaveCSS('background-color','rgb(212, 238, 227)');
+   await modal.locator('#p_extrasBtn').click();await modal.locator('#p_notas').fill('Cambio de prueba');
+   await modal.getByRole('button',{name:'Guardar cambios'}).click();
+   await expect.poll(()=>p.evaluate(()=>window.cambioDePrueba?.p.notas)).toBe('Cambio de prueba');
+   expect(await p.evaluate(()=>window.cambioDePrueba.its.map(it=>it.id))).toEqual(s.db.pedidos[0].pedido_items.map(it=>it.id));
+   expect(await p.locator('#n_cliente').inputValue()).toBe('Borrador de carga');
+  }
+  expect(s.errors).toEqual([]);
+ } finally {await s.close();}
+});
+
+test('calendario: sin fecha se arrastra, el atraso se reprograma y el filtro activa el fondo',async({browser})=>{
+ const s=await setup(browser);
+ try{
+  s.db.pedidos[0].fecha_entrega=null;s.db.pedidos[1].fecha_entrega='2026-11-14';
+  const p=await s.open('Oscar');await irAPedidos(p,s);
+  const cal=p.locator('.calendario');await expect(cal.locator('.cal-dia')).toHaveCount(7);
+  const libre=cal.locator('.cal-pendiente[data-pid=p1]');
+  await expect(libre).toContainText('Mozzarella');
+  await libre.dragTo(cal.locator('.cal-dia[data-cal-drop="2026-11-17"] .cal-dia-cab'));
+  await expect.poll(()=>s.db.pedidos[0].fecha_entrega).toBe('2026-11-17');
+  const dia=cal.locator('.cal-dia[data-cal-drop="2026-11-17"]');
+  const origen=await dia.locator('[data-pid=p1] .oc-main').boundingBox();
+  await p.mouse.move(origen.x+5,origen.y+5);await p.mouse.down();await p.mouse.move(origen.x+18,origen.y+5,{steps:4});
+  const destino=dia.locator('.cal-destino[data-turno=tarde]');await expect(destino).toBeVisible();
+  const rect=await destino.boundingBox();await p.mouse.move(rect.x+8,rect.y+8,{steps:5});await p.mouse.up();
+  await expect.poll(()=>s.db.pedidos[0].turno).toBe('tarde');
+  await cal.locator('[data-pid=p2] .cal-atrasado').click();
+  await p.locator('#calResolver [value=mover]').click();
+  await expect.poll(()=>s.db.pedidos[1].fecha_entrega).toBe('2026-11-16');
+  await p.locator('[data-tipo=reparto]').click();await expect(p.locator('#tab-pedidos')).toHaveClass(/cal-reparto/);
+  await cal.locator('[data-paso="1"]').click();await cal.locator('#calHoy').click();
+  await expect(cal.locator('.cal-dia.es-hoy')).toHaveAttribute('data-cal-drop','2026-11-16');
+  expect(s.errors).toEqual([]);
+ }finally{await s.close();}
 });

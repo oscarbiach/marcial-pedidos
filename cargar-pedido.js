@@ -53,15 +53,19 @@ function elegirCuero(select){
   animarCorte(row);
   if(pieza)row.querySelector('.fetear-input').focus();
 }
-const fechaInput=document.getElementById('n_fecha'), calendario=document.getElementById('almanaque'), fechaBoton=document.getElementById('fechaPC');
-let mesVisible;
 function claveFecha(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+function diaCorto(v){const d=new Date(v+'T12:00:00');return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)}
+function fechaEn(n){const d=new Date();d.setDate(d.getDate()+n);return claveFecha(d)}
+function iniciarFechaPedido(raiz,campoFecha,prefijo){
+ const porId=id=>document.getElementById(prefijo+id);
+const fechaInput=document.getElementById(campoFecha), calendario=porId('almanaque'), fechaBoton=porId('fechaPC');
+let mesVisible;
 function pintarFecha(animar){
-  const valor=fechaInput.value, texto=document.getElementById('fechaTexto');
+  const valor=fechaInput.value, texto=porId('fechaTexto');
   texto.replaceChildren();
   const etiqueta=valor?diaCorto(valor):'Fecha';
-  const cel=document.getElementById('fechaCel');if(cel){cel.textContent=etiqueta;cel.classList.toggle('vacia',!valor)}
-  document.querySelectorAll('.fecha-rapida [data-rap]').forEach(b=>b.setAttribute('aria-pressed',String(!!valor&&valor===fechaEn(+b.dataset.rap))));
+  const cel=porId('fechaCel');if(cel){cel.textContent=etiqueta;cel.classList.toggle('vacia',!valor)}
+  raiz.querySelectorAll('.fecha-rapida [data-rap]').forEach(b=>b.setAttribute('aria-pressed',String(!!valor&&valor===fechaEn(+b.dataset.rap))));
   fechaBoton.setAttribute('aria-label','Elegir fecha'+(valor?' · '+etiqueta:''));
   for(const [i,letra] of [...etiqueta].entries()){
     const span=document.createElement('span');span.textContent=letra===' '?' ':letra;texto.append(span);
@@ -69,9 +73,9 @@ function pintarFecha(animar){
   }
 }
 function dibujarMes(){
-  const y=mesVisible.getFullYear(), m=mesVisible.getMonth(), grid=document.getElementById('dias');
+  const y=mesVisible.getFullYear(), m=mesVisible.getMonth(), grid=porId('dias');
   grid.innerHTML=['Lu','Ma','Mi','Ju','Vi','Sá','Do'].map(x=>'<small>'+x+'</small>').join('');
-  document.getElementById('mesNombre').textContent=mesVisible.toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  porId('mesNombre').textContent=mesVisible.toLocaleDateString('es-AR',{month:'long',year:'numeric'});
   const inicio=(new Date(y,m,1).getDay()+6)%7;
   for(let i=0;i<inicio;i++)grid.append(document.createElement('span'));
   for(let n=1;n<=new Date(y,m+1,0).getDate();n++){
@@ -91,29 +95,32 @@ fechaBoton.onclick=()=>{
  calendario.style.top='';calendario.style.bottom='';
  if(calendario.getBoundingClientRect().top<4){calendario.style.top='calc(100% + 5px)';calendario.style.bottom='auto'}
  if(movimientoPC())calendario.animate([{opacity:0,transform:'translateY(6px) scale(.98)'},{opacity:1,transform:'none'}],{duration:200,easing:'ease-out'});
- (calendario.querySelector('[aria-pressed=true]')||calendario.querySelector('[aria-current=date]')||document.getElementById('mesSig')).focus({preventScroll:true});
+ (calendario.querySelector('[aria-pressed=true]')||calendario.querySelector('[aria-current=date]')||porId('mesSig')).focus({preventScroll:true});
 };
-for(const [id,salto] of [['mesAnt',-1],['mesSig',1]])document.getElementById(id).onclick=()=>{mesVisible.setMonth(mesVisible.getMonth()+salto);dibujarMes()};
-document.getElementById('dias').onclick=e=>{if(e.target.dataset.fecha)asignarFecha(e.target.dataset.fecha)};
-document.getElementById('quitarFecha').onclick=()=>asignarFecha('');
-document.addEventListener('pointerdown',e=>{if(!e.target.closest('.fecha-wrap'))cerrarFecha()});
-document.addEventListener('focusin',e=>{if(!e.target.closest('.fecha-wrap'))cerrarFecha()});
+for(const [id,salto] of [['mesAnt',-1],['mesSig',1]])porId(id).onclick=()=>{mesVisible.setMonth(mesVisible.getMonth()+salto);dibujarMes()};
+porId('dias').onclick=e=>{if(e.target.dataset.fecha)asignarFecha(e.target.dataset.fecha)};
+porId('quitarFecha').onclick=()=>asignarFecha('');
+document.addEventListener('pointerdown',e=>{if(!fechaBoton.closest('.fecha-wrap').contains(e.target))cerrarFecha()});
+document.addEventListener('focusin',e=>{if(!fechaBoton.closest('.fecha-wrap').contains(e.target))cerrarFecha()});
 calendario.onkeydown=e=>{if(e.key==='Escape'){cerrarFecha();fechaBoton.focus()}};
 /* [Opus] Fecha con día de la semana y atajos Hoy / Mañana */
-function diaCorto(v){const d=new Date(v+'T12:00:00');return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)}
-function fechaEn(n){const d=new Date();d.setDate(d.getDate()+n);return claveFecha(d)}
-document.querySelector('.fecha-rapida').addEventListener('click',e=>{
+raiz.querySelector('.fecha-rapida').addEventListener('click',e=>{
   const b=e.target.closest('[data-rap]');if(!b)return;
   fechaInput.value=fechaEn(+b.dataset.rap);fechaInput.dispatchEvent(new Event('change',{bubbles:true}));cerrarFecha();
 });
 
+ return {pintar:pintarFecha,cerrar:cerrarFecha};
+}
+const fechaCarga=iniciarFechaPedido(document.getElementById('tab-cargar'),'n_fecha','');
+const fechaEditar=iniciarFechaPedido(document.getElementById('pedidoModal'),'p_fecha','p_');
+function pintarFecha(animar){fechaCarga.pintar(animar)}
 /* [Opus] «Suele pedir»: se suma desde el panel de la derecha */
-function filasCargar(){return [...document.querySelectorAll('#cargarItemRows .item-row')]}
-function filaDeProducto(prod){const k=String(prod).trim().toLowerCase();return filasCargar().find(r=>r.querySelector('.ac-input').value.trim().toLowerCase()===k)}
-function sueleHtml(habs){
-  const faltan=habs.filter(h=>!filaDeProducto(h.prod)).length;
+function filasPedido(tipo){return [...document.getElementById(ROW_CONTAINERS[tipo]).querySelectorAll('.item-row')]}
+function filaDeProducto(prod,tipo){const k=String(prod).trim().toLowerCase();return filasPedido(tipo).find(r=>r.querySelector('.ac-input').value.trim().toLowerCase()===k)}
+function sueleHtml(habs,tipo){
+  const faltan=habs.filter(h=>!filaDeProducto(h.prod,tipo)).length;
   return '<div class="hc-sub hc-sub-suele"><span>Suele pedir</span>'+(faltan>1?'<button type="button" class="hc-todo" data-todo="1">Agregar todo</button>':'')+'</div><div class="hc-habs">'+
-    habs.map((h,i)=>filaDeProducto(h.prod)
+    habs.map((h,i)=>filaDeProducto(h.prod,tipo)
       ?'<div class="hc-hab ya" data-i="'+i+'"><span class="hh-mas">'+mIco('check')+'</span><span class="hh-q">'+h.qty+'</span><span class="hh-n">'+esc(h.prod)+'</span><span class="hh-v">'+h.veces+'×</span></div>'
       :'<button type="button" class="hc-hab" data-i="'+i+'" title="Sumar al pedido"><span class="hh-mas">'+mIco('plus')+'</span><span class="hh-q">'+h.qty+'</span><span class="hh-n">'+esc(h.prod)+'</span><span class="hh-v">'+h.veces+'×</span></button>').join('')+'</div>';
 }
@@ -126,25 +133,27 @@ function llenarFila(row,it){
   row.dataset.unidades=it.unidades&&pi&&mi!==pi.u?mi:'';
   updateBoxHint(row);actualizarResumenFila(row);
 }
-function sumarHabitual(h){
-  if(!h || filaDeProducto(h.prod))return null;
+function sumarHabitual(h,tipo){
+  if(!h || filaDeProducto(h.prod,tipo))return null;
   const it={prod:h.item.prod,qty:h.item.qty,fetear:h.item.fetear,sinCuero:h.item.sinCuero,unidades:h.item.unidades};
   // Si hay un renglón vacío (el que deja «Agregar producto»), se usa ese.
-  const vacia=filasCargar().find(r=>!r.querySelector('.ac-input').value.trim());
+  const vacia=filasPedido(tipo).find(r=>!r.querySelector('.ac-input').value.trim());
   let row;
   if(vacia){row=vacia;llenarFila(row,it)}
-  else if(filasCargar().length>=20){toast('Máximo 20 productos por pedido');return null}
-  else{addItemRowWith('cargar',it);row=filasCargar().pop()}
+  else if(filasPedido(tipo).length>=20){toast('Máximo 20 productos por pedido');return null}
+  else{addItemRowWith(tipo,it);row=filasPedido(tipo).pop()}
   if(movimientoPC()&&row)row.animate([{backgroundColor:'#d4ece8'},{backgroundColor:'transparent'}],{duration:900,easing:'ease-out'});
   return it;
 }
-document.getElementById('histCli').addEventListener('click',e=>{
-  const box=document.getElementById('histCli'), habs=box._habs||[];
+for(const [tipo,id] of [['cargar','histCli'],['ped','histEdit']]){
+ const box=document.getElementById(id);
+ box.addEventListener('click',e=>{
+  const habs=box._habs||[];
   const todo=e.target.closest('[data-todo]'), uno=e.target.closest('button.hc-hab');
   if(!todo&&!uno)return;
-  const sumados=(todo?habs:[habs[+uno.dataset.i]]).map(sumarHabitual).filter(Boolean);
+  const sumados=(todo?habs:[habs[+uno.dataset.i]]).map(h=>sumarHabitual(h,tipo)).filter(Boolean);
   if(!sumados.length)return;
-  actualizarHistCliente();
+  actualizarHistCliente(tipo);
   // El que se sumó pasa a tilde con un pequeño rebote.
   if(movimientoPC())box.querySelectorAll('.hc-hab.ya .hh-mas').forEach(m=>{
     const i=+m.closest('.hc-hab').dataset.i;
@@ -153,9 +162,8 @@ document.getElementById('histCli').addEventListener('click',e=>{
   toast(sumados.length>1?'Agregado lo que suele pedir':'Agregado: '+sumados[0].prod);
 });
 // Si se borra o cambia un renglón, el panel vuelve a ofrecer ese producto.
-{
-  const filas=document.getElementById('cargarItemRows');let t;
-  const refrescar=()=>{clearTimeout(t);t=setTimeout(()=>{if(!document.getElementById('histCli').hidden)actualizarHistCliente()},120)};
+  const filas=document.getElementById(ROW_CONTAINERS[tipo]);let t;
+  const refrescar=()=>{clearTimeout(t);t=setTimeout(()=>{if(!box.hidden)actualizarHistCliente(tipo)},120)};
   filas.addEventListener('input',refrescar);
   new MutationObserver(refrescar).observe(filas,{childList:true});
 }
