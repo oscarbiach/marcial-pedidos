@@ -209,6 +209,11 @@ const assert = require('node:assert/strict');
   for(const file of ['20261127_reparto_editar_preparacion','20261125_pedidos_turno'])
     await db.exec(fs.readFileSync('supabase/migrations/'+file+'.sql','utf8'));
   await db.exec(fs.readFileSync('tests/reparto-edicion.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127_reparto_despacho.sql','utf8'));
+  await db.exec(`insert into auth.users values ('dbcd0e59-fc02-4c23-b1d6-aba342da21e8'),
+    ('e3e52cc0-d8e3-41e0-a641-26e33ffbcde6'),('b8b830b5-2268-4e92-897e-36f8f74135ea'),
+    ('a5936112-a9b4-4627-bf12-73df5936c42a') on conflict do nothing`);
+  await db.exec(fs.readFileSync('tests/reparto-despacho.sql','utf8'));
   await db.close();
   console.log('OK: cola y Realtime; peso/foto opcionales; control; despacho atómico; faltantes; sustitutos; reintentos; cambios concurrentes y acceso.');
 })().catch(e => {console.error(e); process.exitCode=1;});
