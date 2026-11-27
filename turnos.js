@@ -21,24 +21,15 @@
   const id=el.dataset.turnoId,prev=el.dataset.anterior,next=el.value,who=state.who;
   if(next===prev)return;
   el.disabled=true;
-  try{await guardar(id,prev,next,who);el.dataset.anterior=next;}
-  catch(e){if(state.who===who){el.value=prev;errorTurno(e);}}
-  finally{el.disabled=false;}
- }
- function errorTurno(e){toast(e.message||'No se pudo guardar el turno.');RepartoVivo.refrescar();}
- async function mover(p,next){
-  const prev=clave(p),who=state.who;
-  if(prev===next||p.retiro||!opciones.some(([k])=>k===next))return;
-  try{await guardar(p.id,prev,next,who);}
-  catch(e){if(state.who===who)errorTurno(e);}
- }
- async function guardar(id,prev,next,who){
+  try{
    if(!navigator.onLine)throw new Error('Sin conexión. El turno no se cambió.');
    const {data,error}=await RepartoRed.pedir(sb.rpc('pedido_cambiar_turno',{p_id:id,p_turno:next,p_anterior:prev}));
    if(error)throw error;if(!data?.ok)throw new Error('No se pudo guardar el turno.');
    if(state.who!==who)return;
    const p=state.pedidos.find(p=>p.id===id);if(p)p.turno=next;
-   renderPedidos();RepartoVivo.refrescar();
+   el.dataset.anterior=next;renderPedidos();RepartoVivo.refrescar();
+  }catch(e){if(state.who===who){el.value=prev;toast(e.message||'No se pudo guardar el turno.');RepartoVivo.refrescar();}}
+  finally{el.disabled=false;}
  }
  function filtros(actual,attr){return `<div class="turno-filtros" role="group" aria-label="Filtrar por turno">${[['todos','Todos'],...opciones].map(([t,n])=>`<button type="button" ${attr}="${t}" aria-pressed="${actual===t}">${n}</button>`).join('')}</div>`;}
  function retiro(prefijo){
@@ -47,5 +38,5 @@
   campo.closest('.turno-campo').hidden=activo;campo.disabled=activo;
   if(activo)campo.value='';
  }
- window.Turnos={retiro,clave,nombre,grupos,selector,cambiar,mover,filtros};
+ window.Turnos={retiro,clave,nombre,grupos,selector,cambiar,filtros};
 })();

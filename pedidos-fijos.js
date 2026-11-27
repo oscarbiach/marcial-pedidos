@@ -52,7 +52,7 @@
   function lunes() { return lunesDe(hoyArg()); }
   function armar() {
     const d = $('fijos'); if (!d || S.listo) return;
-    d.innerHTML = `<div class="fijos-cab"><strong id="fijos-tit">Fijos semanales</strong><button type="button" class="fijo-btn fijo-nuevo" data-fijo="nuevo" title="Cargar un pedido fijo semanal">Nuevo fijo</button></div>
+    d.innerHTML = `<summary><span id="fijos-tit">📌 Fijos semanales (0)</span><button type="button" class="fijo-btn fijo-nuevo" data-fijo="nuevo" title="Cargar un pedido fijo semanal">📌 Nuevo fijo</button></summary>
       <div class="fijos-cuerpo">
         <div id="fijos-lista"></div>
         <p id="fijos-aviso" class="fijos-ayuda" role="status" aria-live="polite"></p>
@@ -68,7 +68,7 @@
   function dibujar() {
     armar();
     if (!S.listo) return;
-    $('fijos-tit').textContent = 'Fijos semanales (' + S.lista.length + ')';
+    $('fijos-tit').textContent = '📌 Fijos semanales (' + S.lista.length + ')';
     $('fijos-aviso').textContent = S.aviso;
     const L = $('fijos-lista'), lun = lunes();
     if (!S.lista.length) { L.innerHTML = '<p class="fijos-vacio">' + (S.cargado ? 'Todavía no hay pedidos fijos.' : 'Buscando…') + '</p>'; return; }
@@ -124,7 +124,6 @@
   const abierto = () => $('fijoModal').classList.contains('open');
   function error(msg) { $('fijoError').textContent = msg || ''; }
   function abrirVentana(titulo, disp) {
-    TableroPedidos.fijos(false);
     S.disparador = disp || null; S.guardando = false;
     $('fijoModalTit').textContent = titulo;
     $('fijoGuardarBtn').disabled = false;
@@ -159,12 +158,7 @@
   function cerrar() {
     if (S.guardando) return;
     closeModal('fijoModal');
-    if (S.disparador) {
-      TableroPedidos.fijos(true);
-      const { fijo, id } = S.disparador.dataset;
-      const boton = [...$('fijos').querySelectorAll('[data-fijo]')].find(b => b.dataset.fijo === fijo && b.dataset.id === id);
-      (boton || $('verFijos')).focus({preventScroll:true});
-    }
+    if (S.disparador && document.contains(S.disparador)) S.disparador.focus();
   }
   async function guardar() {
     if (S.guardando || !S.modal) return;
