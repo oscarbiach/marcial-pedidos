@@ -31,7 +31,7 @@
     filtro: leerFiltro(),
     q: '', sel: null, fichaAbierta: false, origen: null, ritmo: new Set(), historial: null, cargando: false, error: false, ts: 0, calc: null, huella: '', ag: null,
     datos: { estado: 'pendiente', decisiones: [], reglas: [], agenda: [], agendaOk: false, agendaMensaje: '', v2: V2_VACIO, ts: 0, ultimoOk: 0, cargando: false, error: false, mensaje: '' },
-    vista: 'hoy', filtroEt: '', cq: '', cf: { tipo: '', senal: '', etiqueta: '', vendedor: '' }, cLimite: 100, semana: 0, pq: '',   // Seguimiento v2: vista actual, filtro por etiqueta y filtros de la lista de clientes
+    vista: 'hoy', filtroEt: '', cq: '', cf: { tipo: '', senal: '', etiqueta: '', vendedor: '', seguimiento: '' }, cLimite: 100, semana: 0, pq: '',   // Seguimiento v2: vista actual, filtro por etiqueta y filtros de la lista de clientes
     alertasTodas: new Set(), contactos: new Map(), ops: new Map(), guardandoMeta: new Set(),
     agendaMapa: new Map(),   // clave del cliente → { fecha, ciclo, escrito } (lo guardado, más lo que se acaba de cambiar y se está guardando)
     sobre: { pausar: new Map(), cerrar: new Set(), meta: new Map() },   // `meta`: vendedor / etiquetas / último contacto recién cambiados (clave del cliente → parcial)   // decisiones que se ven aplicadas antes de que la base conteste (pausar / retomar)
@@ -103,7 +103,7 @@
   const sinAsignar = () => datosOk() && v2().instalado && !v2().yo;
   const esGestor = () => v2Activo() && !!v2().yo.gestor;         // administrador o ve_todo: asigna vendedor y etiquetas
   const veTodo = () => v2Activo() && !!v2().yo.ve_todo;          // ve la columna y el filtro de vendedor
-  const usuarioMotor = () => (v2Activo() ? { nombre: v2().yo.nombre, ve_todo: !!v2().yo.ve_todo } : sinAsignar() ? { nombre: '', ve_todo: false } : undefined);   // sin clientes asignados no se ve ninguno (ni en el buscador)
+  const usuarioMotor = () => (v2Activo() ? { nombre: v2().yo.nombre, ve_todo: !!v2().yo.ve_todo, ve_sin_vendedor: !!v2().yo.ve_sin_vendedor } : sinAsignar() ? { nombre: '', ve_todo: false } : undefined);   // sin clientes asignados no se ve ninguno (ni en el buscador)
   function metaMapa() {
     if (!v2Activo()) return undefined;
     const et = new Map(v2().etiquetas.map(e => [e.id, e])), m = new Map();
@@ -499,6 +499,8 @@
     const f = E.cf, q = S.norm(E.cq);
     return calc.clientes.filter(c => {
       if (q && !S.norm(c.nombre).includes(q) && !S.norm(direccionDe(c)).includes(q)) return false;
+      if (f.seguimiento === 'pausa' && estadoClave(c, ag) !== 'pausa') return false;
+      if (f.seguimiento === 'activo' && ['pausa','inactivo'].includes(estadoClave(c, ag))) return false;
       if (f.tipo && S.tipoDe(c) !== f.tipo) return false;
       if (f.senal && senal(c, ag.porCliente.get(c.clave))[2] !== f.senal) return false;
       if (f.etiqueta && !(c.etiquetas || []).some(e => e.id === f.etiqueta)) return false;
@@ -524,6 +526,7 @@
       <ul class="sv-kpis" aria-label="Resumen de clientes">${kpi('blue', 'users', 'Total clientes', calc.clientes.length)}${kpi('green', 'check', 'En seguimiento', enSeg.length)}${kpi('red', '!', 'Dejaron de comprar', enSeg.filter(c => S.tipoDe(c) === 'recupero').length)}${kpi('blue', 'plus', 'Única compra', calc.clientes.filter(c => c.n === 1).length)}</ul>
       <section class="sv-card sv-sec sv-filtros" aria-label="Filtros"><div class="sv-tools"><label class="sv-search sv-search--cli">${ico('search', 'ico-sm')}<input type="search" id="sc-cq" class="sv-field" placeholder="Buscar cliente…" aria-label="Buscar en la lista de clientes" autocomplete="off" value="${at(E.cq)}"></label>
         ${sel('tipo', 'Tipo', [['', 'Todos'], ['habitual', 'Habitual'], ['unica', 'Única compra'], ['recupero', 'Dejó de comprar']])}
+        ${sel('seguimiento', 'Seguimiento', [['', 'Todos'], ['activo', 'En seguimiento'], ['pausa', 'Sin seguimiento']])}
         ${sel('senal', 'Señal', [['', 'Todas'], ...Object.entries(SENALES)])}
         ${ets.length ? sel('etiqueta', 'Etiqueta', [['', 'Todas'], ...ets.map(e => [e.id, e.nombre])]) : ''}
         ${vt ? sel('vendedor', 'Vendedor', [['', 'Todos'], ['__ninguno', 'Atención general'], ...vendedores.map(v => [v, v])]) : ''}
@@ -1442,7 +1445,7 @@
     else if (a === 'alertas-mas') { const t = b.dataset.t; if (E.alertasTodas.has(t)) E.alertasTodas.delete(t); else E.alertasTodas.add(t); render(); const x = document.querySelector(`#sc-raiz [data-sc="alertas-mas"][data-t="${t}"]`); if (x) x.focus({ preventScroll: true }); }
     else if (a === 'clientes-mas') { E.cLimite += 100; refrescarClientes(); }
     else if (a === 'semana') { E.semana = Number(b.dataset.s); repintarGrilla(); }
-    else if (a === 'limpiar-filtros') { E.cf = { tipo: '', senal: '', etiqueta: '', vendedor: '' }; E.cq = ''; E.cLimite = 100; render(); }
+    else if (a === 'limpiar-filtros') { E.cf = { tipo: '', senal: '', etiqueta: '', vendedor: '', seguimiento: '' }; E.cq = ''; E.cLimite = 100; render(); }
     else if (a === 'resultado') { E.foco = { k, acc: 'resultado' }; abrirResultado(k); }
     else if (a === 'etiquetas') abrirEtiquetas();
     else if (a === 'et-toggle') cambiarEtiqueta(k, b.dataset.e);

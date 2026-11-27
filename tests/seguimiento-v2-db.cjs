@@ -163,5 +163,27 @@ const uuid=()=>crypto.randomUUID();
  await assert.rejects(db.query("insert into seg_etiquetas(id,nombre) values (gen_random_uuid(),'directo')"),/permission denied/);   // se escribe solo por las funciones
  await assert.rejects(db.query("update clientes set vendedor='Thiago'"),/permission denied/);
  await db.exec('reset role');
- console.log('OK: seg_usuarios, vendedor, etiquetas y contactos (permisos, idempotencia y efectos en la agenda).');
+ // Juan Marcos: propios y sin vendedor, incluida atención general sin etiquetas/contactos.
+ await db.exec(sql('20261127_seguimiento_juan_marcos'));
+ await db.exec(sql('20261127_seguimiento_juan_marcos'));
+ await db.query('insert into clientes(id,nombre,vendedor) values ($1,$2,$3),($4,$5,null)',[C(4),'Propio','Juan Marcos',C(5),'General nuevo']);
+ await as(5);
+ assert.deepEqual(await call('seg_yo'),{nombre:'Juan Marcos',ve_todo:false,gestor:false,ve_sin_vendedor:true});
+ m=await call('seg_clientes_meta');
+ assert.deepEqual(m.clientes.map(c=>c.cliente_id).sort(),[C(3),C(4),C(5)]);
+ assert.deepEqual(m.usuarios,[]);
+ for(const id of [C(3),C(4),C(5)]){
+   assert.equal(await call('seg_puede_cliente',[id]),true);
+   await call('seg_agendar',[id,'2026-11-30','2026-11-20']);
+ }
+ for(const id of [C(1),C(2)]){
+   assert.equal(await call('seg_puede_cliente',[id]),false);
+   await sin42501(call('seg_agendar',[id,'2026-11-30','2026-11-20']));
+   await sin42501(call('seg_contactos_leer',[id]));
+ }
+ assert.deepEqual((await comoRol(5,'select cliente_id from seg_agenda order by 1')).map(x=>x.cliente_id),[C(3),C(4),C(5)]);
+ await as(3);assert.equal(await call('seg_puede_cliente',[C(5)]),false);
+ await as(2);assert.equal(await call('seg_puede_cliente',[C(1)]),true);
+ await as(null);assert.equal(await call('seg_puede_cliente',[C(5)]),false);
+ console.log('OK: seguimiento por vendedor, atención general, permisos y agenda.');
 })().catch(e=>{console.error(e);process.exit(1);});
