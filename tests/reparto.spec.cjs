@@ -18,6 +18,15 @@ async function setup(browser,{turnosPlegados=false}={}){
  const itemRows=id=>db.prep_items.filter(x=>db.pedidos.find(p=>p.id===id)?.pedido_items.some(i=>i.id===x.item_id));
  async function emit(table){await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(t=>(window.__listeners||[]).filter(([name])=>name===t).forEach(([,cb])=>cb({})),table)));}
  async function request(q){
+  if(q.name==='proveedores_pagos_leer')return {data:{pagos:structuredClone(db.proveedores_pagos||[]),puede_transferir:['Oscar','Joaquin','Thiago'].includes(q.who),puede_cargar:q.who==='Joaquin'}};
+  if(q.name==='proveedores_pagos_guardar'){
+   const a=q.args;if(failItem)return {error:{message:'Sin conexión'}};
+   writes.push({name:q.name,args:a});db.proveedores_pagos||=[];let row=db.proveedores_pagos.find(x=>x.id===a.p_id);
+   if(a.p_accion==='guardar'){if(row)Object.assign(row,a.p_datos,{version:row.version+1});else{row={id:a.p_id,...a.p_datos,estado:'pendiente',version:1,autor:q.who,creado_en:'2026-11-16T15:00:00Z'};db.proveedores_pagos.push(row);}}
+   else if(row){row.version++;if(a.p_accion==='eliminar'||a.p_accion==='restaurar')row.eliminado_en=a.p_accion==='eliminar'?'2026-11-16':null;else row.estado=a.p_accion==='transferir'?'transferido':'pendiente';row.transferido_en=row.estado==='transferido'?'2026-11-16T15:00:00Z':null;row.transferido_por_nombre=q.who;}
+   return {data:{ok:true,pago:structuredClone(row)}};
+  }
+
   if(q.name==='pedido_mover_entrega'){
    const a=q.args,p=db.pedidos.find(p=>p.id===a.p_id);writes.push({name:q.name,args:a});
    if(!p||p.estado!=='Pendiente'||(p.fecha_entrega||null)!==a.p_anterior)return {error:{message:'El pedido cambió'}};
@@ -1345,3 +1354,16 @@ test('Mover entrega conserva remito hecho y no reescribe productos ni preparaci�
   const r=await p.locator('#notas-popover').boundingBox();expect(r.x).toBeGreaterThanOrEqual(0);expect(r.x+r.width).toBeLessThanOrEqual(390);expect(r.y+r.height).toBeLessThanOrEqual(844);
   await p.screenshot({path:'test-results/notificaciones-movil.png',animations:'disabled'});await p.mouse.click(5,800);await expect(p.locator('#notas-popover')).toHaveCount(0);expect(s.errors).toEqual([]);await s.close();
  });
+
+test('Pagos proveedores: carga, errores, permisos y transferencia sin salir de la app',async({browser})=>{
+ const s=await setup(browser),o=await s.open('Joaquin'),t=await s.open('Thiago'),m=await s.open('Mateo');
+ await expect(m.locator('#pcNav [data-tab="pagos"]')).toBeHidden();await m.evaluate(()=>goTab('pagos'));await expect(m.locator('#tab-pagos')).not.toHaveClass(/active/);
+ await o.locator('#pcNav [data-tab="pagos"]').click();expect(s.errors).toEqual([]);await o.getByRole('button',{name:'+ Cargar pago',exact:true}).click();
+ await o.locator('#pgv-modal [name="proveedor"]').fill('Proveedor de prueba');await o.locator('#pgv-modal [name="importe"]').fill('123.456,78');
+ s.failItem(true);await o.locator('#pgv-modal [type="submit"]').click();await expect(o.locator('#pgv-modal .pgv-error')).toContainText('Sin conexión');await expect(o.locator('#pgv-modal [name="proveedor"]')).toHaveValue('Proveedor de prueba');
+ s.failItem(false);await o.locator('#pgv-modal [type="submit"]').click();await expect(o.locator('#pgv-modal')).toHaveCount(0);await expect(o.locator('.pgv-pago')).toContainText('123.456,78');await expect(o.locator('[data-pgv="transferir"]')).toBeVisible();
+ await t.locator('#pcNav [data-tab="pagos"]').click();await expect(t.locator('.pgv-pago')).toContainText('Proveedor de prueba');await t.screenshot({path:'test-results/pagos-proveedores-pc.png',animations:'disabled'});
+ await t.locator('[data-pgv="transferir"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);await t.locator('[data-modo="transferido"]').click();await expect(t.locator('.pgv-pago')).toContainText('Pagado');await expect(t.locator('[data-pgv="editar"]')).toHaveCount(0);
+ await t.setViewportSize({width:390,height:844});await t.screenshot({path:'test-results/pagos-proveedores-movil.png',animations:'disabled'});expect(await t.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await t.locator('[data-pgv="config"]').click();await expect(t.locator('[data-pgv="editar"]')).toBeVisible();await t.locator('[data-pgv="editar"]').click();await expect(t.locator('#pgv-modal input')).toHaveCount(3);await t.locator('#pgv-modal [name="importe"]').fill('200');await t.locator('#pgv-modal [type="submit"]').click();await expect(t.locator('.pgv-pago')).toContainText('200,00');await t.locator('[data-pgv="eliminar"]').click();await t.locator('#pgv-modal [type="submit"]').click();await t.locator('[data-modo="eliminados"]').click();await expect(t.locator('[data-pgv="restaurar"]')).toBeVisible();await t.locator('[data-pgv="restaurar"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);expect(s.db.proveedores_pagos[0].importe).toBe('200');expect(s.errors).toEqual([]);await s.close();
+});

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node tests/auditoria-db.cjs && node tests/bitacora-db.cjs && node tests/reparto-db.cjs && node tests/gestion-db.cjs && node tests/admin-db.cjs && node tests/seguimiento-agenda.cjs && node tests/seguimiento-contexto.cjs && node tests/seguimiento-v2-db.cjs && node tests/turnos-db.cjs",
+    "test": "node tests/proveedores-pagos-db.cjs && node tests/auditoria-db.cjs && node tests/bitacora-db.cjs && node tests/reparto-db.cjs && node tests/gestion-db.cjs && node tests/admin-db.cjs && node tests/seguimiento-agenda.cjs && node tests/seguimiento-contexto.cjs && node tests/seguimiento-v2-db.cjs && node tests/turnos-db.cjs",
     "test:ui": "playwright test"
   },
   "repository": {
