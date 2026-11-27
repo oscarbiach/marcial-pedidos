@@ -38,6 +38,12 @@ const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
  assert.equal((await db.query('select count(*) n from bonif_ventas where clave=any($1) and producto_id is null',[ambiguous.map(x=>x.clave)])).rows[0].n,2);
  await call('admin_bonificaciones_importar',['prueba.xlsx','a'.repeat(64),JSON.stringify([row(9,{fecha:'2026-11-22',subtotal_con_iva:'23205'})])]);
  assert.equal((await call('admin_bonificaciones_cliente',[id(10)])).productos.find(x=>x.producto==='Carne').estado,'Sobre lista');
+ await db.exec(`insert into stock_productos values('${id(31)}','S31','Carne en caja','kg',true,null)`);
+ const stockRow=row(10,{codigo:'S31',producto:'Carne en caja'});
+ for(let i=0;i<2;i++)await call('admin_bonificaciones_importar',['prueba.xlsx','a'.repeat(64),JSON.stringify([stockRow])]);
+ const stock=(await call('admin_bonificaciones_cliente',[id(10)])).productos.filter(x=>x.stock_id===id(31));
+ assert.equal(stock.length,1);assert.equal(stock[0].porcentaje,5);
+ assert.equal((await call('admin_bonificaciones_resumen',[])).referencias_visibles,3);
  for(const n of [3,4,null]){await as(n);await db.exec('set role authenticated');await assert.rejects(imp(),e=>e.code==='42501');await assert.rejects(call('admin_bonificaciones_cliente',[id(10)]),e=>e.code==='42501');await assert.rejects(call('admin_bonificaciones_resumen',[]),e=>e.code==='42501');await assert.rejects(db.query('select * from bonif_ventas'),e=>e.code==='42501');await db.exec('reset role');}
  console.log('OK: bonificaciones privadas, cálculo con IVA, antecedente válido e importación idempotente.');await db.close();
 })().catch(e=>{console.error(e);process.exit(1)});
