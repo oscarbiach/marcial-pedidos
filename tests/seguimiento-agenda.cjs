@@ -62,6 +62,11 @@ for(const u of ['Juan Marcos','Joaquin'])assert.equal(S.calcular(pedidosV2,hoy2,
 const sinMeta=S.calcular(pedidosV2,hoy2,{meta:new Map(),usuario:{nombre:'Thiago',ve_todo:false}});assert.equal(sinMeta.clientes.length,0);assert.equal(sinMeta.ocultos,4);
 assert.equal(S.calcular(pedidosV2,hoy2,{meta,usuario:{nombre:'Thiago',ve_todo:false}}).ocultos,3);
 console.log('OK: cada usuario ve solo sus clientes; ve_todo, todos.');
+const jm = {nombre:'Juan Marcos',ve_todo:false,ve_sin_vendedor:true};
+const metaGeneral = new Map(meta).set('sin dueno',{vendedor:null});
+assert.deepEqual(S.calcular(pedidosV2,hoy2,{meta:metaGeneral,usuario:jm}).clientes.map(c=>c.nombre).sort(),['Santo Tomé Kiosco','Sin Dueño']);
+assert.deepEqual(S.calcular(pedidosV2,hoy2,{meta,usuario:jm}).clientes.map(c=>c.nombre),['Santo Tomé Kiosco']);
+assert.equal(S.calcular(pedidosV2,hoy2,{meta:new Map(),usuario:jm}).clientes.length,0);
 
 // Día fijo: primer día de esa etiqueta desde el vencimiento; sin etiqueta rige la regla #27 (no se posterga al día habitual).
 const sauce=todos.clientes.find(c=>c.nombre==='Sauce Mercado');

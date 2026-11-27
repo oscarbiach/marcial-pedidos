@@ -15,7 +15,7 @@ const HOY='2026-11-24';   // martes
 const sumar=(f,n)=>{const d=new Date(f+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 function pedidoDb(id,cliente,fecha,extra={}){return {id,cliente,fecha,fecha_pedido:null,quien:'Oscar',direccion:'San Martín 123',notas:'',estado:'Despachado',fecha_entrega:null,fecha_despacho:fecha,retiro:false,eliminado_en:null,eliminado_por:null,remito_hecho:true,creado_en:fecha+'T12:00:00+00:00',actualizado_en:'2026-11-20T10:00:00.000001+00:00',pedido_items:[{id:1,producto:'Mozzarella',cantidad:2,orden:0},{id:2,producto:'Aceite',cantidad:1,orden:1}],...extra};}
 const semanal=(cliente,ultimo,n)=>Array.from({length:n},(_,i)=>pedidoDb(`${norm(cliente).replace(/\W/g,'')}${i}`,cliente,sumar(ultimo,-7*i)));
-const YO={'Juan Marcos':{nombre:'Juan Marcos',ve_todo:true,gestor:true},Joaquin:{nombre:'Joaquin',ve_todo:true,gestor:true},Oscar:{nombre:'Oscar',ve_todo:false,gestor:true},Thiago:{nombre:'Thiago',ve_todo:false,gestor:false}};
+const YO={'Juan Marcos':{nombre:'Juan Marcos',ve_todo:false,ve_sin_vendedor:true,gestor:false},Joaquin:{nombre:'Joaquin',ve_todo:true,gestor:true},Oscar:{nombre:'Oscar',ve_todo:false,gestor:true},Thiago:{nombre:'Thiago',ve_todo:false,gestor:false}};
 function setup(opts={}){
  const clientes=[['c1','Almacén Norte','Thiago'],['c2','Kiosco Sur','Thiago'],['c3','Sauce Mercado','Oscar'],['c4','Santo Tomé Kiosco','Juan Marcos'],['c5','Cliente sin dueño',null],['c6','Única Compra Vieja','Thiago'],['c7','Dejó Hace Rato','Juan Marcos']]
   .map(([id,nombre,vendedor])=>({id,nombre,direccion:'Calle '+id+' 123, Santa Fe',eliminado_en:null,observaciones:id==='c2'?'Cierra a las 13':null,vendedor}));
@@ -28,7 +28,7 @@ function setup(opts={}){
  const safeAliases=()=>db.aliases||[];
  const who2=q=>YO[q.who]||null;
  const clienteDe=id=>db.clientes.find(c=>c.id===id);
- const puede=(q,id)=>{const y=who2(q);return !!y&&(y.ve_todo||norm(clienteDe(id)?.vendedor)===norm(y.nombre));};
+ const puede=(q,id)=>{const y=who2(q);return !!y&&(y.ve_todo||norm(clienteDe(id)?.vendedor)===norm(y.nombre)||(y.ve_sin_vendedor&&clienteDe(id)&&!norm(clienteDe(id).vendedor)));};
  const sinPermiso=()=>err('Ese cliente no está asignado a tu usuario','42501');
  async function request(q){
   const y=who2(q);
@@ -38,8 +38,8 @@ function setup(opts={}){
   if(q.name==='seg_clientes_meta'){
    if(!y)return err('No tenés permiso','42501');
    const et=db.etiquetas.filter(e=>e.activa!==false).map(({id,nombre,dia_semana,siempre})=>({id,nombre,dia_semana,siempre}));
-   const filas=db.clientes.filter(c=>y.gestor||norm(c.vendedor)===norm(y.nombre)).map(c=>({cliente_id:c.id,nombre:c.nombre,vendedor:c.vendedor,etiquetas:(db.clienteEt.get(c.id)||[]).filter(id=>et.some(e=>e.id===id)),
-    contacto:db.contactos.filter(k=>k.cliente_id===c.id).sort((a,b)=>b.creado_en.localeCompare(a.creado_en))[0]||null})).filter(f=>f.vendedor||f.etiquetas.length||f.contacto);
+   const filas=db.clientes.filter(c=>y.gestor||puede(q,c.id)).map(c=>({cliente_id:c.id,nombre:c.nombre,vendedor:c.vendedor,etiquetas:(db.clienteEt.get(c.id)||[]).filter(id=>et.some(e=>e.id===id)),
+    contacto:db.contactos.filter(k=>k.cliente_id===c.id).sort((a,b)=>b.creado_en.localeCompare(a.creado_en))[0]||null})).filter(f=>y.ve_sin_vendedor||f.vendedor||f.etiquetas.length||f.contacto);
    return {data:{etiquetas:et,usuarios:y.gestor?Object.values(YO).map(u=>({nombre:u.nombre,ve_todo:u.ve_todo})):[],clientes:filas}};
   }
   if(q.name==='seg_agendar'||q.name==='seg_escribi'){
@@ -129,8 +129,8 @@ const nombresHoy=async page=>(await page.locator('#sc-raiz .sv-list--tareas .sv-
 const vista=async(page,v)=>{await page.locator(`#sc-raiz .sv-chip[data-sc="vista"][data-v="${v}"]`).click();await expect(page.locator(`#sc-raiz .sv-chip[data-sc="vista"][data-v="${v}"]`)).toHaveAttribute('aria-pressed','true');};
 const sinErrores=page=>expect(page.errors).toEqual([]);
 
-test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vista por defecto con indicadores y alertas',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');
+test('Joaquin ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vista por defecto con indicadores y alertas',async({browser})=>{
+ const s=setup();const page=await entrar(browser,s,'Joaquin');
  await expect(page.locator('#sc-raiz .sv-chip[data-v="hoy"]')).toHaveAttribute('aria-pressed','true');
  const kpis=await page.locator('#sc-raiz .sv-kpi').allInnerTexts();
  expect(kpis.map(t=>t.replace(/\s+/g,' ').trim())).toEqual(['Atrasados 1','Dejaron de comprar 2','Esperando respuesta 0','Contactados / pidieron hoy 0']);
@@ -175,6 +175,34 @@ test('Juan Marcos ve todos los clientes en Hoy, Agenda y Clientes; Hoy es la vis
  sinErrores(page);
 });
 
+test('Juan Marcos ve propios y generales; filtra Sin seguimiento sin mostrar clientes ajenos',async({browser})=>{
+ const s=setup();const page=await entrar(browser,s,'Juan Marcos');
+ expect(await nombresHoy(page)).toEqual(['Cliente sin dueño','Dejó Hace Rato']);
+ expect((await page.locator('#sc-raiz .sv-alert').allTextContents()).join(' ')).not.toContain('Única Compra Vieja');
+ await vista(page,'agenda');
+ const claves=await page.locator('#sc-raiz .daytask').evaluateAll(l=>[...new Set(l.map(x=>x.dataset.k))].sort());
+ expect(claves.every(k=>['cliente sin dueno','dejo hace rato','santo tome kiosco'].includes(k))).toBe(true);
+ await vista(page,'clientes');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(3);
+ await page.locator('#sc-q').fill('sauce');
+ await expect(page.locator('#sc-raiz .sc-bus-l')).toContainText('Ningún cliente coincide');
+ await page.locator('#sc-q').fill('');
+ await page.locator('#sc-raiz .sv-table [data-sc="fila"][data-k="cliente sin dueno"]').click();
+ await page.locator('#sc-ficha [data-sc="sinseg"]').click();
+ await page.locator('#sc-dlg [data-d="pausar-ok"]').click();
+ await expect(page.locator('#sc-ficha [data-sc="retomar"]')).toBeVisible();
+ await page.keyboard.press('Escape');
+ await page.locator('#sc-raiz select[data-cf="seguimiento"]').selectOption('pausa');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(1);
+ await expect(page.locator('#sc-raiz .sv-table tbody')).toContainText('Cliente sin dueño');
+ await shot(page,'juan-marcos-sin-seguimiento');
+ await page.locator('#sc-raiz select[data-cf="seguimiento"]').selectOption('activo');
+ await expect(page.locator('#sc-raiz .sv-table tbody')).not.toContainText('Cliente sin dueño');
+ await page.locator('#sc-raiz select[data-cf="seguimiento"]').selectOption('');
+ await expect(page.locator('#sc-raiz .sv-table tbody tr')).toHaveCount(3);
+ sinErrores(page);
+});
+
 test('Thiago ve solo sus clientes en Hoy, Agenda y Clientes, sin selector de vendedor ni gestión de etiquetas',async({browser})=>{
  const s=setup();const page=await entrar(browser,s,'Thiago');
  expect(await nombresHoy(page)).toEqual(['Almacén Norte','Kiosco Sur','Única Compra Vieja']);
@@ -203,7 +231,7 @@ test('Thiago ve solo sus clientes en Hoy, Agenda y Clientes, sin selector de ven
 });
 
 test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de hoy y aparece ese día; la operación lleva un id y no se repite',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');
+ const s=setup();const page=await entrar(browser,s,'Joaquin');
  const f=fila(page,'kiosco sur');
  await f.locator('[data-sc="escribi"]').click();
  await expect(page.locator('#sc-toast')).toContainText('Le escribiste a Kiosco Sur');
@@ -236,7 +264,7 @@ test('Le escribí → Esperando → Resultado «Tiene stock» con día: sale de 
  await expect(page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]')).toHaveCount(0);
  // la ficha muestra el historial
  await page.locator('#sc-raiz .sv-day[data-fecha="2026-11-26"] .daytask[data-k="kiosco sur"]').click();
- await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Tiene stock');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Le llega el viernes');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Juan Marcos');
+ await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Tiene stock');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Le llega el viernes');await expect(page.locator('#sc-ficha .sc-ctos')).toContainText('Joaquin');
  sinErrores(page);
 });
 
@@ -264,7 +292,7 @@ test('«No contestó» vuelve a pendiente con «Volver a escribir»; un timeout 
 });
 
 test('Una operación lenta deja el botón deshabilitado y no se envía dos veces',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');
+ const s=setup();const page=await entrar(browser,s,'Joaquin');
  s.ctl.colgar=true;
  await fila(page,'kiosco sur').locator('[data-sc="escribi"]').click();
  await expect(fila(page,'kiosco sur').locator('[data-sc="escribi"]')).toBeDisabled();
@@ -273,7 +301,7 @@ test('Una operación lenta deja el botón deshabilitado y no se envía dos veces
 });
 
 test('Agenda semanal: se sigue pudiendo arrastrar una tarjeta a otro día',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
+ const s=setup();const page=await entrar(browser,s,'Joaquin');await vista(page,'agenda');
  const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]'),destino=page.locator('#sc-raiz .sv-day[data-fecha="2026-11-27"]');
  await expect(origen).toHaveAttribute('data-arr','1');
  const a=await origen.boundingBox(),b=await destino.boundingBox();
@@ -284,7 +312,7 @@ test('Agenda semanal: se sigue pudiendo arrastrar una tarjeta a otro día',async
 });
 
 test('Agenda: se arrastra una tarjeta sobre «Semana que viene» y se suelta en un día de esa semana; «Sacar de seguimiento» vive en la ficha',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
+ const s=setup();const page=await entrar(browser,s,'Joaquin');await vista(page,'agenda');
  const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]');
  const a=await origen.boundingBox(),sw=await page.locator('#sc-raiz [data-sc="semana"][data-s="1"]').boundingBox();
  await page.mouse.move(a.x+20,a.y+10);await page.mouse.down();await page.mouse.move(a.x+60,a.y+40,{steps:4});await page.mouse.move(sw.x+sw.width/2,sw.y+sw.height/2,{steps:10});
@@ -302,7 +330,7 @@ test('Agenda: se arrastra una tarjeta sobre «Semana que viene» y se suelta en 
 });
 
 test('Ficha emergente: vendedor, etiquetas e historial; crear una etiqueta con día fijo y ver al cliente ese día',async({browser})=>{
- const s=setup();const page=await entrar(browser,s,'Juan Marcos');
+ const s=setup();const page=await entrar(browser,s,'Joaquin');
  // crear la etiqueta desde Clientes → Etiquetas
  await vista(page,'clientes');await page.locator('#sc-raiz [data-sc="etiquetas"]').click();
  const dlg=page.locator('#sc-dlg');await expect(dlg).toContainText('Todavía no hay etiquetas');
@@ -394,7 +422,7 @@ test('Celular 390 px: Thiago ve Hoy, la tabla se vuelve tarjetas y no hay desbor
 });
 
 test('Movimiento reducido: sin transiciones en las vistas ni en los filtros',async({browser})=>{
- const s=setup();const page=await abrir(browser,s,'Juan Marcos');await page.emulateMedia({reducedMotion:'reduce'});
+ const s=setup();const page=await abrir(browser,s,'Joaquin');await page.emulateMedia({reducedMotion:'reduce'});
  await page.evaluate(()=>goTab('clientes'));await expect(page.locator('#sc-raiz .sv-nav-c')).toBeVisible();
  const dur=await page.evaluate(()=>['.sv-chip','.sv-btn'].map(s=>getComputedStyle(document.querySelector('#sc-raiz '+s)).transitionDuration));
  for(const d of dur)expect(d.split(',').every(x=>x.trim()==='0s')).toBe(true);
@@ -416,11 +444,11 @@ test('Panel de administración: la ficha del cliente permite asignar vendedor y 
  sinErrores(page);
 });
 
-test('Juan Marcos opera sobre el cliente actual aunque el historial conserve nombres anteriores',async({browser})=>{
+test('Joaquin opera sobre el cliente actual aunque el historial conserve nombres anteriores',async({browser})=>{
  const s=setup();s.db.clientes.find(c=>c.id==='c2').nombre='Lucas Onlyburger Sauce';
  s.db.pedidos=s.db.pedidos.filter(p=>p.cliente!=='Kiosco Sur').concat(semanal('Lucas Charruca','2026-11-17',6));
  s.db.aliases=[{alias:'lucas charruca',nombre:'Lucas Onlyburger Sauce',cliente_id:'c2'}];
- const page=await entrar(browser,s,'Juan Marcos');
+ const page=await entrar(browser,s,'Joaquin');
  await expect(fila(page,'lucas charruca')).toHaveCount(0);
  await expect(fila(page,'lucas onlyburger sauce')).toBeVisible();
  await fila(page,'lucas onlyburger sauce').locator('[data-sc="escribi"]').click();
@@ -435,7 +463,7 @@ for(const caso of ['espera vencida','no contestó'])test('Reprogramar alerta roj
  const s=setup();
  s.db.agenda.set('c2',{cliente_id:'c2',fecha:null,ciclo:'2026-11-17',escrito_en:caso==='espera vencida'?'2026-11-20':null});
  if(caso==='no contestó')s.db.contactos.push({id:'prueba-roja',cliente_id:'c2',resultado:'no_contesto',creado_en:'2026-11-24T12:00:00Z',autor:'Juan Marcos'});
- const page=await entrar(browser,s,'Juan Marcos');await vista(page,'agenda');
+ const page=await entrar(browser,s,'Joaquin');await vista(page,'agenda');
  const origen=page.locator('#sc-raiz .sv-day--hoy .daytask[data-k="kiosco sur"]');await expect(origen).toContainText('Volver a escribir');
  const a=await origen.boundingBox(),sw=await page.locator('#sc-raiz [data-sc="semana"][data-s="1"]').boundingBox();
  await page.mouse.move(a.x+20,a.y+10);await page.mouse.down();await page.mouse.move(a.x+60,a.y+40,{steps:4});await page.mouse.move(sw.x+sw.width/2,sw.y+sw.height/2,{steps:10});
@@ -443,7 +471,7 @@ for(const caso of ['espera vencida','no contestó'])test('Reprogramar alerta roj
  const b=await page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"]').boundingBox();await page.mouse.move(b.x+b.width/2,b.y+60,{steps:10});await page.mouse.up();
  await expect(page.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
  expect(s.db.agenda.get('c2').fecha).toBe('2026-12-01');
- const nueva=await entrar(browser,s,'Juan Marcos');await vista(nueva,'agenda');await nueva.locator('#sc-raiz [data-sc="semana"][data-s="1"]').click();
+ const nueva=await entrar(browser,s,'Joaquin');await vista(nueva,'agenda');await nueva.locator('#sc-raiz [data-sc="semana"][data-s="1"]').click();
  await expect(nueva.locator('#sc-raiz .sv-day[data-fecha="2026-12-01"] .daytask[data-k="kiosco sur"]')).toBeVisible();
  sinErrores(page);sinErrores(nueva);
 });
@@ -456,7 +484,7 @@ test('Etapa 1: ficha distingue compra y despacho, sin reiniciar por una reposici
   pedidoDb('et2','Sauce Mercado','2026-11-12',{fecha_despacho:'2026-11-18'}),
   pedidoDb('et3','Sauce Mercado','2026-11-23',{notas:'🔁 REPOSICIÓN — Faltó pan',fecha_despacho:'2026-11-24'})
  ]);
- const page=await entrar(browser,s,'Juan Marcos');
+ const page=await entrar(browser,s,'Joaquin');
  await expect(fila(page,'sauce mercado')).toBeVisible();
  await fila(page,'sauce mercado').locator('[data-sc="fila"]').first().click();
  await expect(page.locator('#scModal .sv-mini').filter({hasText:'Último pedido'})).toContainText('Hace 12 días');
@@ -477,7 +505,7 @@ test('Etapa 2: motivos concretos, programados y espera separados sin escribir da
  s.db.contactos.push({id:'stk',cliente_id:'c1',resultado:'tiene_stock',volver_el:HOY,creado_en:'2026-11-23T15:00:00Z',autor:'Juan Marcos'});
  s.db.agenda.set('c1',{cliente_id:'c1',fecha:HOY,ciclo:'2026-11-16',escrito_en:null});
  s.db.agenda.set('c3',{cliente_id:'c3',fecha:null,ciclo:'2026-11-13',escrito_en:HOY});
- const page=await entrar(browser,s,'Juan Marcos');
+ const page=await entrar(browser,s,'Joaquin');
  await expect(fila(page,'kiosco sur')).toContainText('No contestó · volver a intentar');
  await expect(fila(page,'kiosco sur')).toContainText('Alta');
  await expect(fila(page,'almacen norte')).toContainText('Tenía stock · Contacto programado para hoy');
@@ -497,7 +525,7 @@ test('Etapa 2: motivos concretos, programados y espera separados sin escribir da
 
 test('Etapas 3 y 4: contexto, reposición pendiente y guía interactiva',async({browser})=>{
  const s=setup();s.db.pedidos.push(pedidoDb('repo-contexto','Sauce Mercado',HOY,{estado:'Pendiente',fecha_despacho:null,notas:'🔁 REPOSICIÓN — Falta mercadería'}));
- const page=await entrar(browser,s,'Juan Marcos');
+ const page=await entrar(browser,s,'Joaquin');
  await fila(page,'sauce mercado').locator('[data-sc="fila"]').click();
  await expect(page.locator('.sc-contexto')).toContainText('1 reposición pendiente');
  await expect(page.locator('.sc-contexto')).toContainText('Último pedido');

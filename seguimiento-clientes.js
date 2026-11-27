@@ -370,7 +370,14 @@
     clientes.forEach(c => { const m = metaDe(c.clave); c.vendedor = m.vendedor ? String(m.vendedor) : null; c.etiquetas = Array.isArray(m.etiquetas) ? m.etiquetas.slice() : []; c.contacto = m.contacto || null; });
     const yo = usuario && !usuario.ve_todo ? norm(usuario.nombre) : null;
     const todosN = clientes.length, clavesTodas = new Set(clientes.map(c => c.clave));
-    if (yo !== null) { for (let i = clientes.length - 1; i >= 0; i--) if (!clientes[i].vendedor || norm(clientes[i].vendedor) !== yo) clientes.splice(i, 1); }
+    if (yo !== null) {
+      for (let i = clientes.length - 1; i >= 0; i--) {
+        const c = clientes[i], conocido = metaIn instanceof Map ? metaIn.has(c.clave) : Object.prototype.hasOwnProperty.call(metaIn || {}, c.clave);
+        // Una ausencia de metadata nunca equivale a «sin vendedor»: puede ser un cliente ajeno.
+        const general = usuario.ve_sin_vendedor && conocido && !norm(c.vendedor);
+        if (!general && (!c.vendedor || norm(c.vendedor) !== yo)) clientes.splice(i, 1);
+      }
+    }
     const clavesVisibles = new Set(clientes.map(c => c.clave));
     for (let i = cierresPendientes.length - 1; i >= 0; i--) if (!clavesVisibles.has(cierresPendientes[i].clave)) cierresPendientes.splice(i, 1);
 
