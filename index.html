@@ -1606,12 +1606,12 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="preparacion.css">
 <link rel="stylesheet" href="reparto-vivo.css?v=144">
 <link rel="stylesheet" href="turnos.css?v=157">
-<link rel="stylesheet" href="armado-pedido.css?v=144">
-<link rel="stylesheet" href="reparto-fotos.css?v=117">
+<link rel="stylesheet" href="armado-pedido.css?v=165">
+<link rel="stylesheet" href="reparto-fotos.css?v=165">
 <link rel="stylesheet" href="gestion.css?v=159">
 <link rel="stylesheet" href="admin.css?v=164">
 <link rel="stylesheet" href="auditoria.css?v=149">
-<link rel="stylesheet" href="reparto-control.css?v=117">
+<link rel="stylesheet" href="reparto-control.css?v=165">
 <link rel="stylesheet" href="cargar-pedido.css?v=161">
 <script src="marca/marca.js"></script>
 <!-- Cliente de Supabase (UMD -> window.supabase). Guardado en el repo, no
@@ -2502,6 +2502,7 @@ async function sbUpdatePedido(data) {
     direccion: data.direccion || '', notas: data.notas || '', retiro: !!data.retiro
   };
   const its = (data.items || []).map((it, i) => ({
+    id: it.id || null,
     producto: it.prod, cantidad: Number(it.qty) || 1,
     fetear: !!it.fetear, sin_cuero: !!it.sinCuero, en_unidades: !!it.unidades, medida: medidaGuardar(it), orden: i
   }));
@@ -6079,6 +6080,7 @@ function addItemRowWith(type, it) {
   const container = document.getElementById(ROW_CONTAINERS[type]);
   const row = container.lastElementChild;
   if (!row) return;
+  if (type === 'ped' && it.id) row.dataset.itemId = String(it.id);
   row.querySelector('.ac-input').value = it.prod;
   row.querySelector('.qty-input').value = it.qty;
   row.querySelector('.fetear-input').checked = !!it.fetear;
@@ -6104,6 +6106,7 @@ function getItemRows(type) {
     const qty  = parseFloat(row.querySelector('.qty-input').value);
     if (!prod) return;
     const it = { prod, qty: qty > 0 ? qty : 1 };
+    if (type === 'ped' && row.dataset.itemId) it.id = Number(row.dataset.itemId);
     // El tick solo vale si el producto sigue siendo feteable (por si se
     // tildó y después se cambió el nombre por otro producto).
     const info = prodInfo(prod);
@@ -6670,9 +6673,9 @@ function abrirInstalar() {
 <script src="auditoria.js?v=162"></script>
 <script src="bonificaciones-cliente.js?v=164"></script>
 <script src="admin.js?v=164"></script>
-<script src="reparto-fotos.js?v=117"></script>
-<script src="armado-pedido.js?v=144"></script>
-<script src="reparto-control.js?v=134"></script>
+<script src="reparto-fotos.js?v=165"></script>
+<script src="armado-pedido.js?v=165"></script>
+<script src="reparto-control.js?v=165"></script>
 <script src="reparto-vivo.js?v=144"></script>
 </body>
 </html>

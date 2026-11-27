@@ -182,3 +182,7 @@ body.ap-abierto { overflow:hidden; }
 .ap-photo-gallery:empty{display:none}
 
 .ap-item.ap-incidencia{border-color:#cbb7df}.ap-incidencia .ap-item-head{background:#f5effa}.ap-incidencia .ap-item-name,.ap-incidencia .ap-item-status{color:#69428c}.ap-incidencia .ap-number{background:#805ca0;color:white}
+/* Preparación conservada después de editar el pedido. */
+.ap-item.ap-edit-warning{border:2px solid #c64040}
+.ap-edit-warning .ap-number{background:#fff0f0;color:#b32424;border:1px solid #eaa4a4}
+.ap-edit-warning .ap-photo-preview,.ap-edit-warning .ap-input-unit{outline:2px solid #c64040;outline-offset:2px;border-radius:10px}

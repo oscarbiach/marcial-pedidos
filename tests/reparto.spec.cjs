@@ -961,6 +961,33 @@ test('varias fotos del sustituto conservan originales y una falla permite reinte
  await p.locator('[data-ap="quitar-foto-sub"]').nth(1).click();await expect(p.locator('[data-ap="ver-foto-sub"]')).toHaveCount(1);expect(s.db.prep_items[0].sustituto_foto).toBe('sub.jpg');expect(s.errors).toEqual([]);await s.close();
 });
 
+test('preparación a revisar conserva fotos y peso con señal roja y explica solo en el visor',async({browser})=>{
+ const s=await setup(browser);enCola(s,'listo');
+ s.db.prep_items=[{item_id:1,separado:true,peso:3.25,foto:'a.jpg',fotos_extra:['b.jpg'],revisar_edicion:true}];
+ s.db.prep_retirados=[{pedido_id:'p1',item_id:229,producto:'Producto retirado',preparacion:{peso:1.2,foto:'retirada.jpg'}}];
+ const p=await s.open('Oscar');await p.locator('.rv-listo .rv-card h3').click();await p.locator('[data-rc="expandir"]').click();
+ await expect(p.locator('.rc-edit-warning')).toHaveCount(1);
+ await expect(p.locator('.rc-edit-warning')).toContainText('3,25 kg');
+ await expect(p.locator('.rf-edit-warning')).toHaveCount(0);
+ await expect(p.locator('.rf-retirados')).toContainText('Producto retirado');
+ await expect(p.locator('.rc-table-wrap')).not.toContainText('Producto retirado');
+ await p.locator('[data-rf-item="229"]').click();
+ await expect(p.locator('.rf-edit-warning')).toContainText('se retiró');
+ await p.keyboard.press('Escape');
+ await p.locator('[data-path="a.jpg"]').click();
+ await expect(p.locator('.rf-edit-warning')).toContainText('El pedido fue editado');
+ await p.keyboard.press('ArrowRight');await expect(p.locator('.rf-count')).toHaveText('2/2');
+ await p.keyboard.press('Escape');await p.locator('[data-rc="editar"]').click();await abrirProducto(p);
+ await expect(p.locator('#ap-item-1')).toHaveClass(/ap-edit-warning/);
+ await expect(p.locator('#ap-content .rf-retirados')).toContainText('1,2 kg');
+ await expect(p.locator('[data-ap="peso"]')).toHaveValue('3,25');
+ await expect(p.locator('[data-ap="ver-foto"]')).toHaveCount(2);
+ await p.locator('[data-ap="ver-foto"]').first().click();
+ await expect(p.locator('.rf-edit-warning')).toBeVisible();
+ await p.screenshot({path:'test-results/preparacion-revisar-preview.png',animations:'disabled'});
+ expect(s.writes).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+});
+
 test('visor PC navega solo las fotos del producto y vuelve al remito al cerrar',async({browser})=>{
  const s=await setup(browser);enCola(s,'listo');s.db.prep_items=[{item_id:1,separado:true,falta:true,enviado:1,foto:'a.jpg',fotos_extra:['b.jpg','c.jpg'],sustituto:'Pan',sustituto_cantidad:1,sustituye:1,sustituto_medida:'caja',sustituto_foto:'s1.jpg',sustituto_fotos_extra:['s2.jpg']}];
  const p=await s.open('Oscar');await p.locator('.rv-listo .rv-card h3').click();await p.locator('[data-rc="expandir"]').click();
