@@ -128,6 +128,9 @@ const uuid=()=>crypto.randomUUID();
  ag=await one('select escrito_en::text e from seg_agenda where cliente_id=$1',[C(1)]);assert.equal(ag.e,hoy);   // el reintento no pisó el nuevo «Le escribí»
  await call('seg_contacto_registrar',[uuid(),C(1),'no_interesa','2026-12-08','Por ahora no','2026-11-20']);
  ag=await one('select fecha::text f,escrito_en::text e from seg_agenda where cliente_id=$1',[C(1)]);assert.deepEqual(ag,{f:'2026-12-08',e:null});
+ // Separar fechas de las muestras: PGlite puede completar dos registros
+ // en el mismo milisegundo y el orden entre fechas iguales no está definido.
+ await db.query("update seg_contactos set creado_en=creado_en-interval '1 second' where cliente_id=$1",[C(1)]);
  await call('seg_escribi',[C(1),hoy]);await call('seg_contacto_registrar',[uuid(),C(1),'no_contesto','2026-12-30','no cuenta la fecha',null]);
  ag=await one('select fecha::text f,escrito_en::text e from seg_agenda where cliente_id=$1',[C(1)]);assert.deepEqual(ag,{f:'2026-12-08',e:null});   // no_contesto: solo deja de esperar; no toca el día elegido
  assert.equal((await one("select volver_el from seg_contactos where resultado='no_contesto' and cliente_id=$1",[C(1)])).volver_el,null);
@@ -135,6 +138,7 @@ const uuid=()=>crypto.randomUUID();
  await assert.rejects(call('seg_contacto_registrar',[uuid(),C(1),'quizas',null,null,null]),e=>e.code==='22023');
  await assert.rejects(call('seg_contacto_registrar',[uuid(),C(1),'otro',null,'x'.repeat(501),null]),e=>e.code==='22023');
  const hist=await call('seg_contactos_leer',[C(1)]);assert.equal(hist.length,6);assert.equal(hist[0].resultado,'no_contesto');assert.equal(hist.at(-1).autor,'Thiago');
+ await db.query("update seg_contactos set creado_en=creado_en-interval '1 second' where cliente_id=$1",[C(1)]);
  for(let i=0;i<35;i++)await call('seg_contacto_registrar',[uuid(),C(1),'otro',null,'n'+i,null]);
  assert.equal((await call('seg_contactos_leer',[C(1)])).length,30);   // últimos 30
 
