@@ -1,7 +1,7 @@
 const {test,expect}=require('@playwright/test');
 const mockClient = `window.supabase={createClient:()=>({
  auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>({}),signOut:async()=>({})},
- from(table){const filters=[];const q={select(){return q},eq(k,v){filters.push(['eq',k,v]);return q},neq(k,v){filters.push(['neq',k,v]);return q},is(k,v){filters.push(['eq',k,v]);return q},in(k,v){filters.push(['in',k,v]);return q},order(){return q},limit(){return q},range(){return q},or(){return q},upsert(value){q.value=value;return q},update(value){q.value=value;return q},then(a,b){return window.__db({table,filters,value:q.value}).then(a,b)}};return q},
+ from(table){const filters=[];const q={select(){return q},eq(k,v){filters.push(['eq',k,v]);return q},neq(k,v){filters.push(['neq',k,v]);return q},gte(k,v){filters.push(['gte',k,v]);return q},lte(k,v){filters.push(['lte',k,v]);return q},is(k,v){filters.push(['eq',k,v]);return q},in(k,v){filters.push(['in',k,v]);return q},order(){return q},limit(){return q},range(){return q},or(){return q},upsert(value){q.value=value;return q},update(value){q.value=value;return q},then(a,b){return window.__db({table,filters,value:q.value}).then(a,b)}};return q},
  rpc:(name,args)=>window.__db({name,args,who:typeof state==='undefined'?null:state.who}),
  channel(){const callbacks=[];return {on(type,filter,cb){callbacks.push([filter.table,cb]);return this},subscribe(cb){window.__listeners=(window.__listeners||[]).concat(callbacks);queueMicrotask(()=>cb?.('SUBSCRIBED'));return this}}},
  removeChannel(){window.__listeners=[]},storage:{from:()=>({createSignedUrls:async paths=>({data:paths.map(path=>({path,signedUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII='}))}),upload:(path,blob)=>window.__db({upload:path,size:blob.size})})}
@@ -112,7 +112,7 @@ async function setup(browser,{turnosPlegados=false}={}){
   if(q.value){writes.push(q);if(failItem&&q.table==='prep_items')return {error:{message:'Sin conexión'}};const key=q.table==='prep_items'?'item_id':'pedido_id'; const row=db[q.table].find(r=>r[key]===q.value[key]);if(row)Object.assign(row,q.value);else db[q.table].push(q.value);
    if(q.table==='prep_items'){const p=db.pedidos.find(p=>p.pedido_items.some(i=>i.id===q.value.item_id));if(p){p.remito_hecho=false;const c=db.prep_pedidos.find(x=>x.pedido_id===p.id);if(c){c.controlado=false;c.control_firma=null;}}}
    setTimeout(()=>emit(q.table),0);return {data:null};}
-  return {data:(db[q.table]||[]).filter(row=>(q.filters||[]).every(([op,k,v])=>op==='eq'?row[k]===v:op==='neq'?row[k]!==v:v.includes(row[k])))};
+  return {data:(db[q.table]||[]).filter(row=>(q.filters||[]).every(([op,k,v])=>op==='eq'?row[k]===v:op==='neq'?row[k]!==v:op==='gte'?row[k]>=v:op==='lte'?row[k]<=v:v.includes(row[k])))};
  }
  async function open(who,viewport,options={}){
   const page=await browser.newPage({viewport:viewport||{width:1440,height:1000},serviceWorkers:'block',...options});pages.push(page);
@@ -1409,4 +1409,24 @@ test('Pagos proveedores: carga, errores, permisos y transferencia sin salir de l
  await t.locator('[data-pgv="transferir"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);await t.locator('[data-modo="transferido"]').click();await expect(t.locator('.pgv-pago')).toContainText('Pagado');await expect(t.locator('[data-pgv="editar"]')).toHaveCount(0);
  await t.setViewportSize({width:390,height:844});await t.screenshot({path:'test-results/pagos-proveedores-movil.png',animations:'disabled'});expect(await t.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await t.locator('[data-pgv="config"]').click();await expect(t.locator('[data-pgv="editar"]')).toBeVisible();await t.locator('[data-pgv="editar"]').click();await expect(t.locator('#pgv-modal input')).toHaveCount(3);await t.locator('#pgv-modal [name="importe"]').fill('200');await t.locator('#pgv-modal [type="submit"]').click();await expect(t.locator('.pgv-pago')).toContainText('200,00');await t.locator('[data-pgv="eliminar"]').click();await t.locator('#pgv-modal [type="submit"]').click();await t.locator('[data-modo="eliminados"]').click();await expect(t.locator('[data-pgv="restaurar"]')).toBeVisible();await t.locator('[data-pgv="restaurar"]').click();await expect(t.locator('.pgv-pago')).toHaveCount(0);expect(s.db.proveedores_pagos[0].importe).toBe('200');expect(s.errors).toEqual([]);await s.close();
+});
+
+test('Llegadas de proveedores: semana laborable para Oscar, Joaquín y Thiago',async({browser})=>{
+ const s=await setup(browser);
+ s.db.proveedores_llegadas=[{id:'l1',fecha:'2026-11-17',proveedor:'Proveedor de ejemplo',detalle:'Harina',hora:'10:00',recibido:false,version:1}];
+ for(const who of ['Oscar','Joaquin','Thiago','Juan Marcos','Mateo']){
+   const p=await s.open(who);
+   const boton=p.locator('#pcNav [data-tab="llegadas"]');
+   if(['Oscar','Joaquin','Thiago'].includes(who)){
+     await boton.click();await expect(p.locator('.cp-day')).toHaveCount(5);
+     await expect(p.locator('.cp-card')).toContainText('Proveedor de ejemplo');
+     await p.getByRole('button',{name:'Semana siguiente'}).click();await expect(p.locator('.cp-empty')).toHaveCount(5);
+     await p.getByRole('button',{name:'Esta semana'}).click();await expect(p.locator('.cp-card')).toHaveCount(1);
+     await p.setViewportSize({width:390,height:844});await expect(p.locator('#bottomNav [data-tab="llegadas"]')).toBeVisible();
+     expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   }else{
+     await expect(boton).toBeHidden();await p.evaluate(()=>goTab('llegadas'));await expect(p.locator('#tab-llegadas')).toBeHidden();
+   }
+ }
+ expect(s.errors).toEqual([]);await s.close();
 });
