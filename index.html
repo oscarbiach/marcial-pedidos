@@ -1604,7 +1604,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
 <link rel="stylesheet" href="proveedores-pagos.css?v=162">
 <link rel="stylesheet" href="stock-pantalla.css?v=152">
 <link rel="stylesheet" href="preparacion.css">
-<link rel="stylesheet" href="reparto-vivo.css?v=144">
+<link rel="stylesheet" href="reparto-vivo.css?v=166">
 <link rel="stylesheet" href="turnos.css?v=157">
 <link rel="stylesheet" href="armado-pedido.css?v=165">
 <link rel="stylesheet" href="reparto-fotos.css?v=165">
@@ -1771,6 +1771,7 @@ body.modo-desp #tab-pedidos.active { padding-bottom:86px; }
             title="Mostrar solo los pedidos que retira el cliente en el depósito">
             <svg class="ico ico-sm" aria-hidden="true"><use href="marca/iconos.svg#i-store"/></svg><span>Solo retiros</span><span class="rt-n" id="retiroToggleN"></span>
           </button>
+          <div class="entrega-switch" id="entregaSwitch" role="group" aria-label="Tipo de entrega" hidden></div>
           <button class="refresh-btn" id="refreshBtn" onclick="reload(true)">
             <span class="rb-ico"><svg class="ico" aria-hidden="true"><use href="marca/iconos.svg#i-refresh-cw"/></svg></span><span class="rb-txt">Actualizar</span>
           </button>
@@ -2736,6 +2737,8 @@ let showCancelados = false;
 let searchQuery = '';
 // «Solo retiros» (barra de Pedidos): filtro de presentación, en memoria. Se combina con el buscador.
 let soloRetiros = false;
+let tipoEntregaPedidos='todos';
+function filtroEntregaActual(){return window.RepartoVivo?.envia()?tipoEntregaPedidos:(soloRetiros?'retiro':'todos');}
 // '' = texto escrito a mano (coincidencia parcial).
 // 'cliente' | 'producto' = salió de la lista desplegable (coincidencia exacta).
 let searchTipo = '';
@@ -4462,7 +4465,7 @@ function pedidoBloqueHtml(p) {
         <span>${cargaLabel(p.fecha)}</span>
         <span>${p.items.length} producto${p.items.length !== 1 ? 's' : ''}</span>
       </div>
-      ${(() => { const b = remitoBtnHtml(p); return b ? `<div class="blk-acc">${b}</div>` : ''; })()}
+      ${(() => { const b = (window.RepartoVivo?.botonPedido(p)||'')+remitoBtnHtml(p); return b ? `<div class="blk-acc">${b}</div>` : ''; })()}
     </div>`;
 }
 
@@ -4527,7 +4530,7 @@ function pedidoCardHtml(p) {
           <span class="oc-q">${itemDespachoLabelCorto(p, it)}</span><span class="oc-p">${esc(it.prod)}${itemTags(it)}${itemPartialTagHtml(p, it)}</span>`).join('')}
         ${p.items.length > 3 ? `<div class="oc-mas">+ ${p.items.length - 3} más…</div>` : ''}
       </div>
-      ${(() => { const b = remitoBtnHtml(p); return b ? `<div class="oc-pie">${b}</div>` : ''; })()}
+      ${(() => { const b = (window.RepartoVivo?.botonPedido(p)||'')+remitoBtnHtml(p); return b ? `<div class="oc-pie">${b}</div>` : ''; })()}
     </div>`;
 }
 
@@ -5016,8 +5019,8 @@ function renderPedidos() {
   });
 
   const hayVisibles = atrasados.length + hoyG.length + mananaG.length + sinFecha.length + masAdelante.length + desp.length + canc.length > 0;
-  if (soloRetiros && !hayVisibles) {
-    cuerpo += `<p class="retiro-vacio">${mIco('store', 'ico-sm')} No hay pedidos para retirar con los filtros actuales.</p>`;
+  if (filtroEntregaActual()!=='todos' && !hayVisibles) {
+    cuerpo += `<p class="retiro-vacio">${mIco(filtroEntregaActual()==='retiro'?'store':'truck', 'ico-sm')} No hay pedidos para ${filtroEntregaActual()==='retiro'?'retirar':'repartir'} con los filtros actuales.</p>`;
   } else if (!cuerpo) {
     cuerpo = q
       ? `<p style="text-align:center;color:var(--gray);padding:40px">No hay pedidos que coincidan con "${esc(searchQuery.trim())}"</p>`
@@ -5535,7 +5538,8 @@ function toggleCancelados() {
 //    que aparezcan pedidos ajenos no es un detalle: es leer mal el pedido.
 function pedidosFiltrados() {
   const base = pedidosPorBusqueda();
-  return soloRetiros ? base.filter(p => !!p.retiro) : base;
+  const tipo=filtroEntregaActual();
+  return tipo==='todos'?base:base.filter(p=>!!p.retiro===(tipo==='retiro'));
 }
 function pedidosPorBusqueda() {
   const q = searchQuery.trim().toLowerCase();
@@ -5558,6 +5562,18 @@ function toggleSoloRetiros() {
 // El botón muestra cuántos retiros PENDIENTES hay con la búsqueda actual (lo que hay que preparar o entregar).
 function actualizarRetiroToggle() {
   const b = document.getElementById('retiroToggle'); if (!b) return;
+  const oficina=!!window.RepartoVivo?.envia(),grupo=document.getElementById('entregaSwitch');
+  b.hidden=oficina;grupo.hidden=!oficina;
+  if(oficina){
+    const pendientes=pedidosPorBusqueda().filter(p=>p.estado==='Pendiente'),retiros=pendientes.filter(p=>p.retiro).length;
+    const opciones=[['retiro','Retiro','store',retiros],['reparto','Reparto','truck',pendientes.length-retiros],['todos','Todos','layout-dashboard',pendientes.length]];
+    if(!grupo.childElementCount){
+      grupo.innerHTML=opciones.map(([k,n,i])=>`<button type="button" data-tipo="${k}">${mIco(i,'ico-sm')}${n} <span></span></button>`).join('');
+      grupo.onclick=e=>{const btn=e.target.closest('[data-tipo]');if(btn&&window.RepartoVivo?.envia()){tipoEntregaPedidos=btn.dataset.tipo;renderPedidos();}};
+    }
+    for(const [k,,,n] of opciones){const btn=grupo.querySelector('[data-tipo="'+k+'"]');btn.setAttribute('aria-pressed',String(tipoEntregaPedidos===k));btn.querySelector('span').textContent=n;}
+    return;
+  }
   b.classList.toggle('activo', soloRetiros);
   b.setAttribute('aria-pressed', soloRetiros ? 'true' : 'false');
   const n = pedidosPorBusqueda().filter(p => p.retiro && p.estado === 'Pendiente').length;
@@ -6676,6 +6692,6 @@ function abrirInstalar() {
 <script src="reparto-fotos.js?v=165"></script>
 <script src="armado-pedido.js?v=165"></script>
 <script src="reparto-control.js?v=165"></script>
-<script src="reparto-vivo.js?v=144"></script>
+<script src="reparto-vivo.js?v=166"></script>
 </body>
 </html>

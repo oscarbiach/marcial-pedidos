@@ -7,20 +7,20 @@
   const etapas = { pendiente: 'Sin enviar', por_preparar: 'Por preparar', preparando: 'Preparando', listo: 'Listos' };
   const siguiente = { pendiente: 'por_preparar', por_preparar: 'preparando', preparando: 'listo' };
   const anterior = { por_preparar: 'pendiente', preparando: 'por_preparar', listo: 'preparando' };
-  const accion = { pendiente: 'Enviar a preparar', preparando: 'Marcar listo' };
+  const accion = { pendiente: 'Enviar a preparar', por_preparar:'Empezar preparación', preparando: 'Marcar listo' };
   const icono = nombre => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="marca/iconos.svg#i-${nombre}"/></svg>`;
   const cantidadTarjeta = it => repCantidad(it).replace(/(\d)u\b/g,'$1 un.');
   const S = { filas: new Map(), pedidos: [], canal: null, timer: null, debounce: null, loading: false,
     again: false, ready: false, live: false, error: '', busy: new Set(), legacy: false, drag: null, dirty: false, usuario: '', generation: 0, revision:0,
     items: new Map(), dias: new Map(), diaActual: '', busqueda:'', turno:'todos' };
-  const visible = p => S.turno==='todos'||Turnos.clave(p)===S.turno;
+  const visible = p => envia()||S.turno==='todos'||Turnos.clave(p)===S.turno;
   const mateo = () => state.who === 'Mateo';
   const envia = () => ['Oscar','Thiago','Joaquin'].includes(state.who);
   const opera = () => envia() || mateo();
   const etapa = id => S.filas.get(id)?.etapa || 'pendiente';
   const elegible = p => p.estado === 'Pendiente' && !p.retiro && !p.enCola && !p.errorCola && !p.eliminado_en;
   const permiso = (de, a) => opera() && (siguiente[de] === a || anterior[de] === a) &&
-    (envia() || (de !== 'pendiente' && a !== 'pendiente'));
+    de !== 'pendiente' && a !== 'pendiente';
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function acceso() {
@@ -43,6 +43,11 @@
     navegacion();
   }
   function navegacion() {
+    if(envia() && state.pin && ['pedidos','reparto'].includes(activeTab)){
+      if(!S.canal) iniciar();
+      else if(activeTab==='reparto' && S.tabAnterior!=='reparto') programar();
+    }
+    S.tabAnterior=activeTab;
     const nav=$('rv-mateo-nav');if(!nav||!mateo())return;
     const reparto=activeTab==='reparto',destino=reparto?'Pedidos':'Reparto';
     nav.innerHTML=icono(reparto?'shopping-cart':'truck');
@@ -65,7 +70,7 @@
     S.canal = sb.channel('reparto-vivo-' + Date.now());
     ['prep_cola','pedidos','pedido_items','prep_items','prep_pedidos','prep_productos'].forEach(table => {
       S.canal.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-        programar();
+        if(!envia() || activeTab==='reparto' || (activeTab==='pedidos' && ['prep_cola','pedidos'].includes(table))) programar();
         if (window.Preparacion) Preparacion.refrescar();
         if (window.RepartoControl) RepartoControl.refrescar();
       });
@@ -76,7 +81,7 @@
       pintar();
     });
     // Recuperación ante cortes/eventos perdidos; no es la vía principal de actualización.
-    S.timer = setInterval(() => { if (!document.hidden && activeTab === 'reparto') cargar(); }, 15000);
+    S.timer = setInterval(() => { if (!document.hidden && (activeTab === 'reparto'||(envia()&&activeTab==='pedidos'))) cargar(); }, 15000);
     cargar();
   }
   async function cargar() {
@@ -87,8 +92,10 @@
     try {
       // Paginar evita el límite de 1000 de PostgREST. La cola se consulta solo para pedidos vigentes.
       const pedidos = [];
+      const resumen = envia() && activeTab==='pedidos';
+      const campos = resumen ? 'id' : 'id,fecha,quien,cliente,fecha_entrega,turno,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)';
       for (let desde = 0; ; desde += 500) {
-        const {data,error} = await pedir(sb.from('pedidos').select('id,fecha,quien,cliente,fecha_entrega,turno,direccion,notas,estado,fecha_despacho,retiro,remito_hecho,eliminado_en,pedido_items(id,producto,cantidad,fetear,sin_cuero,en_unidades,medida,orden,cantidad_entregada,motivo_faltante,detalle_faltante)').eq('estado','Pendiente').is('eliminado_en',null).or('retiro.eq.false,retiro.is.null').order('id').range(desde,desde+499));
+        const {data,error} = await pedir(sb.from('pedidos').select(campos).eq('estado','Pendiente').is('eliminado_en',null).or('retiro.eq.false,retiro.is.null').order('id').range(desde,desde+499));
         if (error) throw error;
         pedidos.push(...(data || []));
         if (!data || data.length < 500) break;
@@ -98,20 +105,24 @@
       // Aun sin pedidos verificamos la disponibilidad del esquema.
       if (!consultas.length) consultas.push(sb.from('prep_cola').select('*').limit(0));
       const colas = await Promise.all(consultas.map(q=>pedir(q)));
-      const itemIds=pedidos.flatMap(p=>(p.pedido_items||[]).map(i=>i.id)),detalles=[];
-      for(let i=0;i<itemIds.length;i+=150){const r=await pedir(sb.from('prep_items').select('*').in('item_id',itemIds.slice(i,i+150)));if(r.error)throw r.error;detalles.push(...(r.data||[]));}
       for (const result of colas) if (result.error) throw result.error;
-      if (generation !== S.generation || revision !== S.revision) { S.again=true; return; }
-      S.items=new Map(detalles.map(x=>[x.item_id,x]));
-      S.filas = new Map(colas.flatMap(r => r.data || []).map(r => [r.pedido_id,r]));
-      S.pedidos = pedidos.map(mapPedido_).filter(elegible);
+      const filas=new Map(colas.flatMap(r=>r.data||[]).map(r=>[r.pedido_id,r]));
+      const itemIds=resumen ? [] : pedidos.filter(p=>['preparando','listo'].includes(filas.get(p.id)?.etapa))
+        .flatMap(p=>(p.pedido_items||[]).map(i=>i.id)),detalles=[];
+      for(let i=0;i<itemIds.length;i+=150){const r=await pedir(sb.from('prep_items').select('*').in('item_id',itemIds.slice(i,i+150)));if(r.error)throw r.error;detalles.push(...(r.data||[]));}
+      if (generation !== S.generation || revision !== S.revision || (resumen && activeTab==='reparto')) { S.again=true; return; }
+      S.filas=filas;
+      if(!resumen){
+        S.items=new Map(detalles.map(x=>[x.item_id,x]));
+        S.pedidos=pedidos.map(mapPedido_).filter(elegible);
+      }
       S.ready = true; S.error = '';
     } catch (e) {
       if (generation === S.generation && revision === S.revision) S.error = 'No se pudo sincronizar. Revisá la conexión y reintentá.';
       else S.again=true;
     } finally {
       S.loading = false;
-      pintar();
+      actualizarAccionesPedidos();pintar();
       if (S.again) { S.again = false; programar(); }
     }
   }
@@ -161,15 +172,16 @@
     const fecha = etiquetaFecha(p.fechaEntrega);
     const abre=['preparando','listo'].includes(e);
     return `<article class="rv-card${!navigator.onLine||S.error||busy?' rv-no-drag':''}" tabindex="0" data-id="${esc(p.id)}" data-etapa="${e}" aria-label="${esc(p.cliente)} · ${etapas[e]}${abre?' · Tocar para ver el pedido':''}" aria-keyshortcuts="ArrowLeft ArrowRight${abre?' Enter Space':''}" aria-busy="${busy}">
+      ${envia()?`<button type="button" class="rv-quitar" data-rv="quitar" data-id="${esc(p.id)}" title="Sacar del reparto" aria-label="Sacar del reparto a ${esc(p.cliente)}" ${busy||!S.ready||S.error?'disabled':''}>${icono('x')}</button>`:''}
       ${!mateo()?`<div class="rv-card-top"><span>${esc(fecha)}</span><span>${esc(p.quien || '')}</span></div>`:''}
       <h3>${esc(p.cliente)}</h3>${e==='listo'&&p.remitoHecho?'<div class="rv-remito-done">✓ Remito hecho</div>':''}
       ${mateo()?`<span class="turno-chip">${Turnos.nombre(p.turno)}</span>`:Turnos.selector(p,busy||!S.ready||!!S.error)}
       <p class="rv-dir">${esc(p.direccion || 'Sin dirección')}</p>
       <ul>${p.items.map(it=>productoTarjeta(it,e)).join('')}</ul>
       ${p.notas ? `<p class="rv-note ${esReposicion(p)?'nota-reposicion':''}">${esc(p.notas)}</p>` : ''}
-      ${envia()&&e==='por_preparar'?`<button data-rv="editar" data-id="${esc(p.id)}">Editar pedido</button>`:''}
+      ${envia()&&e!=='pendiente'?`<button data-rv="editar" data-id="${esc(p.id)}">Editar pedido</button>`:''}
       ${e==='preparando'&&['Oscar','Joaquin'].includes(state.who)?`<button data-rv="marcar-remito" data-id="${esc(p.id)}" aria-pressed="${!!p.remitoHecho}" class="${p.remitoHecho?'rv-remito-done':''}" ${busy||!S.ready||S.error?'disabled':''}>${p.remitoHecho?'✓ Remito hecho':'Marcar remito hecho'}</button>`:''}
-      ${['pendiente','preparando'].includes(e) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
+      ${(e==='preparando'||(envia()&&e==='por_preparar')) && permiso(e,next) ? `<div class="rv-actions"><button class="rv-primary" data-rv="mover" data-id="${esc(p.id)}" data-to="${next}" ${busy || !S.ready || S.error ? 'disabled' : ''}>${busy ? 'Guardando…' : accion[e] + ' →'}</button></div>` : ''}
     </article>`;
   }
   function etiquetaFecha(f) {
@@ -210,7 +222,7 @@
     const foco = document.activeElement?.closest('[data-rv]');
     const focusKey = foco && { id: foco.dataset.id, action: foco.dataset.rv, to: foco.dataset.to, day: foco.dataset.day };
     const scrolls = [...r.querySelectorAll('.rv-list')].map(el => [el.dataset.col,el.scrollTop]);
-    const cols = mateo() ? ['por_preparar','preparando','listo'] : ['pendiente','por_preparar','preparando','listo'];
+    const cols = mateo() || envia() ? ['por_preparar','preparando','listo'] : ['pendiente','por_preparar','preparando','listo'];
     const total = S.pedidos.filter(p => visible(p)&&etapa(p.id) !== 'pendiente').length;
     const listos = S.pedidos.filter(p => visible(p)&&etapa(p.id) === 'listo').length;
     const conexion=`<span class="rv-connection ${S.live && !S.error && navigator.onLine ? 'online' : ''}" role="status">${!navigator.onLine ? 'Sin conexión' : S.error ? 'Sin sincronizar' : S.live ? 'En vivo' : 'Reconectando…'}</span>`;
@@ -225,8 +237,8 @@
       <div class="rv-status">${conexion}
       <button data-rv="refresh" aria-label="Actualizar preparación">↻ Actualizar</button><button data-rv="hojas">Hojas de reparto</button></div></header>${resumen}`}
       ${S.error ? `<div class="rv-error" role="alert">${esc(S.error)} <button data-rv="refresh">Reintentar</button></div>` : ''}
-      ${Turnos.filtros(S.turno,'data-rv-turno')}
-      <div class="rv-board ${mateo() ? 'rv-mateo' : ''}">${cols.map(e => {
+      ${envia()?'':Turnos.filtros(S.turno,'data-rv-turno')}
+      <div class="rv-board ${mateo() ? 'rv-mateo' : envia()?'rv-oficina':''}">${cols.map(e => {
         const pedidos = S.pedidos.filter(p => visible(p)&&etapa(p.id) === e && (e!=='pendiente'||coincide(p))).sort((a,b) => {
           if(e === 'pendiente') return (a.fechaEntrega || '9999').localeCompare(b.fechaEntrega || '9999');
           return String(S.filas.get(a.id)?.enviado_en || '').localeCompare(String(S.filas.get(b.id)?.enviado_en || '')) || a.id.localeCompare(b.id);
@@ -246,12 +258,43 @@
       } else el.animate([{opacity:0,transform:'translateY(14px)'},{opacity:1,transform:'none'}],{duration:300,easing:'ease-out'});
     });
   }
-  async function mover(id, to) {
+  function botonPedido(p){
+    if(!envia()||!elegible(p)||despActivo)return '';
+    return `<button type="button" class="remito-btn rv-enviar" data-envio-pedido="${esc(p.id)}" onclick="event.stopPropagation();RepartoVivo.accionPedido(this)" ${S.busy.has(p.id)||(!S.ready&&!S.error)?'disabled':''}>${textoEnvio(p.id)}</button>`;
+  }
+  function textoEnvio(id){
+    if(S.busy.has(id))return 'Guardando…';
+    if(S.error)return 'Reintentar conexión';
+    if(!S.ready)return 'Consultando reparto…';
+    const e=etapa(id);
+    return icono(e==='pendiente'?'truck':'circle-check')+(e==='pendiente'?'Enviar a reparto':'En reparto · '+etapas[e]);
+  }
+  function actualizarAccionesPedidos(){
+    if(!envia())return;
+    $('pedidosList')?.querySelectorAll('[data-envio-pedido]').forEach(b=>{
+      const id=b.dataset.envioPedido,html=textoEnvio(id);
+      if(b._textoEnvio!==html){b.innerHTML=html;b._textoEnvio=html;}
+      b.disabled=S.busy.has(id)||(!S.ready&&!S.error);
+    });
+  }
+  function accionPedido(b){
+    const id=b.dataset.envioPedido;
+    if(!envia()||activeTab!=='pedidos'||despActivo)return;
+    if(S.error || !S.ready){cargar();return;}
+    if(etapa(id)==='pendiente'){mover(id,'preparando',true);return;}
+    const p=state.pedidos.find(p=>p.id===id);
+    if(p && !S.pedidos.some(p=>p.id===id))S.pedidos.push(p);
+    S.legacy=false;goTab('reparto');
+    const card=$('rv-raiz')?.querySelector(`.rv-card[data-id="${CSS.escape(id)}"]`);
+    card?.focus({preventScroll:true});card?.scrollIntoView({block:'nearest'});
+  }
+  async function mover(id, to, despacho=false) {
     const de = etapa(id), fila = S.filas.get(id);
     const generation = S.generation;
-    if (!permiso(de,to) || S.busy.has(id) || !S.ready || S.error) return;
+    const permitido=despacho ? envia()&&((de==='pendiente'&&to==='preparando')||(de!=='pendiente'&&to==='pendiente')) : permiso(de,to);
+    if (!permitido || S.busy.has(id) || !S.ready || S.error) return;
     if (!navigator.onLine) { toast('Sin conexión. El pedido no se movió.'); return; }
-    S.revision++; S.busy.add(id); pintar();
+    S.revision++; S.busy.add(id); actualizarAccionesPedidos();pintar();
     try {
       const {data,error} = await pedir(sb.rpc('prep_mover',{p_id:id,p_etapa:to,p_version:fila?.version || 0,p_quien:state.who}));
       if (error) throw error;
@@ -259,9 +302,9 @@
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error('No llegó la confirmación. Actualizá antes de reintentar.');
       S.revision++; S.filas.set(id,row);
-      toast(to === 'por_preparar' && de === 'pendiente' ? 'Enviado a la cola de Mateo' : 'Pedido en ' + etapas[to].toLowerCase());
+      toast(to==='pendiente'?'Se sacó del reparto. El pedido sigue en Pedidos.':'Pedido en '+etapas[to].toLowerCase());
     } catch (e) { if(generation===S.generation){if(e.code==='REPARTO_TIMEOUT')S.error='Verificando el estado del pedido…';toast(e.message || 'No se pudo mover el pedido.');} }
-    finally { if (generation === S.generation) { S.busy.delete(id); pintar(); cargar(); } }
+    finally { if (generation === S.generation) { S.busy.delete(id); actualizarAccionesPedidos();pintar(); cargar(); } }
   }
   async function marcarRemito(id) {
     if (!['Oscar','Joaquin'].includes(state.who)||etapa(id)!=='preparando'||S.busy.has(id)||!S.ready||S.error) return;
@@ -290,7 +333,8 @@
     if (b.dataset.rv === 'dia') { S.dias.set(b.dataset.day,b.getAttribute('aria-expanded') !== 'true'); pintar(); }
     if (b.dataset.rv === 'mover') mover(b.dataset.id,b.dataset.to);
     if (b.dataset.rv === 'refresh') cargar();
-    if(b.dataset.rv==='editar'&&envia()&&etapa(b.dataset.id)==='por_preparar'){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p)openPedidoEdit(p.id,p);}
+    if(b.dataset.rv==='quitar'&&envia()){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p&&confirm('¿Sacar del reparto a '+p.cliente+'? El pedido seguirá en Pedidos.'))mover(p.id,'pendiente',true);}
+    if(b.dataset.rv==='editar'&&envia()&&etapa(b.dataset.id)!=='pendiente'){const p=S.pedidos.find(x=>x.id===b.dataset.id);if(p)openPedidoEdit(p.id,p);}
     if (b.dataset.rv === 'remito' && envia()) RepartoControl.remito(b.dataset.id);
     if (b.dataset.rv === 'camioneta') RepartoControl.camioneta(S.pedidos.filter(p=>visible(p)&&etapa(p.id)==='listo').map(p=>p.id));
     if (b.dataset.rv === 'hojas') { S.legacy = true; montar(); renderReparto(); }
@@ -415,5 +459,5 @@
   window.addEventListener('pageshow',()=>{cancel();if(S.canal)cargar();});
   document.addEventListener('keydown', e => { if (e.key === 'Escape') cancel(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); else if (S.canal) cargar(); });
-  window.RepartoVivo = { montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
+  window.RepartoVivo = { envia, botonPedido, accionPedido, montar, acceso, navegacion, volver, refrescar: programar, activo: () => !S.legacy || mateo(), detener };
 })();

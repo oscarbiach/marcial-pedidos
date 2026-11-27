@@ -138,7 +138,7 @@ async function setup(browser,{turnosPlegados=false}={}){
   },{w:who,products:db.productos});
   if(who==='Juan Marcos')return page;
   await expect(page.locator('.rv-connection')).toHaveText('En vivo');
-  await expect(page.locator('.rv-empty').first()).not.toContainText('Cargando');
+  await expect(page.locator('.rv-empty').filter({hasText:'Cargando'})).toHaveCount(0);
   if(!turnosPlegados){await page.evaluate(()=>RepartoVivo.montar());await page.clock.runFor(400);}
   return page;
  }
@@ -207,15 +207,22 @@ test('turno elegido se guarda y conserva al editar solo productos o mover fecha'
  expect(s.errors).toEqual([]);await s.close();
 });
 
+async function irAPedidos(page,s){
+ await page.evaluate(rows=>{state.pedidos=rows.filter(r=>!r.eliminado_en).map(mapPedido_);goTab('pedidos');renderPedidos();},s.db.pedidos);
+}
 test('dos pantallas: envío, avance, retorno y sincronización sin refrescar',async({browser})=>{
  const s=await setup(browser),oscar=await s.open('Oscar'),mateo=await s.open('Mateo');
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
  await expect(mateo.locator('#pcNav')).toBeHidden();await expect(mateo.locator('#rv-mateo-nav')).toBeVisible();
  await mateo.evaluate(()=>goTab('cargar'));
  await expect(mateo.locator('#tab-reparto')).toHaveClass(/active/);
- await expect(oscar.locator('.rv-pendiente .rv-card')).toHaveCount(2);
- await oscar.locator('[data-id="p1"][data-rv="mover"][data-to="por_preparar"]').click();
- await expect(mateo.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await irAPedidos(oscar,s);
+ const envio=oscar.locator('[data-envio-pedido="p1"]').first();
+ await envio.click();await expect(envio).toContainText('En reparto · Preparando');
+ await expect(mateo.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await envio.click();await expect(oscar.locator('#tab-reparto')).toHaveClass(/active/);
+ await mateo.locator('.rv-card[data-id="p1"]').press('ArrowLeft');
+ await expect(oscar.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
  await mateo.locator('.rv-card[data-id="p1"]').press('ArrowRight');
  await expect(oscar.locator('.rv-preparando .rv-card')).toHaveCount(1);
  await mateo.locator('[data-id="p1"][data-to="listo"]').click();
@@ -234,8 +241,8 @@ async function touch(page,points,hold=false){
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
 }
 test('gesto corto no cambia de columna, scroll vertical y fallo de escritura',async({browser})=>{
- const s=await setup(browser),page=await s.open('Thiago',{width:390,height:844},{hasTouch:true});
- await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
+ const s=await setup(browser);enCola(s,'por_preparar');s.db.prep_cola.push({pedido_id:'p2',etapa:'por_preparar',version:1});const page=await s.open('Thiago',{width:390,height:844},{hasTouch:true});
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(2);
  const card=page.locator('.rv-card[data-id="p1"]');
  let box=await card.boundingBox();
  await touch(page,[{x:box.x+20,y:box.y+50},{x:box.x+23,y:box.y+80},{x:box.x+25,y:box.y+110}]);
@@ -245,9 +252,9 @@ test('gesto corto no cambia de columna, scroll vertical y fallo de escritura',as
  expect(s.moves).toHaveLength(0);
  await expect(page.locator('#ap-raiz')).toBeHidden();
  await page.clock.runFor(400); // terminar la supresión del click que genera el gesto táctil
- s.fail();await page.locator('[data-id="p2"][data-to="por_preparar"]').click();
+ s.fail();await page.locator('[data-id="p2"][data-to="preparando"]').click();
  await expect.poll(()=>s.moves.length).toBe(1);
- await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
+ await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(2);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/reparto-mobile.png',fullPage:true});
  expect(s.errors).toEqual([]);await s.close();
@@ -265,61 +272,56 @@ async function soltarEn(page,etapa){
  await page.mouse.move(r.x+r.width/2,r.y+r.height/2,{steps:12});await page.mouse.up();
 }
 test('arrastre libre: destinos válidos, retorno, fuera y Escape',async({browser})=>{
- const s=await setup(browser),page=await s.open('Oscar');
+ const s=await setup(browser);enCola(s,'por_preparar');const page=await s.open('Oscar');
  await agarrar(page,'p1');
- await expect(page.locator('[data-stage="por_preparar"]')).toHaveClass(/rv-drop-allowed/);
+ await expect(page.locator('[data-stage="preparando"]')).toHaveClass(/rv-drop-allowed/);
  await expect(page.locator('[data-stage="listo"]')).not.toHaveClass(/rv-drop-allowed/);
  await soltarEn(page,'listo');expect(s.moves).toHaveLength(0);
- await agarrar(page,'p1');await soltarEn(page,'pendiente');expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await soltarEn(page,'por_preparar');expect(s.moves).toHaveLength(0);
  await agarrar(page,'p1');await page.keyboard.press('Escape');await page.mouse.up();
  await expect(page.locator('.rv-ghost')).toHaveCount(0);expect(s.moves).toHaveLength(0);
  await agarrar(page,'p1');await page.mouse.move(5,90);await page.mouse.up();expect(s.moves).toHaveLength(0);
+ await agarrar(page,'p1');await soltarEn(page,'preparando');
+ await expect(page.locator('.rv-preparando .rv-card')).toHaveCount(1);
+ await agarrar(page,'p1');await soltarEn(page,'listo');
+ await expect(page.locator('.rv-listo .rv-card')).toHaveCount(1);
+ await agarrar(page,'p1');await soltarEn(page,'preparando');
+ await expect(page.locator('.rv-preparando .rv-card')).toHaveCount(1);
  await agarrar(page,'p1');await soltarEn(page,'por_preparar');
  await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
- await agarrar(page,'p1');await soltarEn(page,'pendiente');
- await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(2);
- expect(s.moves.map(m=>m.p_etapa)).toEqual(['por_preparar','pendiente']);
+ expect(s.moves.map(m=>m.p_etapa)).toEqual(['preparando','listo','preparando','por_preparar']);
  await expect(page.locator('#ap-raiz')).toBeHidden();
  expect(s.errors).toEqual([]);await s.close();
 });
 test('arrastre no pisa cambios que llegan de otra pantalla',async({browser})=>{
- const s=await setup(browser),page=await s.open('Oscar');
+ const s=await setup(browser);enCola(s,'por_preparar');const page=await s.open('Oscar');
  await agarrar(page,'p1');
- s.db.prep_cola=[{pedido_id:'p1',etapa:'por_preparar',version:1,actualizado_por:'Thiago'}];
+ s.db.prep_cola=[{pedido_id:'p1',etapa:'preparando',version:2,actualizado_por:'Thiago'}];
  await s.emit('prep_cola');await page.waitForTimeout(350);
  await expect(page.locator('.rv-ghost')).toBeVisible();
- await soltarEn(page,'por_preparar');
+ await soltarEn(page,'preparando');
  expect(s.moves).toHaveLength(0);
- await expect(page.locator('.rv-por_preparar .rv-card')).toHaveCount(1);
+ await expect(page.locator('.rv-preparando .rv-card')).toHaveCount(1);
  expect(s.errors).toEqual([]);await s.close();
 });
-test('fechas plegadas, actualización y cambio de día sin ocultar la cola de Mateo',async({browser})=>{
- const s=await setup(browser);
- s.db.pedidos.push(pedido('p6','Atrasado',{fecha_entrega:'2026-11-14'}),pedido('p7','Mañana',{fecha_entrega:'2026-11-17'}),pedido('p8','Próxima semana',{fecha_entrega:'2026-11-23'}),pedido('p9','Sin fecha',{fecha_entrega:null}));
- const page=await s.open('Joaquin'),mateo=await s.open('Mateo');
- await expect(page.locator('.rv-pendiente .rv-card')).toHaveCount(4);
- await expect(page.locator('[data-day="2026-11-16"]')).toHaveText(/Hoy.*2/);
- await expect(page.locator('[data-day="2026-11-14"]')).toHaveText(/Atrasados/);
- await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','false');
- await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
- await page.locator('[data-day="2026-11-23"]').click();
- await expect(page.locator('.rv-card[data-id="p8"]')).toBeVisible();
- s.db.pedidos.push(pedido('p10','Otro programado',{fecha_entrega:'2026-11-23'}));await s.emit('pedidos');
- await expect(page.locator('#rv-dia-2026-11-23 .rv-card')).toHaveCount(2);
- await expect(page.locator('[data-day="2026-11-23"]')).toHaveAttribute('aria-expanded','true');
- await page.locator('[data-id="p8"][data-to="por_preparar"]').click();
- await expect(mateo.locator('.rv-card[data-id="p8"]')).toBeVisible();
- await page.clock.setSystemTime(new Date('2026-11-17T15:00:00Z'));await page.route('**/manifest.webmanifest?hora=*',r=>r.fulfill({status:200,headers:{Date:'Tue, 17 Nov 2026 15:00:00 GMT'},body:''}));await page.evaluate(()=>sincronizarReloj(true));await s.emit('pedidos');
- await expect(page.locator('[data-day="2026-11-17"]')).toHaveText(/Hoy/);
- await expect(page.locator('[data-day="2026-11-17"]')).toHaveAttribute('aria-expanded','true');
- await expect(page.locator('#rv-dia-2026-11-23')).toBeHidden();
- await page.screenshot({path:'test-results/reparto-fechas.png',fullPage:true});
- expect(s.errors).toEqual([]);await s.close();
+test('oficina saca con la X de cada columna y puede reenviar la misma preparación',async({browser})=>{
+ for(const [who,stage] of [['Oscar','por_preparar'],['Joaquin','preparando'],['Thiago','listo']]){
+  const s=await setup(browser);enCola(s,stage);s.db.prep_items.push({item_id:1,peso:2.5,foto:'prueba.jpg'});
+  const p=await s.open(who),quitar=p.locator('.rv-quitar[data-id="p1"]');
+  await expect(p.locator('[data-stage]')).toHaveCount(3);await expect(p.locator('[data-rv-turno]')).toHaveCount(0);
+  p.once('dialog',d=>d.dismiss());await quitar.click();await expect(quitar).toBeVisible();expect(s.moves).toHaveLength(0);
+  p.once('dialog',d=>d.accept());await quitar.click();await expect(p.locator('.rv-card[data-id="p1"]')).toHaveCount(0);
+  await irAPedidos(p,s);const envio=p.locator('[data-envio-pedido="p1"]').first();await expect(envio).toHaveText('Enviar a reparto');
+  await envio.click();await expect(envio).toContainText('Preparando');expect(s.db.prep_items[0]).toMatchObject({peso:2.5,foto:'prueba.jpg'});
+  expect(s.db.pedidos[0].estado).toBe('Pendiente');expect(s.moves.map(m=>m.p_etapa)).toEqual(['pendiente','preparando']);
+  expect(s.errors).toEqual([]);await s.close();
+ }
 });
 test('autoscroll durante arrastre y limpieza al cambiar de pestaña',async({browser})=>{
  const s=await setup(browser);for(let i=10;i<25;i++)s.db.pedidos.push(pedido('p'+i,'Cliente '+i));
+ s.db.prep_cola=s.db.pedidos.map(p=>({pedido_id:p.id,etapa:'por_preparar',version:1}));
  const page=await s.open('Oscar');await agarrar(page,'p1');
- const list=page.locator('[data-col="pendiente"]'),r=await list.boundingBox();
+ const list=page.locator('[data-col="por_preparar"]'),r=await list.boundingBox();
  await page.mouse.move(r.x+50,Math.min(r.y+r.height-5,930),{steps:10});
  await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(40);
  await page.evaluate(()=>goTab('pedidos'));
@@ -494,8 +496,8 @@ test('novedades remotas preservan borradores; pedido despachado deja de ser edit
 });
 
 test('arrastrar desde el nombre y los productos no selecciona texto ni abre el armado',async({browser})=>{
- const s=await setup(browser),page=await s.open('Oscar');
- for(const [selector,stage] of [['h3','por_preparar'],['li','pendiente']]){
+ const s=await setup(browser);enCola(s,'por_preparar');const page=await s.open('Oscar');
+ for(const [selector,stage] of [['h3','preparando'],['li','por_preparar']]){
   await page.locator('.rv-card[data-id="p1"] '+selector).first().scrollIntoViewIfNeeded();
   const r=await page.locator('.rv-card[data-id="p1"] '+selector).first().boundingBox();
   await page.mouse.move(r.x+12,r.y+8);await page.mouse.down();await page.mouse.move(r.x+70,r.y+15,{steps:8});
@@ -860,11 +862,25 @@ test('procesamiento de foto detenido libera Guardando y permite reintentar',asyn
 });
 
 
-test('buscador de Sin enviar filtra sin afectar otras columnas y conserva texto en vivo',async({browser})=>{
- const s=await setup(browser);enCola(s,'pendiente');s.db.prep_cola.push({pedido_id:'p2',etapa:'preparando',version:1});const p=await s.open('Oscar');
- const input=p.getByRole('textbox',{name:'Buscar en Sin enviar'});await input.pressSequentially('almacen');await expect(input).toHaveValue('almacen');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(1);
- await input.fill('nada');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(0);await expect(p.locator('.rv-preparando .rv-card')).toHaveCount(1);
- await s.emit('pedidos');await expect(input).toHaveValue('nada');await input.fill('');await expect(p.locator('.rv-pendiente .rv-card')).toHaveCount(1);expect(s.moves).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
+test('selector de entrega filtra Pedidos y respeta el acceso de cada perfil',async({browser})=>{
+ const s=await setup(browser);
+ for(const who of ['Oscar','Joaquin','Thiago','Mateo','Juan Marcos']){
+  const p=await s.open(who,who==='Thiago'?{width:390,height:844}:undefined);await irAPedidos(p,s);const grupo=p.locator('#entregaSwitch');
+  if(who==='Mateo'||who==='Juan Marcos'){
+   await expect(grupo).toBeHidden();await expect(p.locator('[data-envio-pedido]')).toHaveCount(0);
+   await expect(p.locator('.rv-quitar')).toHaveCount(0);continue;
+  }
+  await expect(grupo).toBeVisible();await expect(p.locator('#retiroToggle')).toBeHidden();
+  await grupo.locator('[data-tipo="retiro"]').click();await expect(p.locator('[data-envio-pedido]')).toHaveCount(0);
+  await grupo.locator('[data-tipo="reparto"]').click();await expect(p.locator('[data-envio-pedido="p1"]').first()).toBeVisible();
+  await grupo.locator('[data-tipo="todos"]').click();await expect(p.locator('#pedidosList')).toContainText('Retiro');
+  expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const buscar=p.locator('.pedido-search input:visible').first();
+  await buscar.fill('La Esquina');await expect(p.locator('[data-envio-pedido="p1"]')).toHaveCount(0);
+  await expect(p.locator('[data-envio-pedido="p2"]').first()).toBeVisible();
+  await expect(p.locator('[data-envio-pedido="p3"],[data-envio-pedido="p4"],[data-envio-pedido="p5"]')).toHaveCount(0);
+ }
+ expect(s.moves).toHaveLength(0);expect(s.errors).toEqual([]);await s.close();
 });
 
 test('iPad muestra directamente foto en productos y sustitutos con botón alineado',async({browser})=>{
@@ -885,9 +901,9 @@ test('Mateo guarda peso manual y luego agrega foto sin perderlo; Listos abre con
 
 
 test('Enviar a preparar se recupera de una respuesta que nunca llega sin F5',async({browser})=>{
- const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{window.sinRecarga=true;const rpc=sb.rpc;sb.rpc=(n,a)=>{if(n==='prep_mover'&&!window.movimientoColgado){window.movimientoColgado=true;return new Promise(()=>{});}return rpc(n,a);};});
+ const s=await setup(browser);enCola(s,'por_preparar');const p=await s.open('Oscar');await p.evaluate(()=>{window.sinRecarga=true;const rpc=sb.rpc;sb.rpc=(n,a)=>{if(n==='prep_mover'&&!window.movimientoColgado){window.movimientoColgado=true;return new Promise(()=>{});}return rpc(n,a);};});
  const button=p.locator('[data-rv="mover"][data-id="p1"]');await button.click();await expect(button).toHaveText('Guardando…');await p.clock.fastForward(21000);
- await expect(button).toBeEnabled();await button.click();await expect(p.locator('.rv-por_preparar [data-id="p1"].rv-card')).toBeVisible();expect(await p.evaluate(()=>window.sinRecarga)).toBe(true);expect(s.moves).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
+ await expect(button).toBeEnabled();await button.click();await expect(p.locator('.rv-preparando [data-id="p1"].rv-card')).toBeVisible();expect(await p.evaluate(()=>window.sinRecarga)).toBe(true);expect(s.moves).toHaveLength(1);expect(s.errors).toEqual([]);await s.close();
 });
 
 test('guardar producto libera la pantalla si la escritura queda sin respuesta y conserva el borrador',async({browser})=>{
@@ -899,21 +915,21 @@ test('guardar producto libera la pantalla si la escritura queda sin respuesta y 
 
 
 test('movimiento confirmado con respuesta perdida se recupera sin duplicar ni aceptar respuesta tardía',async({browser})=>{
- const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=async(n,a)=>{const result=await rpc(n,a);if(n==='prep_mover'&&!window.respuestaPerdida){window.respuestaPerdida=true;return new Promise(resolve=>window.resolverTarde=()=>resolve(result));}return result;};});
+ const s=await setup(browser);enCola(s,'por_preparar');const p=await s.open('Oscar');await p.evaluate(()=>{const rpc=sb.rpc;sb.rpc=async(n,a)=>{const result=await rpc(n,a);if(n==='prep_mover'&&!window.respuestaPerdida){window.respuestaPerdida=true;return new Promise(resolve=>window.resolverTarde=()=>resolve(result));}return result;};});
  await p.locator('[data-rv="mover"][data-id="p1"]').click();await expect.poll(()=>p.evaluate(()=>!!window.resolverTarde)).toBe(true);await p.clock.fastForward(21000);
- await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(1);
- await p.locator('.rv-por_preparar .rv-card[data-id="p1"]').press('ArrowRight');await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();await p.evaluate(()=>window.resolverTarde());await p.waitForTimeout(200);await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(2);expect(s.errors).toEqual([]);await s.close();
+ await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(1);
+ await p.locator('.rv-preparando .rv-card[data-id="p1"]').press('ArrowRight');await expect(p.locator('.rv-listo .rv-card[data-id="p1"]')).toBeVisible();await p.evaluate(()=>window.resolverTarde());await p.waitForTimeout(200);await expect(p.locator('.rv-listo .rv-card[data-id="p1"]')).toBeVisible();expect(s.moves).toHaveLength(2);expect(s.errors).toEqual([]);await s.close();
 });
 
 test('una lectura iniciada antes de mover no devuelve la tarjeta a la columna vieja',async({browser})=>{
- const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=async q=>{const data=await db(q);if(q.table==='prep_cola'&&!window.lecturaVieja){window.lecturaVieja=true;return new Promise(resolve=>window.soltarLecturaVieja=()=>resolve(data));}return data;};RepartoVivo.refrescar();});
- await expect.poll(()=>p.evaluate(()=>!!window.soltarLecturaVieja)).toBe(true);await p.locator('[data-rv="mover"][data-id="p1"]').click();await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();
- await p.evaluate(()=>{new MutationObserver(()=>{if(document.querySelector('.rv-pendiente .rv-card[data-id="p1"]'))window.retroceso=true;}).observe(document.getElementById('rv-raiz'),{childList:true,subtree:true});window.soltarLecturaVieja();});
- await p.waitForTimeout(400);expect(await p.evaluate(()=>!!window.retroceso)).toBe(false);await expect(p.locator('.rv-por_preparar .rv-card[data-id="p1"]')).toBeVisible();expect(s.errors).toEqual([]);await s.close();
+ const s=await setup(browser);enCola(s,'por_preparar');const p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=async q=>{const data=await db(q);if(q.table==='prep_cola'&&!window.lecturaVieja){window.lecturaVieja=true;return new Promise(resolve=>window.soltarLecturaVieja=()=>resolve(data));}return data;};RepartoVivo.refrescar();});
+ await expect.poll(()=>p.evaluate(()=>!!window.soltarLecturaVieja)).toBe(true);await p.locator('[data-rv="mover"][data-id="p1"]').click();await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();
+ await p.evaluate(()=>{new MutationObserver(()=>{if(document.querySelector('.rv-por_preparar .rv-card[data-id="p1"]'))window.retroceso=true;}).observe(document.getElementById('rv-raiz'),{childList:true,subtree:true});window.soltarLecturaVieja();});
+ await p.waitForTimeout(400);expect(await p.evaluate(()=>!!window.retroceso)).toBe(false);await expect(p.locator('.rv-preparando .rv-card[data-id="p1"]')).toBeVisible();expect(s.errors).toEqual([]);await s.close();
 });
 
 test('una sincronización colgada permite actualizar desde la app sin recargar',async({browser})=>{
- const s=await setup(browser),p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=q=>{if(q.table==='pedidos'&&!window.lecturaColgada){window.lecturaColgada=true;return new Promise(()=>{});}return db(q);};RepartoVivo.refrescar();});
+ const s=await setup(browser);enCola(s,'por_preparar');const p=await s.open('Oscar');await p.evaluate(()=>{const db=window.__db;window.__db=q=>{if(q.table==='pedidos'&&!window.lecturaColgada){window.lecturaColgada=true;return new Promise(()=>{});}return db(q);};RepartoVivo.refrescar();});
  await expect.poll(()=>p.evaluate(()=>!!window.lecturaColgada)).toBe(true);await p.clock.fastForward(21000);await expect(p.locator('.rv-error')).toBeVisible();await p.locator('.rv-error [data-rv="refresh"]').click();await expect(p.locator('.rv-error')).toHaveCount(0);await expect(p.locator('[data-rv="mover"][data-id="p1"]')).toBeEnabled();expect(s.errors).toEqual([]);await s.close();
 });
 

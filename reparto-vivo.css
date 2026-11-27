@@ -160,3 +160,18 @@ body.reparto-vivo #repBar { display:none !important; }
 .rv-search {display:block;width:calc(100% - 24px);margin:0 12px 10px;padding:9px 12px;border:1px solid #d4dfec;border-radius:10px;background:#fff;font:inherit;font-size:14px;min-width:0;box-sizing:border-box}
 
 .rv-card li.rv-product-alert{color:#69428c}.rv-product-status{display:block;margin-top:4px;font-weight:700;font-size:.95em}.rv-product-unavailable{text-decoration:line-through;color:#785d87}
+/* Despacho desde Pedidos, con los colores y medidas del tablero. */
+.entrega-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;background:var(--m-superficie-3,#edf2f6);border-radius:24px}
+.entrega-switch[hidden],.retiro-toggle[hidden]{display:none}
+.entrega-switch button{display:inline-flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:20px;min-height:38px;padding:6px 11px;background:transparent;color:var(--m-tinta-2);font:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
+.entrega-switch [data-tipo="retiro"]{color:#0e6251}.entrega-switch [data-tipo="reparto"]{color:#245790}
+.entrega-switch [aria-pressed="true"]{background:#102842;color:white}.entrega-switch [data-tipo="retiro"][aria-pressed="true"]{background:#117a65;color:white}.entrega-switch [data-tipo="reparto"][aria-pressed="true"]{background:#245790;color:white}
+.entrega-switch button span{border-radius:12px;padding:2px 5px;background:#ffffff65;font-size:11px}.entrega-switch [aria-pressed="true"] span{background:#ffffff25}
+.rv-enviar{color:#245790;border-color:#bccfe2}.rv-enviar svg,.rv-quitar svg{flex:none;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.oc-pie:has(.rv-enviar),.blk-acc:has(.rv-enviar){gap:6px;flex-wrap:wrap}
+.rv-board.rv-oficina{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rv-oficina .rv-card-top{padding-right:38px}
+.rv .rv-quitar{position:absolute;top:2px;right:2px;display:grid;place-items:center;width:44px;height:44px;padding:0;border:none;background:transparent;color:#657b90}
+.rv-quitar svg{box-sizing:content-box;border:1px solid #d6dfeb;border-radius:50%;padding:4px;background:white}
+.rv .rv-quitar:hover,.rv .rv-quitar:focus-visible{background:transparent;color:#a12637}
+@media(max-width:760px){.rv-board.rv-oficina{grid-template-columns:1fr}.entrega-switch{flex-wrap:wrap;justify-content:center}.entrega-switch button{min-height:44px;flex:1}}
