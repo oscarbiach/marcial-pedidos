@@ -9,15 +9,16 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{randomUUID}=re
  for(const [n,id] of Object.entries(ids)){await db.query('insert into auth.users values($1)',[id]);await db.query('insert into notas_acceso values($1,$2)',[id,n]);}
  await db.exec(fs.readFileSync('supabase/migrations/20261127_pagos_proveedores.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20261127_pagos_proveedores_auditoria.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261127_pagos_proveedores_marcado.sql','utf8'));
  const quien=n=>db.query("select set_config('test.uid',$1,false)",[ids[n]||'']);
  const leer=async()=>(await db.query('select proveedores_pagos_leer() as r')).rows[0].r;
  const guardar=async(id,version,accion,datos={},op=randomUUID())=>(await db.query('select proveedores_pagos_guardar($1,$2,$3,$4,$5) as r',[op,id,version,accion,JSON.stringify(datos)])).rows[0].r;
  for(const n of ['Mateo','Juan','nadie']){await quien(n);await assert.rejects(leer(),/No tenés acceso/);await assert.rejects(guardar(randomUUID(),0,'guardar'),/No tenés acceso/);}
  await quien('Oscar');await assert.rejects(guardar(randomUUID(),0,'guardar',{proveedor:'X',importe:10,fecha_prevista:'2026-11-27'}),/Solo Joaquín/);await quien('Joaquin');const id=randomUUID(),op=randomUUID(),d={proveedor:'Proveedor A',importe:'123456.78',fecha_prevista:'2026-11-27',concepto:'Factura 001',destino:'alias.prueba'};
  let r=await guardar(id,0,'guardar',d,op);assert.equal(r.pago.importe,123456.78);assert.equal(r.pago.creado_por,ids.Joaquin);
- assert.deepEqual(await guardar(id,0,'guardar',d,op),r);assert.equal((await leer()).pagos.length,1);assert.equal((await leer()).puede_transferir,false);
+ assert.deepEqual(await guardar(id,0,'guardar',d,op),r);assert.equal((await leer()).pagos.length,1);assert.equal((await leer()).puede_transferir,true);
  await assert.rejects(guardar(id,0,'guardar',{...d,importe:10},op),/ya utilizada/);
- await assert.rejects(guardar(id,1,'transferir'),/encargada/);
+ await quien('Oscar');assert.equal((await leer()).puede_transferir,true);await quien('Joaquin');
  for(const importe of ['0','-1','NaN','Infinity','1000000000000'])await assert.rejects(guardar(randomUUID(),0,'guardar',{...d,importe}));
  await quien('Joaquin');r=await guardar(id,1,'guardar',{...d,proveedor:'Proveedor corregido'});assert.equal(r.pago.version,2);
  await assert.rejects(guardar(id,1,'guardar',d),/pago cambió/);
